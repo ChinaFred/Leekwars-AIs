@@ -1,0 +1,87 @@
+include("/Classes/Leek")
+include("/Classes/Context/Coordinates")
+
+class World{
+
+	public Array<Leek> enemies = []
+	public Map<integer, Coordinates> cellsCoordinatesTable  = new Map ()
+	public Set cellsSet = <>
+	public Set obstaclesSet  = <>
+	public Set cellsWithoutObstacles = <>
+
+
+
+	constructor()
+	{
+
+		buildCellsCoordinatesAndCellsSet()
+		buildObstaclesSet()
+		cellsWithoutObstacles = setDifference(cellsSet, obstaclesSet)
+
+		debugOperations("world constructor ")
+	}
+
+
+	public null setEnemiesLeeks(){
+	 	Array<integer> enemiesId = getEnemies()
+	 	debug("world update enemiesId " + enemiesId)
+		enemies = []
+		for (var i in enemiesId){
+			push(enemies, new Leek(i))
+		}
+	}
+
+
+	public void buildCellsCoordinatesAndCellsSet(){
+		for (integer x in [-17..17])
+			for (integer y in [-17..17])
+			{
+				if (abs(x) + abs(y) <= 17){
+					var cell = getCellFromXY (x,y)
+					//mark(cell, getColor(255,0,0))
+					mapPut(cellsCoordinatesTable, cell, new Coordinates(x,y))
+					setPut(cellsSet, cell)
+				}
+			}
+	}
+
+
+	public void buildObstaclesSet(){
+		obstaclesSet = arrayToSet(getObstacles())
+	}
+
+
+	public void updateData(){
+		/*for (var e in enemies)
+			e.updateData()*/
+		debug("update world data")
+		debug("domingo " + enemies[0])
+		debugPause()
+	}
+
+	public Leek getEnemyLeek(id){
+		var ret = arrayFilter(enemies, function(v) {
+    		return v.id == id
+		})
+		return ret[0]
+	}
+
+	public Coordinates getCoordinatesFromCell(key){
+		return mapGet(cellsCoordinatesTable, key)
+	}
+/*
+	static Map<integer,integer> getDistanceToCells(Set<integer> cells, integer position){
+		Map<integer, integer> distanceToCells = new Map()
+		for(integer c in cells){
+			mapPut(distanceToCells,c,getPathLength(c, position) )
+		}
+
+		return distanceToCells
+	}
+*/
+
+
+}
+
+
+

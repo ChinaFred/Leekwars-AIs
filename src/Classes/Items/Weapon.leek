@@ -1,0 +1,68 @@
+include("Item")
+include("/Toolbox/Computations")
+include("/Classes/Context/World")
+
+	class Weapon extends Item {
+
+		constructor(myId) {
+			super(myId) // Appel du constructeur de Item
+
+			name = getWeaponName(myId)
+			range = [getWeaponMinRange(myId), getWeaponMaxRange(myId)]
+			cost = getWeaponCost(myId)
+			effects = getWeaponEffects(this.id)
+			launch_type = getWeaponLaunchType(this.id)
+			los = weaponNeedLos(this.id)
+			meanDammage = this.getMeanDammage()
+		}
+
+
+		real getMeanDammage() {
+			//var effects = getWeaponEffects(this.id)
+			return (this.effects[0][1] + this.effects[0][2]) / 2
+		}
+
+
+		Set < integer > fromWhereToShoot(Leek target, Set < integer > reachabelCells) {
+			Set cellsFromWhereToShoot = arrayToSet(getCellsToUseWeapon(this.id, target.id))
+			Set x = setIntersection(cellsFromWhereToShoot, reachabelCells)
+			return x
+		}
+
+		Set < integer > fromWhereToShootOnCell(integer cell, Set < integer > reachabelCells) {
+			Array cellsToUseWeapon = getCellsToUseWeaponOnCell(this.id, cell)
+			Set cellsFromWhereToShoot = arrayToSet(cellsToUseWeapon)
+			Set x = setIntersection(cellsFromWhereToShoot, reachabelCells)
+			return x
+		}
+
+		Set<integer> whereCanHeShoot( Set < integer > reachabelCells){
+			Set<integer> shootableCells =<>
+			for(integer r in reachabelCells){
+				Coordinates c = new Coordinates(0,0)
+				Coordinates cellCoordinates = world.getCoordinatesFromCell(r)
+				for (integer x in [range[0]..range[1]])
+					for (integer y in [range[0]..range[1]]) {
+						// d'abord verifier si elle existe ensuite si il y a une los
+						if (isInsideWorld(cellCoordinates.x - x, cellCoordinates.y - y) )
+							if(lineOfSight(r, getCellFromXY(cellCoordinates.x - x, cellCoordinates.y - y)))
+								setPut(shootableCells, getCellFromXY(cellCoordinates.x - x, cellCoordinates.y - y))
+						if (isInsideWorld(cellCoordinates.x - x, cellCoordinates.y + y))
+							if(lineOfSight(r,getCellFromXY(cellCoordinates.x - x, cellCoordinates.y + y)))
+								setPut(shootableCells, getCellFromXY(cellCoordinates.x - x, cellCoordinates.y + y))
+						if (isInsideWorld(cellCoordinates.x + x, cellCoordinates.y + y))
+							if(lineOfSight(r,getCellFromXY(cellCoordinates.x + x, cellCoordinates.y + y)))
+								setPut(shootableCells, getCellFromXY(cellCoordinates.x + x, cellCoordinates.y + y))
+						if (isInsideWorld(cellCoordinates.x + x, cellCoordinates.y - y))
+							if(lineOfSight(r,getCellFromXY(cellCoordinates.x + x, cellCoordinates.y - y)))
+								setPut(shootableCells, getCellFromXY(cellCoordinates.x + x, cellCoordinates.y - y))
+
+					}
+			}
+			shootableCells = setDifference(shootableCells, world.obstaclesSet)
+
+			return shootableCells
+
+		}
+
+	}

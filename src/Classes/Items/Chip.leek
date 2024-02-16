@@ -1,0 +1,24 @@
+include("Item")
+include("/Toolbox/Computations")
+include("/Classes/Context/World")
+
+class Chip extends Item{
+
+		constructor(myId) {
+			super(myId) // Appel du constructeur de Item
+
+			name = getChipName(myId)
+			range = [getChipMinRange(myId), getChipMaxRange(myId)]
+			cost = getChipCost(myId)
+			effects = getChipEffects(this.id)
+			launch_type = getChipLaunchType(this.id)
+			los = chipNeedLos(this.id)
+			meanDammage = this.getMeanDammage()
+		}
+
+
+		real getMeanDammage() {
+			//var effects = getWeaponEffects(this.id)
+			return (this.effects[0][1] + this.effects[0][2]) / 2
+		}
+}

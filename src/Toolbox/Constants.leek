@@ -1,0 +1,6 @@
+/*COMPARISON*/
+global integer CONST_EQUAL = 0
+global integer CONST_MIN_OR_EQUAL = 1
+global integer CONST_SUP_OR_EQUAL = 2 
+global integer CONST_MIN = 3
+global integer CONST_SUP = 4

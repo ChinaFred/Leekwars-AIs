@@ -1,0 +1,21 @@
+include ("/Toolbox/Debug")
+include ("/Classes/Plannification/Plannification")
+
+function planAct(me){
+	debug_BeginTurn ()
+	Plannification myPlan = new Plannification(me)
+	me.setTarget(getNearestEnemy())
+	myPlan.chooseWeapon()
+	myPlan.planEquipWeapon()
+	myPlan.planMove()
+	myPlan.planShoot()
+	myPlan.planHide()
+
+	
+	//Resolve plan 
+	myPlan.execute()
+
+
+
+	debug_EndTurn ()
+}

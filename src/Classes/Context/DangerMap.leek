@@ -1,0 +1,112 @@
+include("/Classes/Leek")
+include("/Classes/Context/World")
+include("/Toolbox/CellsMap")
+
+
+class DangerMap{
+	Map<integer, real> map = new Map() // cell as key, danger as value
+
+	constructor(me){
+	//	map  = buildDangerMap( me.target)
+	}
+
+	void resetMap(){
+		map = new Map()
+	}
+
+	integer getFurthestLessDangerous(integer fromCell, Set<integer> reachableCells){
+		integer result =-1
+		Map<integer, real> reachableCellsEvenDangerousOne = mapFilter(this.map,
+															 (real value, integer key)  => boolean
+															 {
+															    debug("key " + key )
+															 	return (setContains(reachableCells, key))
+															 }
+															)
+															debug(reachableCellsEvenDangerousOne)
+															debug("bof")
+															pause()
+															/*mapFilter(this.map,
+																		 (real value, integer, key) => boolean{
+																		 	return true//setContains(reachableCells, key)
+																		 }
+																		)*/
+		real min = mapMin(reachableCellsEvenDangerousOne)
+		Map<integer, real> lessDangerousCells = mapFilter(reachableCellsEvenDangerousOne,
+															 (real value, integer key)  => boolean
+															 {
+															 	return (min == value)
+															 }
+															)
+		debug("lessDangerousCells" + lessDangerousCells)
+		mark(mapKeys(lessDangerousCells), COLOR_SALMON)
+
+		debugPause()
+		integer ret = getFurthestCellFromSet(fromCell, arrayToSet( mapKeys(lessDangerousCells)))
+		debug ("getFurthestLessDangerous " + ret)
+		mark(ret, COLOR_BROWN)
+		pause()
+		return ret
+	}
+
+
+
+	integer getPlaceToHide(Leek me, Leek enemy, integer origin, integer mp){
+		integer placeToHide = -1
+		Set<integer> reachableCellsToHide = me.getReachableCellsFromCell (origin, mp)
+		Set<integer> safePlaces = <>
+		debug("place to hide ")
+		debug("leek cell " + me.name + " " +  me.cell)
+		debug("orignie du calcul : place ou on est " + origin + " mp " + mp)
+		debug("enemy cell " + enemy.name + " " +  enemy.cell)
+		debug("reachableCellsToHide " + reachableCellsToHide)
+		debugPause()
+
+
+
+		if(reachableCellsToHide == <>)
+		   debug("No cells reachable to hide")
+		else
+		{
+
+			Set<integer> dangerousPlaces = arrayToSet(mapKeys(me.dangerMap.map) )
+			debug("DangerousPlaces places")
+			mark(setToArray(dangerousPlaces), COLOR_HIT)
+			safePlaces = setDifference(reachableCellsToHide, dangerousPlaces)
+			debugPause()
+			debug("safe places " + safePlaces)
+			mark(setToArray(safePlaces), COLOR_LIGHT_GREEN)
+			debugPause()
+			// la plus loin de l'ennemi
+			debug("enemy.cell " + enemy.cell)
+			integer safe = getFurthestCellFromSet(enemy.cell, safePlaces)
+			if(safe > -1 )
+				placeToHide = safe
+			else{
+				//intersect with reachables
+
+				placeToHide = getFurthestLessDangerous(enemy.cell, reachableCellsToHide)
+
+			}
+
+			debug("placeToHide " + placeToHide)
+			mark(placeToHide, COLOR_YELLOW)
+			debugPause()
+		}
+		return placeToHide
+	}
+
+	Map buildDangerMap(Leek enemy){
+		integer damage = -1
+		for(Weapon w in enemy.wearedWeapons)
+		{
+			damage = 0
+			Set<integer> cellsToShootTo = w.whereCanHeShoot(enemy.reachableCells)
+			for (integer c in cellsToShootTo ){
+				mapPut(map,c, mapGet(map, c, 0) + w.meanDammage )
+			}
+		}
+		return map
+	}
+
+}

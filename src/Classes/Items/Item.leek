@@ -1,0 +1,18 @@
+class Item {
+	public integer id =-1
+    public string name = ""
+    public Array range = []
+	public Array effects = []
+	public integer cost = 0
+	public Array < integer > area = []
+    public real meanDammage = 0.0
+    public integer launch_type = -1
+    public boolean los = false
+
+	constructor(myId){
+			id = myId
+            name = "myItem"
+			debug("new Item => "+ myId )
+	}
+
+}

@@ -1,0 +1,143 @@
+include("/Classes/Leek")
+include("/Classes/Items/Weapon")
+include("/Classes/Context/World")
+include("/Classes/Context/DangerMap")
+include("/Classes/Plannification/Action")
+
+/**
+ * Classe Plannification qui gère la planification des actions d'un poireau dans le jeu.
+ */
+class Plannification{
+	public Leek|null leek = null
+	public Array<Action> actions   = []
+	public integer tpLeft = 0
+	public integer mpLeft = 0
+	public integer cellToShootFrom = 0
+	public Weapon|null chosenWeapon = null
+	public boolean willShoot = false
+
+	/**
+	 * Constructeur de la classe Plannification.
+	 *
+	 * @param l - Le poireau pour lequel la planification est effectuée.
+	 */
+	constructor(Leek l){
+		leek = l
+		tpLeft = leek.tp
+		debug("Plannification tp left leek " + tpLeft)
+		mpLeft = leek.mp
+		actions = []
+		cellToShootFrom = 0
+		willShoot = false
+	}
+
+	/**
+	 * Choisis une arme pour le poireau.
+	 */
+    void chooseWeapon(){
+		if (chosenWeapon == null)
+			chosenWeapon = leek.wearedWeapons[0]
+	}
+
+	/**
+	 * Planifie l'équipement d'une arme par le poireau.
+	 */
+	void planEquipWeapon(){
+		chooseWeapon() //faire un choix ï¿½clairï¿½$
+		debug("planEquipWeapon chosenWeapon" + chosenWeapon)
+		debug("planEquipWeapon leek.equipedWeapon " + leek.equipedWeapon)
+		if(leek.equipedWeapon.id != chosenWeapon.id)
+		{
+			push(actions, new Action("equip weapon " + chosenWeapon.name,function (){leek.equipWeapon(chosenWeapon)}))
+			tpLeft = tpLeft - 1
+			debug("equip weapon  + tpLeft" + tpLeft)
+
+		}
+	}
+
+	/**
+	 * Planifie le déplacement du poireau.
+	 */
+	void planMove(){
+		Set<integer> cellsToShootFrom =  leek.wearedWeapons[0].fromWhereToShoot(leek.target, leek.reachableCells)
+		integer distance = 20
+		if (cellsToShootFrom == <>){
+			// move towards target full speed
+			while(mpLeft>0  ) {
+				push(actions, new Action("move toward ", function (){leek.moveTowardTarget()}))
+				mpLeft = mpLeft - 1
+			}
+		}
+		else{
+		    if(cellsToShootFrom != <>) {
+                Map<integer, integer> cellsDistanceToLeek = new Map()
+                for(integer c in cellsToShootFrom){
+
+                    mapPut(cellsDistanceToLeek,c,getPathLength(leek.cell, c))
+                }
+                distance = mapMin(cellsDistanceToLeek)
+                cellToShootFrom = mapSearch(cellsDistanceToLeek, distance)
+                willShoot = (getPathLength(cellToShootFrom, leek.cell)<=leek.mp)
+                mark(cellToShootFrom, COLOR_WARNING)
+		    }
+		    else{
+		        cellToShootFrom = leek.target.cell
+				distance = getPathLength(leek.cell, cellToShootFrom)
+		        mark(cellToShootFrom, COLOR_BROWN)
+		    }
+            pause()
+
+			push(actions, new Action("moveTowardOneCell " + cellToShootFrom , function ()		{leek.moveTowardOneCell(cellToShootFrom)}))
+
+			mpLeft = mpLeft -distance
+		}
+	}
+
+	/**
+	 * Planifie le tir du poireau.
+	 */
+	void planShoot(){
+		if(willShoot)
+		while( tpLeft >= chosenWeapon.cost){
+			debug("planshoot + tpleft " + tpLeft)
+			push(actions, new Action("shoot",function(){leek.shoot()}))
+			tpLeft = tpLeft - chosenWeapon.cost
+		}
+		debug("planshoot + tpleft after" + tpLeft)
+	}
+
+	/**
+	 * Planifie la dissimulation du poireau.
+	 */
+	void planHide()
+	{
+		if(mpLeft > 0)
+		{
+			//Set<integer> safeCells=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
+			integer safeCell=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
+			if (safeCell > -1){
+					Map<integer, integer> distanceToSafeCells = new Map()
+					push(actions,new Action("hide", function (){leek.moveTowardOneCell(safeCell)}))
+
+				}
+
+		}
+
+	}
+
+	/**
+	 * Exécute les actions planifiées.
+	 */
+	void execute(){
+		debug("Actions" + actions)
+		while(count(actions) > 0)
+		{
+			Action toExecute = shift(actions)
+			debug("play " + toExecute.name )
+			toExecute.action()
+
+		}
+
+	}
+
+}

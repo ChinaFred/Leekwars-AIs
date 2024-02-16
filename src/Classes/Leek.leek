@@ -1,0 +1,223 @@
+include ("/Classes/Items/Weapon")
+include ("/Classes/Items/Chip")
+include ("/Toolbox/Debug")
+include ("/Toolbox/Speeches")
+include ("/Classes/Context/Coordinates")
+include ("/Classes/Context/World")
+include ("/Classes/Context/DangerMap")
+
+
+
+class Leek {
+	public integer id
+	public AI = null
+	public string AIname = ""
+
+	public string name  = ""
+   	public integer life = new Integer()
+	public integer totalLife = new Integer()
+    public integer strength = new Integer()
+	public integer wisdom = new Integer()
+	public integer agility = new Integer()
+    public integer resistance = new Integer()
+	public integer science = new Integer()
+	public integer magic  = new Integer()
+	public integer frequency = new Integer()
+	public integer cores  = new Integer()// 1M operations per core
+	public integer ram = new Integer()// 1M variables pers ram
+	public integer mp  = new Integer()
+	public integer tp = new Integer()
+
+
+	public Array<Weapon> wearedWeapons =[]
+	public Weapon|null equipedWeapon
+
+	public Array<Chip> wearedChips =[]
+
+	public Leek|null target
+	public integer cell = new Integer()
+	public Coordinates coordinates = new Coordinates()
+	public Array actions = []
+
+	public Set<integer> reachableCells = <>
+	public DangerMap? dangerMap= new DangerMap()
+
+	constructor(){
+	}
+
+	constructor(integer myId){
+		id = myId
+		updateData()
+
+		equipedWeapon = null
+		target = new Leek()
+
+		debugOperations("Leek constructor " + name )
+	}
+
+	constructor(integer myId, myIA){
+		id = myId
+		updateData()
+		equipedWeapon = new Weapon()
+		target = new Leek()
+		AI = myIA
+		AIname  = getAIName()
+		say("Hello world, je suis " + name)
+		say(getRandomMessage(speech_GREATINGS))
+
+
+	}
+
+	void updateData(){
+
+		name = getName(id)
+		life = getLife(id)
+		totalLife = getTotalLife(id)
+		strength = getStrength(id)
+		wisdom = getWisdom(id)
+		agility = getAgility(id)
+		resistance = getResistance(id)
+		science = getScience(id)
+		magic = getMagic(id)
+		frequency = getFrequency(id)
+		cores = getCores(id)
+		ram = getRAM(id)
+		mp = getTotalMP(id)
+		tp = getTotalTP(id)
+		wearedWeapons = []
+		Array<integer> tempWearedWeapons= getWeapons(id)
+		for (integer w in tempWearedWeapons)
+			push(wearedWeapons, new Weapon(w))
+
+		Array<integer> tempWearedChips = getChips(id)
+		for (integer c in tempWearedChips)
+			push(wearedChips, new Chip(c))
+		cell = getCell(id)
+		coordinates = new Coordinates (getCellX(cell), getCellY(cell))
+		reachableCells = getReachableCells()
+		actions =[]
+
+		debug("update " + name + " data")
+	}
+
+	updateDataMyLeeks(){
+		debug("update data my leek")
+		target = world.getEnemyLeek(this.target.id)
+		dangerMap.resetMap()
+		dangerMap.buildDangerMap(this.target)
+	}
+
+	/***************setters*******************************************/
+	void setTarget(integer id){
+		target = world.getEnemyLeek(id)
+		debug("My target is " + target.name)
+
+	}
+
+	void equipWeaponById(integer weaponID){
+		setWeapon(weaponID)
+		equipedWeapon= new Weapon(weaponID)
+	}
+
+	void equipWeapon(Weapon w){
+		setWeapon(w.id)
+		equipedWeapon= w
+		debug("weapon " + w.name + "equiped")
+	}
+
+
+	/******************************Act**********************************/
+	void shoot(){
+	//	if(canShootOnTarget()){
+			integer attackResult = useWeapon(target.id)
+			tp = tp - equipedWeapon.cost
+			debug ("shoot target " + target.id + " " + target.name + " -- " + tp +" TP remains")
+	//	}
+	}
+
+	boolean canShootOnTarget(){
+		return canUseWeaponOnCell(equipedWeapon.id, target.cell)
+	}
+
+
+	/***************************Moves*************************************************/
+	void moveTowardTarget()
+	{
+		moveToward(target.id,1)
+		mp=mp-1
+	}
+
+	void moveTowardOneCell(cell)
+	{
+		mp=mp - moveTowardCell(cell)
+	}
+
+	void fleeTarget(){
+		moveAwayFrom(target.id)
+		mp =0
+	}
+
+	public Set<integer> getReachableCells(){
+		Array<integer> arrReachablesCells = []
+
+
+		for (integer x in [-1 * mp   .. mp])
+			for (integer y in [-1* mp .. mp]){
+				if(abs(x) + abs(y) <= mp )
+					if(abs(coordinates.x + x) + abs(coordinates.y+ y) <= 17 ){
+						integer possibleCell = getCellFromXY(coordinates.x + x, coordinates.y+ y)
+					//	debug("cell from x y " +getCellFromXY(coordinates.x + x, coordinates.y + y))
+					//	debug("cell" + cell)
+					//	debug("path length" + getPathLength(cell,possibleCell))
+					//	debug("mp " + mp)
+						if(mp >= getPathLength(cell,possibleCell))
+							push(arrReachablesCells, possibleCell)
+					}
+			}
+		debug("getReachableCells green")
+		mark(arrReachablesCells, getColor(0,255,0))
+		debugPause()
+
+		return setDifference(arrayToSet(arrReachablesCells), world.obstaclesSet)
+	}
+
+
+	public Set<integer> getReachableCellsFromCell(integer cell, integer leftMps){
+
+		Set<integer> reachablesCellsSet = <>
+		Coordinates myCoordinates  = world.getCoordinatesFromCell(cell)
+		for (integer x in [-1 * leftMps   .. leftMps])
+			for (integer y in [-1* leftMps .. leftMps]){
+				if(abs(x) + abs(y) <= leftMps ){
+					if(abs(myCoordinates.x + x) + abs(myCoordinates.y+ y) <= 17 ){
+						integer possibleCell =  getCellFromXY(myCoordinates.x + x, myCoordinates.y+ y)
+						mark(possibleCell,getColor(100, 0	, 255))
+						if(leftMps >= getPathLength(cell,possibleCell))
+						{
+							setPut(reachablesCellsSet,possibleCell)
+							mark(possibleCell,getColor(0, 0	, 255))
+						}
+
+					}
+				}
+			}
+		debugPause()
+		reachablesCellsSet = setDifference((reachablesCellsSet),world.obstaclesSet)
+		debug("getReachableCellsFromCell green + blue from cell " + cell + " with " + leftMps + " mps")
+		mark(setToArray(reachablesCellsSet), getColor(0,200,125))
+		debugPause()
+		return reachablesCellsSet
+	}
+
+
+	/************************************************************************************/
+
+	/* main */
+
+	null play(){
+
+		debug("I play " + this.name )
+		AI(this)
+	}
+
+}
