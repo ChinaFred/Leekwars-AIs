@@ -6,7 +6,9 @@ include("/Classes/Context/World")
 	global kassbi = new Leek(getEntity(), planAct)
 
 	// init
+	world.buildObstaclesCoordinatesSet()
 	world.setEnemiesLeeks()
+
 	var turn = getTurn()
 	if (turn > 1)
 	{

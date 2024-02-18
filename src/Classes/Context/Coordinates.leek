@@ -137,17 +137,19 @@ class Coordinates {
 	static Coordinates getFurthestCellFromSet(Coordinates cell, Set<Coordinates> cells) {
 		// Debugging information to log the input cell and the set of cells.
 		debug("getFurthestCellFromSet(cell) cell" + cell)
-		debug("cells " + cells)
 
 		// Initialize variables to store the maximum distance and the furthest cell.
 		integer maxDist = -1
 		integer dist = -1
 		Coordinates furthestCell = new Coordinates()
-
+		// Remove obstacles from set
+		debug("world.obstaclesCoordinatesSet " + world.obstaclesCoordinatesSet)
+		cells = setDifference(cells, world.obstaclesCoordinatesSet)
+		debug(" cells "+ cells)
+		pause()
 		// Check if the set of cells is not empty.
 		if (setSize(cells) > 0) {
 			// Iterate over each cell in the set.
-			debug(" cells "+ cells)
 			for (Coordinates c in cells) {
 			
 				// Calculate the path length from the reference cell to the current cell.

@@ -93,7 +93,7 @@ class Leek {
 		for (integer c in tempWearedChips)
 			push(wearedChips, new Chip(c))
 		cell = getCell(id)
-		coordinates = new Coordinates (getCellX(cell), getCellY(cell))
+		coordinates = world.getCoordinatesFromCell(cell)
 		reachableCells = getReachableCells()
 		actions =[]
 
@@ -179,56 +179,28 @@ class Leek {
 
 	public Set<Coordinates> getReachableCoordinatesFromCell(Coordinates cell, integer leftMps){
 
-		Set<Coordinates> reachablesCellsSet = <>
+		Set<Coordinates> reachablesCoordinatesSet = <>
 		for (integer x in [-1 * leftMps   .. leftMps])
 			for (integer y in [-1* leftMps .. leftMps]){
 				if(abs(x) + abs(y) <= leftMps ){
 					if(abs(cell.x + x) + abs(cell.y+ y) <= 17 ){
 						integer possibleCell =  getCellFromXY(cell.x + x, cell.y+ y)
-						mark(possibleCell,getColor(100, 0	, 255))
+						mark(possibleCell,getColor(100, 0	, 255)) // purple : not reachable in the end - too many PM 
 						if(leftMps >= getPathLength(cell.cell,possibleCell))
 						{
-							setPut(reachablesCellsSet,new Coordinates (possibleCell))
-							mark(possibleCell,getColor(0, 0	, 255))
+							setPut(reachablesCoordinatesSet,world.getCoordinatesFromCell (possibleCell))
+							mark(possibleCell,getColor(0, 0	, 255)) // reachable ones 
 						}
 
 					}
 				}
 			}
 		debugPause()
-		reachablesCellsSet = setDifference((reachablesCellsSet),world.obstaclesCoordinatesSet)
+		reachablesCoordinatesSet = setDifference((reachablesCoordinatesSet),world.obstaclesCoordinatesSet)
 		debug("getReachableCellsFromCell green + blue from cell " + cell + " with " + leftMps + " mps")
-		Coordinates.markArray(setToArray(reachablesCellsSet), getColor(0,200,125))
+		Coordinates.markArray(setToArray(reachablesCoordinatesSet), getColor(0,200,125))
 		debugPause()
-		return reachablesCellsSet
-	}
-
-
-	public Set<Coordinates> getReachableCellsFromCell(integer cell, integer leftMps){
-
-		Set<Coordinates> reachablesCellsSet = <>
-		Coordinates myCoordinates  = world.getCoordinatesFromCell(cell)
-		for (integer x in [-1 * leftMps   .. leftMps])
-			for (integer y in [-1* leftMps .. leftMps]){
-				if(abs(x) + abs(y) <= leftMps ){
-					if(abs(myCoordinates.x + x) + abs(myCoordinates.y+ y) <= 17 ){
-						integer possibleCell =  getCellFromXY(myCoordinates.x + x, myCoordinates.y+ y)
-						mark(possibleCell,getColor(100, 0	, 255))
-						if(leftMps >= getPathLength(cell,possibleCell))
-						{
-							setPut(reachablesCellsSet,new Coordinates(possibleCell))
-							mark(possibleCell,getColor(0, 0	, 255))
-						}
-
-					}
-				}
-			}
-		debugPause()
-		reachablesCellsSet = setDifference((reachablesCellsSet),world.obstaclesSet)
-		debug("getReachableCellsFromCell green + blue from cell " + cell + " with " + leftMps + " mps")
-		mark(setToArray(reachablesCellsSet), getColor(0,200,125))
-		debugPause()
-		return reachablesCellsSet
+		return reachablesCoordinatesSet
 	}
 
 

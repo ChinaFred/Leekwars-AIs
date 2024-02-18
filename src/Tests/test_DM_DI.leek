@@ -44,4 +44,4 @@ Leek me = new Leek(getEntity(), planAct)
 me.setTarget(getNearestEnemy())
 
 
-dm.getPlaceToHide(me, me.target,me.cell, 10 )
+dm.getPlaceToHide(me, me.target,new Coordinates (me.cell), 10 )

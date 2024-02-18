@@ -6,8 +6,8 @@ class World{
 	public Array<Leek> enemies = []
 	public Map<integer, Coordinates> cellsCoordinatesTable  = new Map ()
 	public Set cellsSet = <>
-	public Set obstaclesSet  = <>
-	public Set obstaclesCoordinatesSet  = <>
+	public Set<integer> obstaclesSet  = <>
+	public Set<Coordinates> obstaclesCoordinatesSet  = <>
 	public Set cellsWithoutObstacles = <>
 
 
@@ -39,7 +39,6 @@ class World{
 			{
 				if (abs(x) + abs(y) <= 17){
 					var cell = getCellFromXY (x,y)
-					//mark(cell, getColor(255,0,0))
 					mapPut(cellsCoordinatesTable, cell, new Coordinates(x,y))
 					setPut(cellsSet, cell)
 				}
@@ -49,14 +48,14 @@ class World{
 
 	public void buildObstaclesSet(){
 		obstaclesSet = arrayToSet(getObstacles())
-		buildObstaclesCoordinatesSet()
+		
 	}
 
 
 	public void buildObstaclesCoordinatesSet(){
 		for (integer o in obstaclesSet)
 		{
-			//setPut(obstaclesCoordinatesSet, new Coordinates(o))
+			setPut(this.obstaclesCoordinatesSet, world.getCoordinatesFromCell(o))
 		}
 	}
 

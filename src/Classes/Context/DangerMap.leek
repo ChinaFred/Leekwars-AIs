@@ -56,6 +56,21 @@ class DangerMap {
         mapPut(this.map, cell, dangerInfo)
     }
 
+    /**
+    * Removes all obstacles from the current map.
+    *
+    * This function iterates through the `world.obstaclesCoordinatesSet` set and
+    * calls the `mapRemove` function for each obstacle's coordinates, effectively
+    * deleting them from the map.
+    */
+    void removeObstaclesFromMap() {
+    // Iterate through all obstacle coordinates
+        for (Coordinates o in world.obstaclesCoordinatesSet) {
+            // Remove the obstacle from the map
+            mapRemove(this.map, o);
+            debugC("Obstacle enlev� "+ o, COLOR_BLUE)
+        }
+    }
 
 
     /**
@@ -152,7 +167,16 @@ class DangerMap {
                 // Filter reachable cells based on whether they are in the reachableCells set.
                 return (setContains(reachableCells, key))
             })
-
+		/*
+		//remove obstacles
+		for (Coordinates o in world.obstaclesCoordinatesSet){
+			mapRemove(reachableCellsEvenDangerousOne.map,o)
+			debugC("Obstacle enlev� "+ o, COLOR_BLUE)
+		}*/
+        reachableCellsEvenDangerousOne.removeObstaclesFromMap()
+			
+			
+			
         // Get the minimum danger value among reachable cells.
         DangerInfo min = reachableCellsEvenDangerousOne.getDangerWithMinWeight()
 
@@ -179,10 +203,10 @@ class DangerMap {
      * @param {integer} mp - The movement points of the leek.
      * @returns {Coordinates} - The cell to hide.
      */
-    Coordinates getPlaceToHide(Leek me, Leek enemy, integer origin, integer mp) {
+    Coordinates getPlaceToHide(Leek me, Leek enemy, Coordinates origin, integer mp) {
         // Initialize variables.
         Coordinates placeToHide = new Coordinates()
-        Set<Coordinates> reachableCellsToHide = me.getReachableCellsFromCell(origin, mp)
+        Set<Coordinates> reachableCellsToHide = me.getReachableCoordinatesFromCell(origin, mp)
         Set<Coordinates> safePlaces = <>
 
 
@@ -194,14 +218,14 @@ class DangerMap {
             Set<Coordinates> dangerousPlaces = arrayToSet(mapKeys(me.dangerMap.map))
             safePlaces = setDifference(reachableCellsToHide, dangerousPlaces)
             mark(setToArray(safePlaces), COLORS.LIGHT_GREEN)
-            Coordinates safe = Coordinates.getFurthestCellFromSet(new Coordinates(enemy.cell), safePlaces)
+            Coordinates safe = Coordinates.getFurthestCellFromSet(world.getCoordinatesFromCell(enemy.cell), safePlaces)
             if (safe.cell > -1)
                 placeToHide = safe
             else {
                 // If no safe cell found, find the furthest less dangerous cell.
-                debug("new Coordinates enemy.cell " + new Coordinates(enemy.cell) )
+                debug("new Coordinates enemy.cell " + world.getCoordinatesFromCell(enemy.cell) )
                 pause()
-               placeToHide = getFurthestLessDangerous(new Coordinates(enemy.cell), reachableCellsToHide)
+               placeToHide = getFurthestLessDangerous(world.getCoordinatesFromCell(enemy.cell), reachableCellsToHide)
             }
 
             debug("placeToHide " + placeToHide)

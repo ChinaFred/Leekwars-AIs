@@ -8,13 +8,13 @@ include("/Toolbox/Constants")
 /**
  * Classe Plannification qui g�re la planification des actions d'un poireau dans le jeu.
  */
-class Plannification{
-	public Leek|null leek = null
-	public Array<Action> actions   = []
+class Plannification {
+	public Leek | null leek = null
+	public Array < Action > actions = []
 	public integer tpLeft = 0
 	public integer mpLeft = 0
-	public integer cellToShootFrom = 0
-	public Weapon|null chosenWeapon = null
+	public Coordinates cellToShootFrom = new Coordinates()
+	public Weapon | null chosenWeapon = null
 	public boolean willShoot = false
 
 	/**
@@ -22,19 +22,19 @@ class Plannification{
 	 *
 	 * @param l - Le poireau pour lequel la planification est effectu�e.
 	 */
-	constructor(Leek l){
+	constructor(Leek l) {
 		leek = l
 		tpLeft = leek.tp
 		mpLeft = leek.mp
 		actions = []
-		cellToShootFrom = 0
+		cellToShootFrom = new Coordinates()
 		willShoot = false
 	}
 
 	/**
 	 * Choisis une arme pour le poireau.
 	 */
-    void chooseWeapon(){
+	void chooseWeapon() {
 		if (chosenWeapon == null)
 			chosenWeapon = leek.wearedWeapons[0]
 	}
@@ -42,11 +42,13 @@ class Plannification{
 	/**
 	 * Planifie l'�quipement d'une arme par le poireau.
 	 */
-	void planEquipWeapon(){
+	void planEquipWeapon() {
 		chooseWeapon() //faire un choix �clair�$
-		if(leek.equipedWeapon.id != chosenWeapon.id)
-		{
-			push(actions, new Action("equip weapon " + chosenWeapon.name,function (){leek.equipWeapon(chosenWeapon)}))
+		if (leek.equipedWeapon.id != chosenWeapon.id) {
+			push(actions, new Action("equip weapon " , function() {
+				leek.equipWeapon(chosenWeapon)
+			}, 
+		    chosenWeapon.name))
 			tpLeft = tpLeft - 1
 
 		}
@@ -55,68 +57,75 @@ class Plannification{
 	/**
 	 * Planifie le d�placement du poireau.
 	 */
-	void planMove(){
-		Set<integer> cellsToShootFrom =  leek.wearedWeapons[0].fromWhereToShoot(leek.target, leek.reachableCells)
+	void planMove() {
+		Set < integer > cellsToShootFrom = leek.wearedWeapons[0].fromWhereToShoot(leek.target, leek.reachableCells)
 		integer distance = 20
-		if (cellsToShootFrom == <>){
+		if (cellsToShootFrom == < > ) {
 			// move towards target full speed
-			while(mpLeft>0  ) {
-				push(actions, new Action("move toward ", function (){leek.moveTowardTarget()}))
+			while (mpLeft > 0) {
+				push(actions, new Action("move toward ", function() {
+					leek.moveTowardTarget()
+				}, "Move towards enemy"))
 				mpLeft = mpLeft - 1
 			}
-		}
-		else{
-		    if(cellsToShootFrom != <>) {
-                Map<integer, integer> cellsDistanceToLeek = new Map()
-                for(integer c in cellsToShootFrom){
+		} else {
+			if (cellsToShootFrom != < > ) {
+				Map < integer, integer > cellsDistanceToLeek = new Map()
+				for (integer c in cellsToShootFrom) {
 
-                    mapPut(cellsDistanceToLeek,c,getPathLength(leek.cell, c))
-                }
-                distance = mapMin(cellsDistanceToLeek)
-                cellToShootFrom = mapSearch(cellsDistanceToLeek, distance)
-                willShoot = (getPathLength(cellToShootFrom, leek.cell)<=leek.mp)
-                mark(cellToShootFrom, COLORS.WARNING)
-		    }
-		    else{
-		        cellToShootFrom = leek.target.cell
-				distance = getPathLength(leek.cell, cellToShootFrom)
-		        mark(cellToShootFrom, COLORS.BROWN)
-		    }
-            pause()
+					mapPut(cellsDistanceToLeek, c, getPathLength(leek.cell, c))
+				}
+				distance = mapMin(cellsDistanceToLeek)
+				cellToShootFrom = world.getCoordinatesFromCell(mapSearch(cellsDistanceToLeek, distance))
+				willShoot = (getPathLength(cellToShootFrom.cell, leek.cell) <= leek.mp)
+				mark(cellToShootFrom.cell, COLORS.WARNING)
+			} else {
+				cellToShootFrom = world.getCoordinatesFromCell(leek.target.cell)
+				distance = getPathLength(leek.cell, cellToShootFrom.cell)
+				mark(cellToShootFrom.cell, COLORS.BROWN)
+			}
+			pause()
 
-			push(actions, new Action("moveTowardOneCell " + cellToShootFrom , function ()		{leek.moveTowardOneCell(cellToShootFrom)}))
+			push(actions, new Action("moveTowardOneCell " + cellToShootFrom, function() {
+				leek.moveTowardOneCell(cellToShootFrom.cell)
+			}, "cell to shoot from " + cellsToShootFrom ))
 
-			mpLeft = mpLeft -distance
+			mpLeft = mpLeft - distance
 		}
 	}
 
 	/**
 	 * Planifie le tir du poireau.
 	 */
-	void planShoot(){
-		if(willShoot)
-		while( tpLeft >= chosenWeapon.cost){
-			debug("planshoot + tpleft " + tpLeft)
-			push(actions, new Action("shoot",function(){leek.shoot()}))
-			tpLeft = tpLeft - chosenWeapon.cost
-		}
+	void planShoot() {
+		if (willShoot)
+			while (tpLeft >= chosenWeapon.cost) {
+				debug("planshoot + tpleft " + tpLeft)
+				push(actions, new Action("shoot", function() {
+					leek.shoot()
+				}, 
+				"planshoot + tpleft after" + tpLeft))
+				tpLeft = tpLeft - chosenWeapon.cost
+			}
 		debug("planshoot + tpleft after" + tpLeft)
 	}
 
 	/**
 	 * Planifie la dissimulation du poireau.
 	 */
-	void planHide()
-	{
-		if(mpLeft > 0)
-		{
-			//Set<integer> safeCells=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
-			Coordinates safeCell=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
-			if (safeCell.cell > -1){
-					Map<integer, integer> distanceToSafeCells = new Map()
-					push(actions,new Action("hide", function (){leek.moveTowardOneCell(safeCell)}))
+	void planHide() {
+		if (mpLeft > 0) {
+			Coordinates safeCell = leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
+			debugC("place to hide " + safeCell, COLOR_RED)
+			pause()
+			if (safeCell.cell > -1) {
+				Map < integer, integer > distanceToSafeCells = new Map()
+				push(actions, new Action("hide", function() {
+					leek.moveTowardOneCell(safeCell.cell)
+				},"safe place : " + safeCell
+				))
 
-				}
+			}
 
 		}
 
@@ -125,12 +134,11 @@ class Plannification{
 	/**
 	 * Ex�cute les actions planifi�es.
 	 */
-	void execute(){
+	void execute() {
 		debug("Actions" + actions)
-		while(count(actions) > 0)
-		{
+		while (count(actions) > 0) {
 			Action toExecute = shift(actions)
-			debug("play " + toExecute.name )
+			debug("play " + toExecute.name)
 			toExecute.action()
 
 		}
