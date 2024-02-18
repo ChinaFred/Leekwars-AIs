@@ -1,12 +1,5 @@
 	global boolean CONST_DEBUG_PAUSE = false
-	global integer COLOR_HIT = getColor(250, 51, 153)
-	global integer COLOR_SUCCESS = getColor(0, 255, 20)
-	global integer COLOR_WARNING = getColor(255, 128, 0)
-	global integer COLOR_PURPLE = getColor(152, 51, 255)
-	global integer COLOR_SALMON = getColor(255, 229, 204)
-	global integer COLOR_LIGHT_GREEN = getColor(204, 255, 229)
-	global integer COLOR_BROWN = getColor(152, 76, 0)
-	global integer COLOR_YELLOW = getColor(255, 255, 102)
+
 	
 
 	function debugPause()=>void{
@@ -14,13 +7,13 @@
 		 	pause()
 	}
 	
-
+	
 	
 
 
 function debugOperations(text)
 	{
-		debugC(text + " - Nombre opérations :" +  getOperations(), getColor(0,255,0))
+		debugC(text + " - Nombre opï¿½rations :" +  getOperations(), getColor(0,255,0))
 	}
 
 

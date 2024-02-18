@@ -166,10 +166,6 @@ class Leek {
 				if(abs(x) + abs(y) <= mp )
 					if(abs(coordinates.x + x) + abs(coordinates.y+ y) <= 17 ){
 						integer possibleCell = getCellFromXY(coordinates.x + x, coordinates.y+ y)
-					//	debug("cell from x y " +getCellFromXY(coordinates.x + x, coordinates.y + y))
-					//	debug("cell" + cell)
-					//	debug("path length" + getPathLength(cell,possibleCell))
-					//	debug("mp " + mp)
 						if(mp >= getPathLength(cell,possibleCell))
 							push(arrReachablesCells, possibleCell)
 					}
@@ -181,10 +177,36 @@ class Leek {
 		return setDifference(arrayToSet(arrReachablesCells), world.obstaclesSet)
 	}
 
+	public Set<Coordinates> getReachableCoordinatesFromCell(Coordinates cell, integer leftMps){
 
-	public Set<integer> getReachableCellsFromCell(integer cell, integer leftMps){
+		Set<Coordinates> reachablesCellsSet = <>
+		for (integer x in [-1 * leftMps   .. leftMps])
+			for (integer y in [-1* leftMps .. leftMps]){
+				if(abs(x) + abs(y) <= leftMps ){
+					if(abs(cell.x + x) + abs(cell.y+ y) <= 17 ){
+						integer possibleCell =  getCellFromXY(cell.x + x, cell.y+ y)
+						mark(possibleCell,getColor(100, 0	, 255))
+						if(leftMps >= getPathLength(cell.cell,possibleCell))
+						{
+							setPut(reachablesCellsSet,new Coordinates (possibleCell))
+							mark(possibleCell,getColor(0, 0	, 255))
+						}
 
-		Set<integer> reachablesCellsSet = <>
+					}
+				}
+			}
+		debugPause()
+		reachablesCellsSet = setDifference((reachablesCellsSet),world.obstaclesCoordinatesSet)
+		debug("getReachableCellsFromCell green + blue from cell " + cell + " with " + leftMps + " mps")
+		Coordinates.markArray(setToArray(reachablesCellsSet), getColor(0,200,125))
+		debugPause()
+		return reachablesCellsSet
+	}
+
+
+	public Set<Coordinates> getReachableCellsFromCell(integer cell, integer leftMps){
+
+		Set<Coordinates> reachablesCellsSet = <>
 		Coordinates myCoordinates  = world.getCoordinatesFromCell(cell)
 		for (integer x in [-1 * leftMps   .. leftMps])
 			for (integer y in [-1* leftMps .. leftMps]){
@@ -194,7 +216,7 @@ class Leek {
 						mark(possibleCell,getColor(100, 0	, 255))
 						if(leftMps >= getPathLength(cell,possibleCell))
 						{
-							setPut(reachablesCellsSet,possibleCell)
+							setPut(reachablesCellsSet,new Coordinates(possibleCell))
 							mark(possibleCell,getColor(0, 0	, 255))
 						}
 

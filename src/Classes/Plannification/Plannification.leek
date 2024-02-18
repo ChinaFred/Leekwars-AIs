@@ -3,9 +3,10 @@ include("/Classes/Items/Weapon")
 include("/Classes/Context/World")
 include("/Classes/Context/DangerMap")
 include("/Classes/Plannification/Action")
+include("/Toolbox/Constants")
 
 /**
- * Classe Plannification qui gère la planification des actions d'un poireau dans le jeu.
+ * Classe Plannification qui gï¿½re la planification des actions d'un poireau dans le jeu.
  */
 class Plannification{
 	public Leek|null leek = null
@@ -19,12 +20,11 @@ class Plannification{
 	/**
 	 * Constructeur de la classe Plannification.
 	 *
-	 * @param l - Le poireau pour lequel la planification est effectuée.
+	 * @param l - Le poireau pour lequel la planification est effectuï¿½e.
 	 */
 	constructor(Leek l){
 		leek = l
 		tpLeft = leek.tp
-		debug("Plannification tp left leek " + tpLeft)
 		mpLeft = leek.mp
 		actions = []
 		cellToShootFrom = 0
@@ -40,23 +40,20 @@ class Plannification{
 	}
 
 	/**
-	 * Planifie l'équipement d'une arme par le poireau.
+	 * Planifie l'ï¿½quipement d'une arme par le poireau.
 	 */
 	void planEquipWeapon(){
 		chooseWeapon() //faire un choix ï¿½clairï¿½$
-		debug("planEquipWeapon chosenWeapon" + chosenWeapon)
-		debug("planEquipWeapon leek.equipedWeapon " + leek.equipedWeapon)
 		if(leek.equipedWeapon.id != chosenWeapon.id)
 		{
 			push(actions, new Action("equip weapon " + chosenWeapon.name,function (){leek.equipWeapon(chosenWeapon)}))
 			tpLeft = tpLeft - 1
-			debug("equip weapon  + tpLeft" + tpLeft)
 
 		}
 	}
 
 	/**
-	 * Planifie le déplacement du poireau.
+	 * Planifie le dï¿½placement du poireau.
 	 */
 	void planMove(){
 		Set<integer> cellsToShootFrom =  leek.wearedWeapons[0].fromWhereToShoot(leek.target, leek.reachableCells)
@@ -78,12 +75,12 @@ class Plannification{
                 distance = mapMin(cellsDistanceToLeek)
                 cellToShootFrom = mapSearch(cellsDistanceToLeek, distance)
                 willShoot = (getPathLength(cellToShootFrom, leek.cell)<=leek.mp)
-                mark(cellToShootFrom, COLOR_WARNING)
+                mark(cellToShootFrom, COLORS.WARNING)
 		    }
 		    else{
 		        cellToShootFrom = leek.target.cell
 				distance = getPathLength(leek.cell, cellToShootFrom)
-		        mark(cellToShootFrom, COLOR_BROWN)
+		        mark(cellToShootFrom, COLORS.BROWN)
 		    }
             pause()
 
@@ -114,8 +111,8 @@ class Plannification{
 		if(mpLeft > 0)
 		{
 			//Set<integer> safeCells=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
-			integer safeCell=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
-			if (safeCell > -1){
+			Coordinates safeCell=  leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
+			if (safeCell.cell > -1){
 					Map<integer, integer> distanceToSafeCells = new Map()
 					push(actions,new Action("hide", function (){leek.moveTowardOneCell(safeCell)}))
 
@@ -126,7 +123,7 @@ class Plannification{
 	}
 
 	/**
-	 * Exécute les actions planifiées.
+	 * Exï¿½cute les actions planifiï¿½es.
 	 */
 	void execute(){
 		debug("Actions" + actions)

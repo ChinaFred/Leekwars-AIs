@@ -12,7 +12,6 @@ class Item {
 	constructor(myId){
 			id = myId
             name = "myItem"
-			debug("new Item => "+ myId )
 	}
 
 }

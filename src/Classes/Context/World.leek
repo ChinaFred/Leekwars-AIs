@@ -7,6 +7,7 @@ class World{
 	public Map<integer, Coordinates> cellsCoordinatesTable  = new Map ()
 	public Set cellsSet = <>
 	public Set obstaclesSet  = <>
+	public Set obstaclesCoordinatesSet  = <>
 	public Set cellsWithoutObstacles = <>
 
 
@@ -48,15 +49,20 @@ class World{
 
 	public void buildObstaclesSet(){
 		obstaclesSet = arrayToSet(getObstacles())
+		buildObstaclesCoordinatesSet()
+	}
+
+
+	public void buildObstaclesCoordinatesSet(){
+		for (integer o in obstaclesSet)
+		{
+			//setPut(obstaclesCoordinatesSet, new Coordinates(o))
+		}
 	}
 
 
 	public void updateData(){
-		/*for (var e in enemies)
-			e.updateData()*/
 		debug("update world data")
-		debug("domingo " + enemies[0])
-		debugPause()
 	}
 
 	public Leek getEnemyLeek(id){
@@ -69,17 +75,6 @@ class World{
 	public Coordinates getCoordinatesFromCell(key){
 		return mapGet(cellsCoordinatesTable, key)
 	}
-/*
-	static Map<integer,integer> getDistanceToCells(Set<integer> cells, integer position){
-		Map<integer, integer> distanceToCells = new Map()
-		for(integer c in cells){
-			mapPut(distanceToCells,c,getPathLength(c, position) )
-		}
-
-		return distanceToCells
-	}
-*/
-
 
 }
 

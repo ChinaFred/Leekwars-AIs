@@ -102,9 +102,6 @@ class Coordinates {
 	* @returns {Coordinates} - The closest cell from the set.
 	*/
 	static Coordinates getClosestCellFromSet(Coordinates cell, Set<Coordinates> cells) {
-		// Debugging information to log the input cell and the set of cells.
-		debug("getClosestCellFromSet(Coordinates) cell" + cell)
-		debug("cells " + cells)
 
 		// Initialize variables to store the minimum distance and the closest cell.
 		integer minDist = 10000000
@@ -115,9 +112,6 @@ class Coordinates {
 		if (setSize(cells) > 0) {
 			// Iterate over each cell in the set.
 			for (Coordinates c in cells) {
-				// Debugging information to log the reference cell and the current cell being compared.
-				debug("machin " + cell)
-				debug("machin " + c)
 
 				// Calculate the path length from the reference cell to the current cell.
 				dist = getPathLength(cell.cell, c.cell)
@@ -129,9 +123,6 @@ class Coordinates {
 				}
 			}
 		}
-
-		// Debugging information to log the closest cell found.
-		debug("closestCell " + closestCell)
 
 		// Return the closest cell from the set.
 		return closestCell
@@ -156,19 +147,26 @@ class Coordinates {
 		// Check if the set of cells is not empty.
 		if (setSize(cells) > 0) {
 			// Iterate over each cell in the set.
+			debug(" cells "+ cells)
 			for (Coordinates c in cells) {
-				// Debugging information to log the reference cell and the current cell being compared.
-				debug("machin loin cell " + cell)
-				debug("machin loin c " + c)
-
+			
 				// Calculate the path length from the reference cell to the current cell.
-				dist = getPathLength(cell.cell, c.cell)
-
-				// If the current cell is further than the previously furthest cell, update the furthest cell and the maximum distance.
-				if (dist > maxDist) {
-					furthestCell = c
-					maxDist = dist
+				if (getPathLength(cell.cell, c.cell))
+				{
+					dist = getPathLength(cell.cell, c.cell)
+					// If the current cell is further than the previously furthest cell, update the furthest cell and the maximum distance.
+					if (dist > maxDist) {
+						furthestCell = c
+						maxDist = dist
+					}
 				}
+				else 
+				{
+					debugC("NULL VALUE" , COLOR_RED)
+					debug(" c " + c.cell)
+					debug("cell.cell " + cell.cell)
+				}
+				
 			}
 		}
 
@@ -178,4 +176,33 @@ class Coordinates {
 		// Return the furthest cell from the set.
 		return furthestCell
 	}
+
+	/**
+	* Marks the current cell with the specified color.
+	* @param color - The color with which the cell should be marked.
+	*/
+	void mark(color) {
+		// Marks the current cell with the specified color.
+		mark(cell, color)
+	}
+
+
+
+	/**
+	* Marks the specified cells in an array with a given color.
+	* @param arr - The array of coordinates of cells to mark.
+	* @param color - The color with which the cells should be marked.
+	*/
+	static void markArray(Array<Coordinates> arr, color) {
+		// Create a new array to store cell IDs.
+		Array<integer> arrInt = []
+		// Iterate over each coordinate in the specified array.
+		for (Coordinates c in arr)
+			// Add the cell ID to the integer array.
+			push(arrInt, c.cell)
+		// Mark the identified cells with the specified color.
+		mark(arrInt, color)
+	}
+
+
 }
