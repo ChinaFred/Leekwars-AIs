@@ -3,22 +3,60 @@ include("/Toolbox/Computations")
 include("/Classes/Context/World")
 
 class Chip extends Item{
+		integer cooldown = 10
 
 		constructor(myId) {
 			super(myId) // Appel du constructeur de Item
-
+			type ="Chip"
 			name = getChipName(myId)
 			range = [getChipMinRange(myId), getChipMaxRange(myId)]
-			cost = getChipCost(myId)
-			effects = getChipEffects(this.id)
+			
+ 			effects = new Effects(getChipEffects(this.id))
+			cost = getChipCost(this.id)
 			launch_type = getChipLaunchType(this.id)
-			los = chipNeedLos(this.id)
+			needLos = chipNeedLos(this.id)
 			meanDammage = this.getMeanDammage()
+			cooldown  = getChipCooldown(this.id)
 		}
 
 
-		real getMeanDammage() {
-			//var effects = getWeaponEffects(this.id)
-			return (this.effects[0][1] + this.effects[0][2]) / 2
+
+
+		void useOnTarget (Leek target){
+			useChip(this.id, target.id)
 		}
+
+		boolean canReachCell(Coordinates from, Coordinates to){
+			integer distance = getCellDistance(from.cell, to.cell)
+			boolean inRange = (range[0] <= distance) && (range[1]>=distance)
+			boolean losOk = lineOfSight(from.cell, to.cell ) || ! this.needLos
+
+			if (inRange && losOk)
+				return true
+			else	
+				return false
+		}
+
+		Set < integer > fromWhereToUse(Leek target, Set < integer > reachabelCells) {
+			Set cellsFromWhereToUse = arrayToSet(getCellsToUseChip(this.id, target.id))
+			debug("cell where to use")
+			mark(setToArray(cellsFromWhereToUse),COLOR_BLUE)
+			pause()
+			Set x = setIntersection(cellsFromWhereToUse, reachabelCells)
+			debug("where to shoot in range")
+			mark(setToArray(x), COLORS.BROWN)
+			pause()
+			return x
+		}
+
+		Set < integer > fromWhereToUseOnCell(integer cell, Set < integer > reachabelCells) {
+			Array cellsToUseWeapon = getCellsToUseChipOnCell(this.id, cell)
+			Set cellsFromWhereToShoot = arrayToSet(cellsToUseWeapon)
+			Set x = setIntersection(cellsFromWhereToShoot, reachabelCells)
+			return x
+		}
+
+
+
+
 }

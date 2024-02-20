@@ -1,17 +1,37 @@
+include("/Classes/Items/Effects")
+
 class Item {
 	public integer id =-1
     public string name = ""
     public Array range = []
-	public Array effects = []
+	public Effects effects = new Effects()
 	public integer cost = 0
 	public Array < integer > area = []
     public real meanDammage = 0.0
     public integer launch_type = -1
-    public boolean los = false
+    public boolean needLos = false
+	public string type = "item"
 
 	constructor(myId){
 			id = myId
             name = "myItem"
 	}
+	
+	real getMeanDammage() {
+			return (this.effects.effect_damage.min + this.effects.effect_damage.max) / 2
+	}
+	
+	Set < integer > fromWhereToUse(Leek target, Set < integer > reachabelCells) {
+		return <-1>
+	}
+
+	Set < integer > fromWhereToUseOnCell(integer cell, Set < integer > reachabelCells) {
+		return <-1>
+	}
+		
+	Set<integer> whereCanHeUse( Set < integer > reachabelCells){
+		return <-1>
+	}
+	
 
 }

@@ -9,6 +9,7 @@ function planAct(me){
 	myPlan.planEquipWeapon()
 	myPlan.planMove()
 	myPlan.planShoot()
+	myPlan.planChipsActions()
 	myPlan.planHide()
 
 	

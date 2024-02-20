@@ -249,7 +249,7 @@ class DangerMap {
         for (Weapon w in enemy.wearedWeapons) {
             damage = 0
             // Find cells to shoot to for the weapon.
-            Set<integer> cellsToShootTo = w.whereCanHeShoot(enemy.reachableCells)
+            Set<integer> cellsToShootTo = w.whereCanHeUse(enemy.reachableCells)
 
             // Update danger map with damage caused by the weapon.
             for (integer c in cellsToShootTo) {

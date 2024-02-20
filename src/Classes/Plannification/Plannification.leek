@@ -4,6 +4,7 @@ include("/Classes/Context/World")
 include("/Classes/Context/DangerMap")
 include("/Classes/Plannification/Action")
 include("/Toolbox/Constants")
+include("/Classes/Context/Combo")
 
 /**
  * Classe Plannification qui g�re la planification des actions d'un poireau dans le jeu.
@@ -39,6 +40,58 @@ class Plannification {
 			chosenWeapon = leek.wearedWeapons[0]
 	}
 
+	void planChipsActions() {
+		Array<Chip> leekChips = leek.cooledChips
+		while(tpLeft && count(leekChips)>0){
+			Action? bestAction = null;
+			real largestDammages = 1 
+			Chip? usedChip = null
+			Set<integer> fromSet = new Set()
+			setPut(fromSet, cellToShootFrom.cell)
+			for(Chip wc in  leekChips)
+			{	
+				debug("wc name " + wc.name)
+				Set < integer > cellsToUseFrom = wc.fromWhereToUse(leek.target, leek.reachableCells)
+				if(wc.cost > tpLeft || cellsToUseFrom == <>)
+				   {
+				   		removeElement( leekChips, wc)
+						debug("remove wc " + wc.name + " " + wc.cost + " cell " + cellsToUseFrom + ".")
+						mark(setToArray(cellsToUseFrom),COLOR_BLUE)
+						pause()
+						clearMarks()
+						
+				   }
+				else
+				{
+					debug("wc meanDammage " + wc.meanDammage)
+					if(
+						wc.meanDammage > largestDammages 
+					)
+					{
+						largestDammages = wc.meanDammage
+						bestAction = new Action("use chip " + wc.name  , 
+												function() {
+													wc.useOnTarget(leek.target)
+												}, 
+												" on " + leek.target.name)
+						usedChip = wc
+						debug("new action " + wc.name + " action " + bestAction)
+					}
+				}
+			}
+			if (bestAction != null )
+			{
+				push(actions,bestAction)
+				removeElement( leekChips, usedChip)
+			}
+
+		}
+		
+
+
+	}
+
+
 	/**
 	 * Planifie l'�quipement d'une arme par le poireau.
 	 */
@@ -58,7 +111,7 @@ class Plannification {
 	 * Planifie le d�placement du poireau.
 	 */
 	void planMove() {
-		Set < integer > cellsToShootFrom = leek.wearedWeapons[0].fromWhereToShoot(leek.target, leek.reachableCells)
+		Set < integer > cellsToShootFrom = leek.wearedWeapons[0].fromWhereToUse(leek.target, leek.reachableCells)
 		integer distance = 20
 		if (cellsToShootFrom == < > ) {
 			// move towards target full speed
@@ -67,6 +120,7 @@ class Plannification {
 					leek.moveTowardTarget()
 				}, "Move towards enemy"))
 				mpLeft = mpLeft - 1
+				// insérer possibilité d'utiliser une puce pour tirer sur l'ennemi si distance and Los
 			}
 		} else {
 			if (cellsToShootFrom != < > ) {
@@ -83,6 +137,8 @@ class Plannification {
 				cellToShootFrom = world.getCoordinatesFromCell(leek.target.cell)
 				distance = getPathLength(leek.cell, cellToShootFrom.cell)
 				mark(cellToShootFrom.cell, COLORS.BROWN)
+				debugC("pourquoi a t on ce cas ?", COLOR_RED)
+				pause() // pourquoi a t on ce cas ? 
 			}
 			pause()
 
@@ -130,6 +186,10 @@ class Plannification {
 		}
 
 	}
+
+
+
+
 
 	/**
 	 * Ex�cute les actions planifi�es.
