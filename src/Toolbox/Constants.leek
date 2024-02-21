@@ -14,6 +14,10 @@ class CONST_COMPARISON {
     static integer SUP = 4
 }
 
+class DANGER{
+	static integer NO_SAFE_PLACE = -20000
+}
+
 class COLORS{
     static integer HIT = getColor(250, 51, 153)
 	static integer SUCCESS = getColor(0, 255, 20)

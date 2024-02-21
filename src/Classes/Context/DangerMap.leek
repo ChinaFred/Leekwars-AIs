@@ -13,7 +13,7 @@ class DangerMap {
     /**
      * The map containing coordinates as keys and danger info as values.
      */
-    Map<Coordinates, DangerInfo> map = new Map() // coordinates as key, dangerInfo as value
+    Map<Coordinates, DangerInfo> map = new Map()// coordinates as key, dangerInfo as value
 	real maxDamage = 0.
 	
 	
@@ -28,10 +28,14 @@ class DangerMap {
         // Iterate over each cell in the game world and populate the DangerMap with default DangerInfo objects.
         for (Coordinates cell in world.cellsCoordinatesTable) {
             // Create a new default DangerInfo object.
-            DangerInfo dangerInfo = new DangerInfo(cell.cell)
-            dangerInfo.weight = 100
-            // Associate the Coordinates object with the DangerInfo object in the DangerMap.
-            mapPut(map, cell, dangerInfo)
+			if (cell.cell >=0 ){
+				DangerInfo dangerInfo = new DangerInfo(cell.cell)
+				dangerInfo.weight = 100
+				// Associate the Coordinates object with the DangerInfo object in the DangerMap.
+				mapPut(map, cell, dangerInfo)
+			}
+			else 
+				debugC("SALOOOOOOOOOPERIE " + cell.cell, COLOR_RED)
         }
     }
 
@@ -78,7 +82,7 @@ class DangerMap {
     */
     DangerInfo getDangerWithMinWeight() {
         // Initialize a DangerInfo object with default values.
-        DangerInfo min = new DangerInfo(-1,10000000,0,0,0)
+        DangerInfo min = new DangerInfo(DANGER.NO_SAFE_PLACE,10000000,0,0,0)
         // Iterate over each DangerInfo object in the map.
         for (DangerInfo el in map) {
             // Check if the weight of the current DangerInfo object is less than or equal to the minimum weight found so far.
@@ -155,16 +159,24 @@ class DangerMap {
      * @returns {Coordinates} - The furthest less dangerous cell.
      */
    Coordinates getFurthestLessDangerous(Coordinates fromCell, Set<Coordinates> reachableCells) {
-        // Initialize variables.
-        integer result = -1
+       debug( "from cell " + fromCell) 
+	   debug("getFurthestLessDangerous reachableCells "  + reachableCells)
+	   debug("this.map" + this.map)
+	   pause()
+	   // Initialize variables.
         DangerMap reachableCellsEvenDangerousOne = new DangerMap()
-		reachableCellsEvenDangerousOne.map = mapFilter(
-            this.map, (DangerInfo value, Coordinates key) 
-            => boolean {
+		debug("reachableCellsEvenDangerousOne" + reachableCellsEvenDangerousOne)
+	   pause()
+	   if(mapSize(this.map)>0){
+		   reachableCellsEvenDangerousOne.map = mapFilter(
+            this.map, 
+			(DangerInfo value, Coordinates key) => boolean {
                 // Filter reachable cells based on whether they are in the reachableCells set.
                 return (setContains(reachableCells, key))
             })
-        reachableCellsEvenDangerousOne.removeObstaclesFromMap()
+        	reachableCellsEvenDangerousOne.removeObstaclesFromMap()
+	   }
+		
 			
 			
 			
@@ -173,6 +185,8 @@ class DangerMap {
 
         // Filter reachable cells based on minimum danger value.
         DangerMap lessDangerousCells = new DangerMap()
+		debug("lessDangerousCells " +lessDangerousCells)
+		pause()
 		lessDangerousCells.map = mapFilter(reachableCellsEvenDangerousOne.map, (DangerInfo value, Coordinates key) => boolean {
             return (min.weight == value.weight)
         })

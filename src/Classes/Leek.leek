@@ -87,12 +87,12 @@ class Leek {
 		wearedWeapons = []
 		Array < integer > tempWearedWeapons = getWeapons(id)
 		for (integer w in tempWearedWeapons)
-			push(wearedWeapons, new Weapon(w))
+			push(wearedWeapons, new Weapon(w, this))
 		
 		wearedChips = []
 		Array < integer > tempWearedChips = getChips(id)
 		for (integer c in tempWearedChips)
-			push(wearedChips, new Chip(c))
+			push(wearedChips, new Chip(c, this))
 	
 		cooledChips = []
 		for (Chip wc in wearedChips)
@@ -128,7 +128,7 @@ class Leek {
 
 	void equipWeaponById(integer weaponID) {
 		setWeapon(weaponID)
-		equipedWeapon = new Weapon(weaponID)
+		equipedWeapon = new Weapon(weaponID, this)
 	}
 
 	void equipWeapon(Weapon w) {
@@ -235,9 +235,12 @@ class Leek {
 							push(arrReachablesCells, possibleCell)
 					}
 			}
-		debug("getReachableCells green")
-		mark(arrReachablesCells, getColor(0, 255, 0))
-		debugPause()
+		if(DEBUGS.CONST_REACHABLE_CELLS){
+			debug("getReachableCells green")
+			mark(arrReachablesCells, getColor(0, 255, 0))
+			pause()
+		}
+	
 
 		return setDifference(arrayToSet(arrReachablesCells), world.obstaclesSet)
 	}
@@ -270,7 +273,7 @@ class Leek {
 
 	/* main */
 
-	null play() {
+	void play() {
 
 		debug("I play " + this.name)
 		AI(this)

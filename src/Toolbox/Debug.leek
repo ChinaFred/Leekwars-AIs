@@ -3,6 +3,7 @@
 	class DEBUGS{
 		static boolean CONST_DEBUG_PAUSE = false
 		static boolean CONST_MARK_DANGERMAP = false
+		static boolean CONST_REACHABLE_CELLS = false
 		
 	}	
 

@@ -4,8 +4,9 @@ include("/Classes/Context/World")
 
 	class Weapon extends Item {
 
-		constructor(myId) {
+		constructor(integer myId, Leek ow ) {
 			super(myId) // Appel du constructeur de Item
+			owner = ow
 			type ="Weapon"
 			name = getWeaponName(myId)
 			range = [getWeaponMinRange(myId), getWeaponMaxRange(myId)]
@@ -13,8 +14,8 @@ include("/Classes/Context/World")
 			effects = new Effects(getWeaponEffects(this.id))
 			launch_type = getWeaponLaunchType(this.id)
 			needLos = weaponNeedLos(this.id)
-			meanDamage = this.getMeanDamage()
-			meanHeal = this.getMeanHeal()
+			meanDamage = this.getMeanDamage(owner)
+			meanHeal = this.getMeanHeal(owner)
 		}
 
 		real getTurnDamage(integer tp){

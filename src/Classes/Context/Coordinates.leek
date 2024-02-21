@@ -17,7 +17,7 @@ class Coordinates {
     /**
      * The cell number.
      */
-    public integer cell = -1
+    public integer cell = -100
 
     /**
      * Constructor to initialize the coordinates.

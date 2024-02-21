@@ -5,8 +5,9 @@ include("/Classes/Context/World")
 class Chip extends Item{
 		integer cooldown = 10
 
-		constructor(myId) {
+		constructor(integer myId, Leek ow) {
 			super(myId) // Appel du constructeur de Item
+			owner = ow
 			type ="Chip"
 			name = getChipName(myId)
 			range = [getChipMinRange(myId), getChipMaxRange(myId)]
@@ -15,8 +16,8 @@ class Chip extends Item{
 			cost = getChipCost(this.id)
 			launch_type = getChipLaunchType(this.id)
 			needLos = chipNeedLos(this.id)
-			meanDamage = this.getMeanDamage()
-			meanHeal = this.getMeanHeal()
+			meanDamage = this.getMeanDamage(owner)
+			meanHeal = this.getMeanHeal(owner)
 			cooldown  = getChipCooldown(this.id)
 		}
 

@@ -39,8 +39,11 @@ class World{
 			{
 				if (abs(x) + abs(y) <= 17){
 					var cell = getCellFromXY (x,y)
-					mapPut(cellsCoordinatesTable, cell, new Coordinates(x,y))
-					setPut(cellsSet, cell)
+					if( cell >= 0 ){
+						mapPut(cellsCoordinatesTable, cell, new Coordinates(x,y))
+						setPut(cellsSet, cell)
+					}
+					
 				}
 			}
 	}
@@ -72,7 +75,11 @@ class World{
 	}
 
 	public Coordinates getCoordinatesFromCell(key){
-		return mapGet(cellsCoordinatesTable, key)
+		Coordinates ret =  mapGet(cellsCoordinatesTable, key)
+	
+	
+						  
+		return ret
 	}
 
 }
