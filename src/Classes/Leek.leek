@@ -41,7 +41,7 @@ class Leek {
 	public Array actions = []
 
 	public Set < integer > reachableCells = < >
-		public DangerMap ? dangerMap = new DangerMap()
+	public DangerMap ? dangerMap = new DangerMap()
 
 	constructor() {}
 
@@ -69,7 +69,6 @@ class Leek {
 	}
 
 	void updateData() {
-
 		name = getName(id)
 		life = getLife(id)
 		totalLife = getTotalLife(id)
@@ -84,37 +83,45 @@ class Leek {
 		ram = getRAM(id)
 		mp = getTotalMP(id)
 		tp = getTotalTP(id)
+		
 		wearedWeapons = []
 		Array < integer > tempWearedWeapons = getWeapons(id)
 		for (integer w in tempWearedWeapons)
 			push(wearedWeapons, new Weapon(w))
+		
 		wearedChips = []
 		Array < integer > tempWearedChips = getChips(id)
 		for (integer c in tempWearedChips)
 			push(wearedChips, new Chip(c))
-		cell = getCell(id)
-		coordinates = world.getCoordinatesFromCell(cell)
-		reachableCells = getReachableCells()
-		actions = []
-
+	
+		cooledChips = []
 		for (Chip wc in wearedChips)
 			if (getCooldown(wc.id, this.id) == 0)
 				push(cooledChips, wc)
 
+		cell = getCell(id)
+		coordinates = world.getCoordinatesFromCell(cell)
+		reachableCells = getReachableCells()
+		actions = []
+		
 		debug("update " + name + " data")
-		debug("wearedChips " + wearedChips)
 	}
 
 	updateDataMyLeeks() {
 		debug("update data my leek")
-		target = world.getEnemyLeek(this.target.id)
-		dangerMap.resetMap()
-		dangerMap.buildDangerMap(this.target)
+		if(target != null){
+			target = world.getEnemyLeek(this.target.id)
+			dangerMap.initialize()
+			dangerMap.buildDangerMap(this.target)
+		}
+
 	}
 
 	/***************setters*******************************************/
 	void setTarget(integer id) {
 		target = world.getEnemyLeek(id)
+		dangerMap.initialize()
+		dangerMap.buildDangerMap(this.target)
 		debug("My target is " + target.name)
 
 	}
@@ -140,9 +147,10 @@ class Leek {
 		return damagingItems
 	}
 
-	Array < Item > getUsableDamagingItems(integer distance, boolean hasLos) {
+	Array < Item > getUsableDamagingItems(integer distance, boolean hasLos, integer leftTP) {
 		Array < Item > damagingItems = []
 		for (Weapon ww in wearedWeapons) {
+		if(leftTP>=ww.cost)
 		if (ww.effects.effect_damage != null 
 				and ww.range[0]<=distance
 				and ww.range[1]>=distance
@@ -152,6 +160,7 @@ class Leek {
 		}
 		
 		for (Chip wc in wearedChips) {
+			if(leftTP>=wc.cost)
 			if (wc.effects.effect_damage != null 
 				and inArray(this.cooledChips, wc)
 				and wc.range[0]<=distance
@@ -160,7 +169,6 @@ class Leek {
 			   )
 				push(damagingItems, wc)
 		}
-		debug("damagingItems " + damagingItems)
 		return damagingItems
 	}
 
@@ -170,13 +178,32 @@ class Leek {
 		tp = tp - equipedWeapon.cost
 		debug("shoot target " + target.id + " " + target.name + " -- " + tp + " TP remains - result " + attackResult)
 	}
+	
+	void shootOnTarget(Leek theTarget) {
+		integer attackResult = useWeapon(theTarget.id)
+		tp = tp - equipedWeapon.cost
+		debug("shoot target " + theTarget.id + " " + theTarget.name + " -- " + tp + " TP remains - result " + attackResult)
+	}
+	
+	/*void useChipById(integer chipId, Leek target) {
+		useChip(chipId, target.id)
+	}*/
 
 	void useChip(Chip chip, Leek target) {
 		chip.useOnTarget(target)
 	}
+	
+
 
 	boolean canShootOnTarget() {
 		return canUseWeaponOnCell(equipedWeapon.id, target.cell)
+	}
+	
+	Chip? getChipById(integer id ){
+		for(Chip c in wearedChips)
+			if (c.id == id )
+				return c 
+		return null
 	}
 
 
@@ -232,11 +259,9 @@ class Leek {
 						}
 					}
 				}
-		debugPause()
 		reachablesCoordinatesSet = setDifference((reachablesCoordinatesSet), world.obstaclesCoordinatesSet)
 		debug("getReachableCellsFromCell green + blue from cell " + cell + " with " + leftMps + " mps")
 		Coordinates.markArray(setToArray(reachablesCoordinatesSet), getColor(0, 200, 125))
-		debugPause()
 		return reachablesCoordinatesSet
 	}
 

@@ -7,7 +7,8 @@ class Item {
 	public Effects effects = new Effects()
 	public integer cost = 0
 	public Array < integer > area = []
-    public real meanDammage = 0.0
+    public real meanDamage = 0.0
+	public real meanHeal = 0.0
     public integer launch_type = -1
     public boolean needLos = false
 	public string type = "item"
@@ -17,8 +18,20 @@ class Item {
             name = "myItem"
 	}
 	
-	real getMeanDammage() {
-			return (this.effects.effect_damage.min + this.effects.effect_damage.max) / 2
+	real getMeanDamage() {
+		if(this.effects.effect_damage!=null)
+			return this.effects.effect_damage.min + (this.effects.effect_damage.max - this.effects.effect_damage.min) * 0.5;
+			//return (this.effects.effect_damage.min + this.effects.effect_damage.max) / 2
+		else 
+			return 0.
+	}
+	
+	real getMeanHeal() {
+		if(this.effects.effect_heal!=null)
+			return this.effects.effect_heal.min + (this.effects.effect_heal.max - this.effects.effect_heal.min) * 0.5;
+			//return (this.effects.effect_heal.min + this.effects.effect_heal.max) / 2
+		else 
+			return 0.
 	}
 	
 	Set < integer > fromWhereToUse(Leek target, Set < integer > reachabelCells) {
@@ -31,6 +44,17 @@ class Item {
 		
 	Set<integer> whereCanHeUse( Set < integer > reachabelCells){
 		return <-1>
+	}
+		
+	Action getActionUse(Leek leek,Leek target){
+		return new Action() 
+	}
+		
+	Action getActionEquip(Leek leek){
+		return new Action("Equip item", function() {
+				debug("no need to equip items " + this.name)
+			}, 
+			"Equip" + this.name)
 	}
 	
 

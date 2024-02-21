@@ -1,4 +1,4 @@
- function getClosestCellFromSet(integer cell, Set cells)=> integer{
+ /*function getClosestCellFromSet(integer cell, Set cells)=> integer{
 	debug("getClosestCellFromSet(cell) cell" + cell)
 	debug("cells " + cells)
 	integer minDist = 10000000
@@ -40,4 +40,4 @@
 	debug("furthestCell " + furthestCell)
 
 	return furthestCell 
-}
+}*/

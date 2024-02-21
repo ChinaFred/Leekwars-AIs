@@ -1,9 +1,13 @@
-	global boolean CONST_DEBUG_PAUSE = false
 
-	
+
+	class DEBUGS{
+		static boolean CONST_DEBUG_PAUSE = false
+		static boolean CONST_MARK_DANGERMAP = false
+		
+	}	
 
 	function debugPause()=>void{
-		if(CONST_DEBUG_PAUSE )
+		if(DEBUGS.CONST_DEBUG_PAUSE )
 		 	pause()
 	}
 	

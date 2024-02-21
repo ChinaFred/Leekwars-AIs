@@ -36,58 +36,60 @@ class Plannification {
 	 * Choisis une arme pour le poireau.
 	 */
 	void chooseWeapon() {
-		if (chosenWeapon == null)
-			chosenWeapon = leek.wearedWeapons[0]
+		Weapon bestWeapon
+		real bestDamage = 0.
+		for (Weapon w in leek.wearedWeapons){
+			if (bestDamage < w.getTurnDamage(tpLeft))
+				bestWeapon = w
+		}
+
+		chosenWeapon = bestWeapon
 	}
 
 	void planChipsActions() {
-		Array<Chip> leekChips = leek.cooledChips
-		while(tpLeft && count(leekChips)>0){
-			Action? bestAction = null;
-			real largestDammages = 1 
-			Chip? usedChip = null
-			Set<integer> fromSet = new Set()
-			setPut(fromSet, cellToShootFrom.cell)
-			for(Chip wc in  leekChips)
-			{	
-				debug("wc name " + wc.name)
-				Set < integer > cellsToUseFrom = wc.fromWhereToUse(leek.target, leek.reachableCells)
-				if(wc.cost > tpLeft || cellsToUseFrom == <>)
-				   {
-				   		removeElement( leekChips, wc)
-						debug("remove wc " + wc.name + " " + wc.cost + " cell " + cellsToUseFrom + ".")
-						mark(setToArray(cellsToUseFrom),COLOR_BLUE)
-						pause()
-						clearMarks()
-						
-				   }
-				else
-				{
-					debug("wc meanDammage " + wc.meanDammage)
-					if(
-						wc.meanDammage > largestDammages 
-					)
-					{
-						largestDammages = wc.meanDammage
-						bestAction = new Action("use chip " + wc.name  , 
-												function() {
-													wc.useOnTarget(leek.target)
-												}, 
-												" on " + leek.target.name)
-						usedChip = wc
-						debug("new action " + wc.name + " action " + bestAction)
-					}
+		Array < Chip > cooledChips = leek.cooledChips
+		Array < Chip > healChips  = Chip.getHealingChips(cooledChips)
+		Array < Chip > shieldChips  = Chip.getShieldChips(cooledChips)
+	
+		
+		/// Heal if wounded
+		integer lostLife = leek.totalLife - leek.life
+		if( lostLife >0) {
+			for (Chip hc in healChips){
+				if (hc.meanHeal < lostLife){
+					push(actions, new Action("heal  ", function() {
+							leek.useChip(hc, leek)
+						},
+						hc.name))
+					tpLeft = tpLeft - hc.cost
+				
 				}
 			}
-			if (bestAction != null )
-			{
-				push(actions,bestAction)
-				removeElement( leekChips, usedChip)
-			}
-
 		}
-		
-
+			
+		///if close to enemy put shield
+		integer distance = getCellDistance(leek.coordinates.cell, leek.target.coordinates.cell)
+		debug("shield ? distance " +distance)
+		debug("leek.target.mp " + leek.target.mp )
+		//debug("leek.equipedWeapon.range[1] " + leek.equipedWeapon.range[1])
+		if (leek.equipedWeapon != null) // tour 1
+		if (leek.equipedWeapon.range != [])
+		if( distance < (leek.target.mp + leek.equipedWeapon.range[1]) ) {
+			debug("i willl choose an helmet")
+			for (Chip sc in shieldChips){
+					
+					push(actions, new Action("Shield  ", function() {
+							leek.useChip(sc, leek)
+						},
+						sc.name))
+					tpLeft = tpLeft - sc.cost
+				
+				
+			}
+		}
+		else 
+			debug("no helmet")
+		pause()
 
 	}
 
@@ -96,12 +98,13 @@ class Plannification {
 	 * Planifie l'�quipement d'une arme par le poireau.
 	 */
 	void planEquipWeapon() {
-		chooseWeapon() //faire un choix �clair�$
+		if(chosenWeapon == null)
+			chooseWeapon() //faire un choix �clair�$
 		if (leek.equipedWeapon.id != chosenWeapon.id) {
-			push(actions, new Action("equip weapon " , function() {
-				leek.equipWeapon(chosenWeapon)
-			}, 
-		    chosenWeapon.name))
+			push(actions, new Action("equip weapon ", function() {
+					leek.equipWeapon(chosenWeapon)
+				},
+				chosenWeapon.name))
 			tpLeft = tpLeft - 1
 
 		}
@@ -126,8 +129,12 @@ class Plannification {
 			if (cellsToShootFrom != < > ) {
 				Map < integer, integer > cellsDistanceToLeek = new Map()
 				for (integer c in cellsToShootFrom) {
-
-					mapPut(cellsDistanceToLeek, c, getPathLength(leek.cell, c))
+					any pathLength = getPathLength(leek.cell, c)
+					if (pathLength != null)
+						mapPut(cellsDistanceToLeek, c, pathLength)
+					else {
+						debugC("erreur dans le calcul de cells to shoot from leek.cell " + leek.cell + " c " + c , COLOR_RED)
+					}
 				}
 				distance = mapMin(cellsDistanceToLeek)
 				cellToShootFrom = world.getCoordinatesFromCell(mapSearch(cellsDistanceToLeek, distance))
@@ -144,7 +151,7 @@ class Plannification {
 
 			push(actions, new Action("moveTowardOneCell " + cellToShootFrom, function() {
 				leek.moveTowardOneCell(cellToShootFrom.cell)
-			}, "cell to shoot from " + cellsToShootFrom ))
+			}, "cell to shoot from " + cellToShootFrom))
 
 			mpLeft = mpLeft - distance
 		}
@@ -158,51 +165,77 @@ class Plannification {
 			while (tpLeft >= chosenWeapon.cost) {
 				debug("planshoot + tpleft " + tpLeft)
 				push(actions, new Action("shoot", function() {
-					leek.shoot()
-				}, 
-				"planshoot + tpleft after" + tpLeft))
+						leek.shoot()
+					},
+					"planshoot + tpleft after" + tpLeft))
 				tpLeft = tpLeft - chosenWeapon.cost
 			}
 		debug("planshoot + tpleft after" + tpLeft)
 	}
 
 	/**
-	 * Planifie la dissimulation du poireau.
+	 * Planifie le tir ou l'utlisation d'un chip du poireau.
 	 */
-	void planHide() {
-		if (mpLeft > 0) {
-			Coordinates safeCell = leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
-			debugC("place to hide " + safeCell, COLOR_RED)
+	void planShootOrChip() {
+		Chip chipIce = leek.getChipById(CHIP_ICE)
+		if ( (getCooldown(chipIce.id, leek.id)==0) and canUseChipOnCell(chipIce.id, leek.target.coordinates.cell)) {
+				push(actions, 
+				 new Action("ice this one", 
+					function() {
+						leek.useChip(chipIce, leek.target)
+					}, "on " + leek.target.name)
+				)
+				tpLeft = tpLeft-chipIce.cost
+			}
+
+			if (willShoot)
+				while (tpLeft >= chosenWeapon.cost) {
+					debug("planShootOrChip + tpleft " + tpLeft)
+					push(actions, new Action("shoot", function() {
+							leek.shoot()
+						},
+						"planShootOrChip + tpleft after" + tpLeft))
+					tpLeft = tpLeft - chosenWeapon.cost
+				}
+			debug("actions " + actions)
 			pause()
-			if (safeCell.cell > -1) {
-				Map < integer, integer > distanceToSafeCells = new Map()
-				push(actions, new Action("hide", function() {
-					leek.moveTowardOneCell(safeCell.cell)
-				},"safe place : " + safeCell
-				))
+		}
+
+		/**
+		 * Planifie la dissimulation du poireau.
+		 */
+		void planHide() {
+			if (mpLeft > 0) {
+				Coordinates safeCell = leek.dangerMap.getPlaceToHide(leek, leek.target, cellToShootFrom, mpLeft)
+				debugC("place to hide " + safeCell, COLOR_RED)
+				pause()
+				if (safeCell.cell > -1) {
+					push(actions, new Action("hide", function() {
+						leek.moveTowardOneCell(safeCell.cell)
+					}, "safe place : " + safeCell))
+
+				}
+
+			}
+
+		}
+
+
+
+
+
+		/**
+		 * Ex�cute les actions planifi�es.
+		 */
+		void execute() {
+			debug("Actions" + actions)
+			while (count(actions) > 0) {
+				Action toExecute = shift(actions)
+				debug("play " + toExecute.name + " - " + toExecute.desc)
+				toExecute.action()
 
 			}
 
 		}
 
 	}
-
-
-
-
-
-	/**
-	 * Ex�cute les actions planifi�es.
-	 */
-	void execute() {
-		debug("Actions" + actions)
-		while (count(actions) > 0) {
-			Action toExecute = shift(actions)
-			debug("play " + toExecute.name)
-			toExecute.action()
-
-		}
-
-	}
-
-}

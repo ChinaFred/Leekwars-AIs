@@ -13,10 +13,13 @@ include("/Classes/Context/World")
 			effects = new Effects(getWeaponEffects(this.id))
 			launch_type = getWeaponLaunchType(this.id)
 			needLos = weaponNeedLos(this.id)
-			meanDammage = this.getMeanDammage()
+			meanDamage = this.getMeanDamage()
+			meanHeal = this.getMeanHeal()
 		}
 
-
+		real getTurnDamage(integer tp){
+			return meanDamage * (tp \ cost)
+		}
 
 
 		Set < integer > fromWhereToUse(Leek target, Set < integer > reachabelCells) {
@@ -59,6 +62,20 @@ include("/Classes/Context/World")
 
 			return shootableCells
 
+		}
+		
+		Action getActionEquip(Leek leek){
+			return new Action("Equip weapon", function() {
+					leek.equipWeapon(this)
+				}, 
+				"Equip" + this.name)
+		}
+		
+		Action getActionUse(Leek leek,Leek target){
+			return new Action("shootOnTarget", function() {
+					leek.shootOnTarget(target)
+				}, 
+				"shoot on " + target.name + " with" + this.name)
 		}
 
 	}

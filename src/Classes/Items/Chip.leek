@@ -15,7 +15,8 @@ class Chip extends Item{
 			cost = getChipCost(this.id)
 			launch_type = getChipLaunchType(this.id)
 			needLos = chipNeedLos(this.id)
-			meanDammage = this.getMeanDammage()
+			meanDamage = this.getMeanDamage()
+			meanHeal = this.getMeanHeal()
 			cooldown  = getChipCooldown(this.id)
 		}
 
@@ -56,6 +57,39 @@ class Chip extends Item{
 			return x
 		}
 
+	
+		static Array<Chip> getHealingChips(Array<Chip> arr){
+			Array<Chip> ret = []
+			for(Chip c in arr)
+				if(c.effects.effect_heal != null)
+					push(ret,c)
+			return ret
+		}
+	
+		static Array<Chip> getDamagingChips(Array<Chip> arr){
+			Array<Chip> ret = []
+			for(Chip c in arr)
+				if(c.effects.effect_damage != null)
+					push(ret,c)
+			return ret
+		}
+	
+		static Array<Chip> getShieldChips(Array<Chip> arr){
+			Array<Chip> ret = []
+			for(Chip c in arr)
+				if(c.effects.effect_absolute_shield != null or c.effects.effect_relative_shield != null)
+					push(ret,c)
+			return ret
+		}
+	
+		static Array<Chip> getStrengthBuffChips(Array<Chip> arr){
+			Array<Chip> ret = []
+			for(Chip c in arr)
+				if(c.effects.effect_buff_strength != null )
+					push(ret,c)
+			return ret
+		}
+	
 
 
 

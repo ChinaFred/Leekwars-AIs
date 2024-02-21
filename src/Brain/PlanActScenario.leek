@@ -7,9 +7,9 @@ function planAct(me){
 	me.setTarget(getNearestEnemy())
 	myPlan.chooseWeapon()
 	myPlan.planEquipWeapon()
-	myPlan.planMove()
-	myPlan.planShoot()
 	myPlan.planChipsActions()
+	myPlan.planMove()
+	myPlan.planShootOrChip()
 	myPlan.planHide()
 
 	

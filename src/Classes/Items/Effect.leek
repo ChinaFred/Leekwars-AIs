@@ -1,12 +1,12 @@
 class Effect{
 	integer type = -1
-	integer min = -1
-	integer max = -1
+	real min = -1.
+	real max = -1.
 	integer turns = -1
 	integer targets = -1
 	integer modifiers = -1
 
-	constructor(Array<integer> arr){
+	constructor(Array<any> arr){
 		this.type = arr[0]
 		this.min = arr[1]
 		this.max = arr[2]
