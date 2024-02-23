@@ -4,7 +4,8 @@ include("/Classes/Context/World")
 include("/Classes/Context/DangerMap")
 include("/Classes/Plannification/Action")
 include("/Toolbox/Constants")
-include("/Classes/Context/Combo")
+include("/Classes/Plannification/ShootingOption")
+include("/Classes/Plannification/ShootingOptions")
 
 /**
  * Classe Plannification qui g�re la planification des actions d'un poireau dans le jeu.
@@ -17,6 +18,8 @@ class Plannification {
 	public Coordinates cellToShootFrom = new Coordinates()
 	public Weapon | null chosenWeapon = null
 	public boolean willShoot = false
+	
+	public Array<ShootingOption> shootingOptions = [] 
 
 	/**
 	 * Constructeur de la classe Plannification.
@@ -115,7 +118,9 @@ class Plannification {
 	 */
 	void planMove() {
 		Set < integer > cellsToShootFrom = leek.wearedWeapons[0].fromWhereToUse(leek.target, leek.reachableCells)
-		integer distance = 20
+		if(DEBUGS.MARK_CELLS_TO_SHOOT_FROM)
+			mark(setToArray(cellsToShootFrom), COLORS.SALMON)
+		integer distance = 70
 		if (cellsToShootFrom == < > ) {
 			// move towards target full speed
 			while (mpLeft > 0) {
@@ -129,9 +134,14 @@ class Plannification {
 			if (cellsToShootFrom != < > ) {
 				Map < integer, integer > cellsDistanceToLeek = new Map()
 				for (integer c in cellsToShootFrom) {
-					any pathLength = getPathLength(leek.cell, c)
-					if (pathLength != null)
+					integer pathLength = getPathLength(leek.cell, c)
+					if (pathLength <= leek.mp){
+						
 						mapPut(cellsDistanceToLeek, c, pathLength)
+						debug(cellsDistanceToLeek)	
+						pause()
+					}
+					
 					else {
 						debugC("erreur dans le calcul de cells to shoot from leek.cell " + leek.cell + " c " + c , COLOR_RED)
 					}
@@ -219,6 +229,15 @@ class Plannification {
 			}
 
 		}
+
+	void chooseAgressionTactic(){
+		Array<Item> potentialAttacks = ShootingOption.buildDamagingItemsTable(leek)
+		ShootingOptions shootingOptions = new ShootingOptions()
+		ShootingOption shootingOption = new ShootingOption()
+		
+	
+	}
+
 
 
 

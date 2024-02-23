@@ -16,6 +16,7 @@ class CONST_COMPARISON {
 
 class DANGER{
 	static integer NO_SAFE_PLACE = -20000
+	static integer INITIAL_DANGER = 100
 }
 
 class COLORS{

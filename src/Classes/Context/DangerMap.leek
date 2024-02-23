@@ -30,12 +30,15 @@ class DangerMap {
             // Create a new default DangerInfo object.
 			if (cell.cell >=0 ){
 				DangerInfo dangerInfo = new DangerInfo(cell.cell)
-				dangerInfo.weight = 100
+				dangerInfo.weight = DANGER.INITIAL_DANGER
 				// Associate the Coordinates object with the DangerInfo object in the DangerMap.
 				mapPut(map, cell, dangerInfo)
 			}
-			else 
-				debugC("SALOOOOOOOOOPERIE " + cell.cell, COLOR_RED)
+			else {
+				debugC("une cell a un indice erroné dans l'initialization des danger maps' " + cell.cell, COLOR_RED)
+			
+			}
+			
         }
     }
 
@@ -159,14 +162,8 @@ class DangerMap {
      * @returns {Coordinates} - The furthest less dangerous cell.
      */
    Coordinates getFurthestLessDangerous(Coordinates fromCell, Set<Coordinates> reachableCells) {
-       debug( "from cell " + fromCell) 
-	   debug("getFurthestLessDangerous reachableCells "  + reachableCells)
-	   debug("this.map" + this.map)
-	   pause()
 	   // Initialize variables.
         DangerMap reachableCellsEvenDangerousOne = new DangerMap()
-		debug("reachableCellsEvenDangerousOne" + reachableCellsEvenDangerousOne)
-	   pause()
 	   if(mapSize(this.map)>0){
 		   reachableCellsEvenDangerousOne.map = mapFilter(
             this.map, 
@@ -185,13 +182,10 @@ class DangerMap {
 
         // Filter reachable cells based on minimum danger value.
         DangerMap lessDangerousCells = new DangerMap()
-		debug("lessDangerousCells " +lessDangerousCells)
-		pause()
 		lessDangerousCells.map = mapFilter(reachableCellsEvenDangerousOne.map, (DangerInfo value, Coordinates key) => boolean {
             return (min.weight == value.weight)
         })
 
-        // Debug and mark less dangerous cells.
 
         // Find the furthest cell among less dangerous cells.
         Coordinates ret = Coordinates.getFurthestCellFromSet(fromCell, arrayToSet(mapKeys(lessDangerousCells.map)))
@@ -210,7 +204,7 @@ class DangerMap {
      */
     Coordinates getPlaceToHide(Leek me, Leek enemy, Coordinates origin, integer mp) {
         // Initialize variables.
-        Coordinates placeToHide = new Coordinates()
+        Coordinates? placeToHide = null
         Set<Coordinates> reachableCellsToHide = me.getReachableCoordinatesFromCell(origin, mp)
         Set<Coordinates> safePlaces = <>
 
@@ -220,25 +214,35 @@ class DangerMap {
             debug("No cells reachable to hide")
         } else {
             // Find safe places by subtracting dangerous places from reachable cells.
-            Set<Coordinates> dangerousPlaces = arrayToSet(mapKeys(me.dangerMap.map))
-            safePlaces = setDifference(reachableCellsToHide, dangerousPlaces)
-            mark(setToArray(safePlaces), COLORS.LIGHT_GREEN)
-           pause()
-            Coordinates safe = Coordinates.getFurthestCellFromSet(world.getCoordinatesFromCell(enemy.cell), safePlaces)
-            if (safe.cell > -1){
-                placeToHide = safe
-                debug("placeToHide safe" + placeToHide)
-                mark(placeToHide.cell, COLORS.YELLOW)
-            }
-                
-            else {
-                // If no safe cell found, find the furthest less dangerous cell.
-               placeToHide = getFurthestLessDangerous(world.getCoordinatesFromCell(enemy.cell), reachableCellsToHide)
-               debug("placeToHide less safe" + placeToHide)
-                mark(placeToHide.cell, COLORS.WARNING)
-            }
-             pause()
-
+            Set<Coordinates> dangerousPlaces =getCellsFromWeight(DANGER.INITIAL_DANGER, CONST_COMPARISON.SUP)
+			safePlaces = setDifference(reachableCellsToHide, dangerousPlaces)
+			if(DEBUGS.SAFE_PLACES){
+				debug("safePlaces " + safePlaces)
+				mark(setToArray(safePlaces), COLORS.LIGHT_GREEN)
+				pause()
+			}
+        
+			if(setSize(safePlaces) >0){
+				Coordinates safe = Coordinates.getFurthestCellFromSet(world.getCoordinatesFromCell(enemy.cell), safePlaces)
+				if (safe.cell > -1){
+					placeToHide = safe
+					if(DEBUGS.SAFE_PLACES){
+						debug("placeToHide safe" + placeToHide)
+						mark(placeToHide.cell, COLORS.YELLOW)
+						pause()
+					}
+				}
+				 pause()
+			}
+			if (placeToHide == null) {
+				// If no safe cell found, find the furthest less dangerous cell.
+			   	placeToHide = getFurthestLessDangerous(world.getCoordinatesFromCell(enemy.cell), reachableCellsToHide)
+				if(DEBUGS.SAFE_PLACES){
+			   		debug("placeToHide less safe" + placeToHide)
+					mark(placeToHide.cell, COLORS.WARNING)
+					pause()
+				}
+			}
             
         }
         // Return the cell to hide.
@@ -276,10 +280,12 @@ class DangerMap {
         return map
     }
 
+
+
 	void markDM(){
 		if(DEBUGS.CONST_MARK_DANGERMAP){
 			for (any di in map ){
-				mark(di.key, getColor(COLOR_RED *di.weight/(maxDamage+ 100), 0, 0))
+				mark(di.key, getColor(COLOR_RED *di.weight/(maxDamage+ DANGER.INITIAL_DANGER), 0, 0))
 				markText(di.key, di.weight)
 			}
 			pause()

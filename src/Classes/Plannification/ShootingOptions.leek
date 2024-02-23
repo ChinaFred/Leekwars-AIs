@@ -1,0 +1,70 @@
+include("/Classes/Context/World")
+include("/Classes/Leek")
+include("/Classes/Items/Chip")
+include("/Classes/Items/Item")
+include("/Classes/Items/Weapon")
+include("/Classes/Context/DangerMap")
+include("/Classes/Plannification/ShootingOption")
+include("/Classes/Plannification/Action")
+include("/Classes/Context/Coordinates")
+include("/Toolbox/Constants")
+include("/Toolbox/Debug")
+include("/Toolbox/Helpers")
+
+
+
+
+class ShootingOptions{
+	Array<ShootingOption> options = []
+	
+	
+	
+	
+	void exploreOptions(Leek leek,ShootingOption previousOption, Array<Item> damagingItems ){
+		ShootingOption currentOption = new ShootingOption(previousOption)
+		Array<Item> currentDamagingItems = copyArray(damagingItems)
+		
+		//for(Item  di in currentDamagingItems){
+		for (integer i =0 ; i < count(currentDamagingItems);i++ ){
+			Item di = currentDamagingItems[i]
+			debug("explore options " + currentDamagingItems[i].name)
+			for (Item cd in currentDamagingItems)
+				debug("currentDamagingItems " +  cd.name)
+			debug("di.cost <= currentOption.tpLeft " + (di.cost <= currentOption.tpLeft))
+			debug("di.range[1] " + di.range[1] +"+ leek.mp " + leek.mp+" <= getCellDistance(leek.cell, leek.target.cell " +getCellDistance(leek.cell, leek.target.cell)+":"  + (di.range[1] + leek.mp <= getCellDistance(leek.cell, leek.target.cell)) )
+			// vérification des tp  
+			// vérification brève/ grossière de pouvoir tirer sur distance	
+			if(
+				di.cost <= currentOption.tpLeft and 
+				di.range[1] + leek.mp <= getCellDistance(leek.cell, leek.target.cell)
+			){
+				debug("ajoute option " + di.name)
+				
+				push(currentOption.actions, di.getActionUse(leek, leek.target))
+				push(currentOption.usedItems, di)
+				currentOption.tpLeft = currentOption.tpLeft - di.cost
+				debug(currentOption.rejected)
+				currentOption.debugUsedItems()
+				pause()
+				remove(currentDamagingItems, i)
+				if (getOperations()> (getMaxOperations()* 0.9))
+					return
+			}
+			else {
+				// on enleve toute les occurences puisque pas utilisable
+				arrayRemoveAll(currentDamagingItems, di)
+				push(currentOption.rejected,"rejeté : " + di.name)
+			}
+				
+			
+			exploreOptions(leek, currentOption, currentDamagingItems)
+		}
+		
+		push(options, currentOption)
+		debug("une option retenue , fin de boucle")
+		for (Item it in currentOption.usedItems )
+					debug(" tous les items retenus " + it.name)
+		pause()
+	}
+
+}
