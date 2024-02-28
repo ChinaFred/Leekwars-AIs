@@ -8,7 +8,7 @@ class Chip extends Item{
 		constructor(integer myId, Leek ow) {
 			super(myId) // Appel du constructeur de Item
 			owner = ow
-			type ="Chip"
+			type = ITEM_TYPE.CHIP
 			name = getChipName(myId)
 			range = [getChipMinRange(myId), getChipMaxRange(myId)]
 			
@@ -51,8 +51,8 @@ class Chip extends Item{
 			return x
 		}
 
-		Set < integer > fromWhereToUseOnCell(integer cell, Set < integer > reachabelCells) {
-			Array cellsToUseWeapon = getCellsToUseChipOnCell(this.id, cell)
+		Set < integer > fromWhereToUseOnCell(integer targetCell, Set < integer > reachabelCells) {
+			Array cellsToUseWeapon = getCellsToUseChipOnCell(this.id, targetCell)
 			Set cellsFromWhereToShoot = arrayToSet(cellsToUseWeapon)
 			Set x = setIntersection(cellsFromWhereToShoot, reachabelCells)
 			return x

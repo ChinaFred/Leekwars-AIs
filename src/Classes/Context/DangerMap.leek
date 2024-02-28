@@ -285,7 +285,10 @@ class DangerMap {
 	void markDM(){
 		if(DEBUGS.CONST_MARK_DANGERMAP){
 			for (any di in map ){
-				mark(di.key, getColor(COLOR_RED *di.weight/(maxDamage+ DANGER.INITIAL_DANGER), 0, 0))
+				//mark(di.key, getColor(COLOR_RED *di.weight/(maxDamage+ DANGER.INITIAL_DANGER), 0, 0))
+				real color = ((di.weight - DANGER.INITIAL_DANGER) / (maxDamage )) * 100
+				debug(color)
+				mark(di.key, getColor(255, 255 -color, 255 -color))
 				markText(di.key, di.weight)
 			}
 			pause()

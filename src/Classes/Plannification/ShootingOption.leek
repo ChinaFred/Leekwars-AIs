@@ -29,13 +29,14 @@ class ShootingOption{
 		usedItems = copyArray(previousOption.usedItems)
 		rejected = copyArray(previousOption.rejected)
 	}
+	
 	void Init(Leek leek )
 	{
 		tpLeft = leek.tp 
 		mpLeft = leek.mp
 	}
 
-	
+	// table reprenant des copies des items pour faire une exploration en arbre
 	static Array<Item> buildDamagingItemsTable(leek){
 		Array<Item> damagingItems = leek.getDamagingItems()	
 		Array<Item> potentialAttacks = []

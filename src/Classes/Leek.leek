@@ -147,28 +147,35 @@ class Leek {
 		return damagingItems
 	}
 
-	Array < Item > getUsableDamagingItems(integer distance, boolean hasLos, integer leftTP) {
+	Array < Item > getUsableDamagingItems(integer distance, boolean hasLos, integer leftTP, integer leftMP) {
+		Array < Item > damagingItemsUnFiltered = getDamagingItems()
 		Array < Item > damagingItems = []
-		for (Weapon ww in wearedWeapons) {
-		if(leftTP>=ww.cost)
-		if (ww.effects.effect_damage != null 
-				and ww.range[0]<=distance
-				and ww.range[1]>=distance
-				and (hasLos || ! ww.needLos)
+	/*	for (Item i in damagingItemsUnFiltered)
+			debug(i.name)*/
+		for (Item ww in damagingItemsUnFiltered) {
+	/*		debug(ww.name)
+			debug("leftTP " + leftTP)
+			debug("leftTP>=ww.cost " + (leftTP>=ww.cost))
+			debug("ww.effects.effect_damage != null " + (ww.effects.effect_damage != null))
+			debug("ww.range[0]<=distance " + (ww.range[0]<=distance))
+			debug("and ww.range[1]>=distance " + ( ww.range[1]>=distance))
+			debug("range " + ww.range[1] + "leftmp " + leftMP)
+			debug("distance " + distance)
+			debug("(hasLos || ! ww.needLos) " + (hasLos or ! ww.needLos))
+			debug("haslos " + hasLos)
+			debug("needlos " + ww.needLos)
+			pause()*/
+			
+			if(
+				leftTP>=ww.cost and
+				ww.effects.effect_damage != null 
+					and ww.range[0]<=distance
+					and (ww.range[1] + leftMP) >=distance
+					and (hasLos or ! ww.needLos)
 			   )
 				push(damagingItems, ww)
 		}
 		
-		for (Chip wc in wearedChips) {
-			if(leftTP>=wc.cost)
-			if (wc.effects.effect_damage != null 
-				and inArray(this.cooledChips, wc)
-				and wc.range[0]<=distance
-				and wc.range[1]>=distance
-				and (hasLos || ! wc.needLos)
-			   )
-				push(damagingItems, wc)
-		}
 		return damagingItems
 	}
 

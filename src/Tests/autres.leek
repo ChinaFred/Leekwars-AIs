@@ -23,15 +23,13 @@ include("/Classes/Plannification/ShootingOptions")
 	}
 	kassbi.setTarget(getNearestEnemy())
 
-	ShootingOptions so = new ShootingOptions()
-	ShootingOption first = new ShootingOption()
-	first.Init(kassbi)
-	debug("shooting option " + first)
-	pause()
-	so.exploreOptions(kassbi,first, ShootingOption.buildDamagingItemsTable(kassbi))
-	for(ShootingOption s in so.options)
-		s.debugUsedItems()
+	ShootingOptions options = new ShootingOptions()
+	debug("shooting option ")
 
+	options.exploreOptions(kassbi)//,first, ShootingOption.buildDamagingItemsTable(kassbi))
+	for(ShootingOption s in options.options)
+		s.debugUsedItems()
+	pause()
 
 	moveToward(getNearestEnemy())
 

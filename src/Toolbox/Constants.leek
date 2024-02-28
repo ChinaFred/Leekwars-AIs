@@ -29,3 +29,9 @@ class COLORS{
 	static integer BROWN = getColor(152, 76, 0)
 	static integer YELLOW = getColor(255, 255, 102)
 }
+
+
+class ITEM_TYPE{
+	static string CHIP  = "Chip"
+	static string WEAPON = "Weapon"
+}

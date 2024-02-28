@@ -18,7 +18,13 @@ class Effects{
 			
 		for (Effect e in arrEffects ){
 			if(e.type == EFFECT_DAMAGE)
-				effect_damage = e 
+			{
+				// machine gun tire une rafale de trois balles. un autre cas pour les shields à traiter plus tard
+				if(effect_damage != null)
+					effect_damage.repeat = effect_damage.repeat +1 
+				else 
+					effect_damage = e
+			}
 			else if (e.type == EFFECT_HEAL)
 				effect_heal = e 
 			else if (e.type == EFFECT_ABSOLUTE_SHIELD)
@@ -37,4 +43,6 @@ class Effects{
 				effect_buff_tp = e 
 		}
 	}
+	
+
 }

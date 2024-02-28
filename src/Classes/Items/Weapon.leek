@@ -7,7 +7,7 @@ include("/Classes/Context/World")
 		constructor(integer myId, Leek ow ) {
 			super(myId) // Appel du constructeur de Item
 			owner = ow
-			type ="Weapon"
+			type = ITEM_TYPE.WEAPON
 			name = getWeaponName(myId)
 			range = [getWeaponMinRange(myId), getWeaponMaxRange(myId)]
 			cost = getWeaponCost(myId)
@@ -29,8 +29,8 @@ include("/Classes/Context/World")
 			return x
 		}
 
-		Set < integer > fromWhereToUseOnCell(integer cell, Set < integer > reachabelCells) {
-			Array cellsToUseWeapon = getCellsToUseWeaponOnCell(this.id, cell)
+		Set < integer > fromWhereToUseOnCell(integer targetCell, Set < integer > reachabelCells) {
+			Array cellsToUseWeapon = getCellsToUseWeaponOnCell(this.id, targetCell)
 			Set cellsFromWhereToShoot = arrayToSet(cellsToUseWeapon)
 			Set x = setIntersection(cellsFromWhereToShoot, reachabelCells)
 			return x

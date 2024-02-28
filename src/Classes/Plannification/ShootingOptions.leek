@@ -14,57 +14,178 @@ include("/Toolbox/Helpers")
 
 
 
-class ShootingOptions{
-	Array<ShootingOption> options = []
+class ShootingOptions {
+	Array < ShootingOption > options = []
+
+
+	// euristic based logic
+	void exploreOptions(Leek leek) {
+		// d'abord on choisit la meilleure arme : celle qui peut tirer et fait le plus de dégats
+		// on choisit ensuite un complément 
+		// Les chips ont un comportement intermittent donc ils passent premiers 
+		debug("explore options for " + leek.name)
+
+		// prendre toutes les armes utilisables dans mp cases
+		// Array<Item> damagingItems = leek.getDamagingItems()
+		Array < Item > damagingItems = leek.getUsableDamagingItems(getCellDistance(leek.cell, leek.target.cell),
+			true, // la los peut changer après mouvement 
+			leek.tp,
+			leek.mp)
+		debug("he got  " + count(damagingItems) + "  weapons and chips to hit")
+
+		Array < Item > orderedItems = OrderDamagingItems(damagingItems)
+		debug("he got  " + count(damagingItems) + "  weapons and chips to hit that are ordered")
+
+		debugDamagingItems(orderedItems)
+		//buildOptions(leek, orderedItems)
+
+
+		pause()
+
+
+	}
+
+	Array < ShootingOption > buildOptions(Leek leek, Array < Item > items) {
 	
-	
-	
-	
-	void exploreOptions(Leek leek,ShootingOption previousOption, Array<Item> damagingItems ){
-		ShootingOption currentOption = new ShootingOption(previousOption)
-		Array<Item> currentDamagingItems = copyArray(damagingItems)
+		for (Item currentItem in items){
 		
-		//for(Item  di in currentDamagingItems){
-		for (integer i =0 ; i < count(currentDamagingItems);i++ ){
-			Item di = currentDamagingItems[i]
-			debug("explore options " + currentDamagingItems[i].name)
-			for (Item cd in currentDamagingItems)
-				debug("currentDamagingItems " +  cd.name)
-			debug("di.cost <= currentOption.tpLeft " + (di.cost <= currentOption.tpLeft))
-			debug("di.range[1] " + di.range[1] +"+ leek.mp " + leek.mp+" <= getCellDistance(leek.cell, leek.target.cell " +getCellDistance(leek.cell, leek.target.cell)+":"  + (di.range[1] + leek.mp <= getCellDistance(leek.cell, leek.target.cell)) )
-			// vérification des tp  
-			// vérification brève/ grossière de pouvoir tirer sur distance	
-			if(
-				di.cost <= currentOption.tpLeft and 
-				di.range[1] + leek.mp <= getCellDistance(leek.cell, leek.target.cell)
-			){
-				debug("ajoute option " + di.name)
-				
-				push(currentOption.actions, di.getActionUse(leek, leek.target))
-				push(currentOption.usedItems, di)
-				currentOption.tpLeft = currentOption.tpLeft - di.cost
-				debug(currentOption.rejected)
-				currentOption.debugUsedItems()
-				pause()
-				remove(currentDamagingItems, i)
-				if (getOperations()> (getMaxOperations()* 0.9))
-					return
+			if(currentItem.isWeapon()){
+				Set<integer> reachable = currentItem.fromWhereToUseOnCell(leek.target.cell, leek.reachableCells)
+				if(setSize(reachable)>0){
+					// si on peut tirer 
+					
+					// d'abord tirer plusieurs fois avec la même arme'
+					ShootingOption onlyOne = new ShootingOption()
+					onlyOne.tpLeft = leek.tp
+					// equiper si ce n'est pas la bonne arme qui est équipée'
+					if(leek.equipedWeapon != currentItem ){
+						push(onlyOne.actions, currentItem.getActionEquip(leek))
+						onlyOne.tpLeft = onlyOne.tpLeft -1 
+					}
+						
+					for (integer cost=0 ; cost <= onlyOne.tpLeft \ currentItem.cost; cost++ ){
+						push(onlyOne.actions, currentItem.getActionUse(leek, leek.target)) 
+						onlyOne.tpLeft = onlyOne.tpLeft - currentItem.cost
+						onlyOne.willShoot =true 
+						onlyOne.totalMeanDamages = onlyOne.totalMeanDamages + currentItem.meanDamage
+					}
+					push(onlyOne.usedItems, currentItem)
+					push(options, onlyOne)
+					
+					// Ensuite essayer de combiner
+					combineItems(items, currentItem,  leek)
+				}
+			}
+			else(
+				debug("chip not really explored")
+			)
+		}
+		debugShootingOptions()
+		return options
+	}
+		
+	private  void combineItems(Array<Item> items,Item currentItem,  Leek leek){
+		Array<Item> tempItems = copyArray(items)
+		removeElement(tempItems, currentItem)
+
+		for(Item e in tempItems) {
+			ShootingOption combination = new ShootingOption()
+			combination.tpLeft = leek.tp
+            // equiper si ce n'est pas la bonne arme qui est équipée'
+			if(leek.equipedWeapon != currentItem ){
+				push(combination.actions, currentItem.getActionEquip(leek))
+				combination.tpLeft = combination.tpLeft -1 
+			}
+			combination.tpLeft = combination.tpLeft - currentItem.cost
+			combination.willShoot = true 
+			combination.totalMeanDamages = combination.totalMeanDamages + currentItem.meanDamage
+			if (e.isWeapon){ 
+				for (integer cost=0 ; cost <= combination.tpLeft \ e.cost; cost++ ){
+					if(leek.equipedWeapon != e ){
+						push(combination.actions, e.getActionEquip(leek))
+						combination.tpLeft = combination.tpLeft -1 
+					}
+					push(combination.actions, e.getActionUse(leek, leek.target)) 
+					combination.tpLeft = combination.tpLeft - e.cost
+					combination.willShoot = true 
+					combination.totalMeanDamages = combination.totalMeanDamages + e.meanDamage
+				}
 			}
 			else {
-				// on enleve toute les occurences puisque pas utilisable
-				arrayRemoveAll(currentDamagingItems, di)
-				push(currentOption.rejected,"rejeté : " + di.name)
+				push(combination.actions, e.getActionUse(leek, leek.target)) 
+				combination.tpLeft = combination.tpLeft - e.cost
+				combination.willShoot =true 
+				combination.totalMeanDamages = combination.totalMeanDamages + e.meanDamage
 			}
-				
-			
-			exploreOptions(leek, currentOption, currentDamagingItems)
+			push(combination.usedItems, e)
+			push(options, combination)
+
+		}
+		if (count(items)>1){
+				combineItems(items, currentItem, leek)
+
 		}
 		
-		push(options, currentOption)
-		debug("une option retenue , fin de boucle")
-		for (Item it in currentOption.usedItems )
-					debug(" tous les items retenus " + it.name)
+
+	}
+	
+	
+	
+	
+	
+	
+	
+
+
+	static Array < Item > OrderDamagingItems(Array < Item > damagingItems) {
+		Array < Item > temp = []
+		Array < Item > ordered = []
+		for (Item di in damagingItems) {
+			if (count(ordered) > 0) {
+				temp = []
+				boolean hasBeenAdded = false
+				for (Item w in ordered) {
+					if (w.meanDamage < di.meanDamage and!hasBeenAdded) {
+						push(temp, di)
+						hasBeenAdded = true
+						push(temp, w)
+					} else {
+						push(temp, w)
+					}
+				}
+				if (!hasBeenAdded) {
+					push(temp, di)
+				}
+
+
+			} else {
+				push(temp, di)
+			}
+			ordered = temp
+		}
+
+
+		return ordered
+	}
+
+
+	static void debugDamagingItems(Array < Item > di, string text = "damaging items") {
+		debug("------------------------------" + text)
+		for (Item i in di) {
+			debug("damaging item " + i.name + "  - mean damage : " + i.meanDamage)
+
+		}
+		debug("--------------------------FIN-" + text)
 		pause()
 	}
+	
+	void debugShootingOptions(){
+		for( ShootingOption so in options)
+		{
+				debug("actions : " + so.actions)
+		}
+	
+	}
+
 
 }

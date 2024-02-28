@@ -5,6 +5,7 @@ class Effect{
 	integer turns = -1
 	integer targets = -1
 	integer modifiers = -1
+	integer repeat = 1
 
 	constructor(Array<any> arr){
 		this.type = arr[0]

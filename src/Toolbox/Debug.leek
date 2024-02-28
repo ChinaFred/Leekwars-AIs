@@ -2,7 +2,7 @@
 
 	class DEBUGS{
 		static boolean CONST_DEBUG_PAUSE = false
-		static boolean CONST_MARK_DANGERMAP = false
+		static boolean CONST_MARK_DANGERMAP = true
 		static boolean CONST_REACHABLE_CELLS = false
 		static boolean MARK_CELLS_TO_SHOOT_FROM = true
 		static boolean SAFE_PLACES = true
