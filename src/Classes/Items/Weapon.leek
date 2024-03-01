@@ -69,14 +69,14 @@ include("/Classes/Context/World")
 			return new Action("Equip weapon", function() {
 					leek.equipWeapon(this)
 				}, 
-				"Equip" + this.name)
+				"Equip " + this.name)
 		}
 		
 		Action getActionUse(Leek leek,Leek target){
 			return new Action("shootOnTarget", function() {
 					leek.shootOnTarget(target)
 				}, 
-				"shoot on " + target.name + " with" + this.name)
+				"shoot on " + target.name + " with " + this.name)
 		}
 
 	}

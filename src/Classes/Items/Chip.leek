@@ -21,7 +21,12 @@ class Chip extends Item{
 			cooldown  = getChipCooldown(this.id)
 		}
 
-
+		Action getActionUse(Leek leek,Leek target){
+			return new Action("use on target", function() {
+					this.useOnTarget(target)
+				}, 
+				"use "+ this.name +" on " +target.name  )
+		}
 
 
 		void useOnTarget (Leek target){

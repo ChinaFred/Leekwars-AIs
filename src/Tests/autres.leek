@@ -21,15 +21,15 @@ include("/Classes/Plannification/ShootingOptions")
 		// doit venir après le monde pour permettre l'update de la danger map'
 		kassbi.updateDataMyLeeks()
 	}
-	kassbi.setTarget(getNearestEnemy())
+	else{
+		kassbi.setTarget(getNearestEnemy())
+	}
+
 
 	ShootingOptions options = new ShootingOptions()
-	debug("shooting option ")
 
 	options.exploreOptions(kassbi)//,first, ShootingOption.buildDamagingItemsTable(kassbi))
-	for(ShootingOption s in options.options)
-		s.debugUsedItems()
-	pause()
+
 
 	moveToward(getNearestEnemy())
 

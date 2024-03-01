@@ -28,6 +28,7 @@ class COLORS{
 	static integer LIGHT_GREEN = getColor(204, 255, 229)
 	static integer BROWN = getColor(152, 76, 0)
 	static integer YELLOW = getColor(255, 255, 102)
+	static integer DEBUG = getColor(198, 131, 74)
 }
 
 

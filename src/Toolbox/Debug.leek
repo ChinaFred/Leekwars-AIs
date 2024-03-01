@@ -1,4 +1,4 @@
-
+	include("/Toolbox/Constants")
 
 	class DEBUGS{
 		static boolean CONST_DEBUG_PAUSE = false
@@ -6,8 +6,47 @@
 		static boolean CONST_REACHABLE_CELLS = false
 		static boolean MARK_CELLS_TO_SHOOT_FROM = true
 		static boolean SAFE_PLACES = true
+		static boolean OPERATIONS = true
 		
 	}	
+
+
+	class Operations{
+		integer startCount = 0
+		string text = ""
+		boolean paused = false
+		
+		constructor (){
+			startCount = getOperations()
+		
+		}
+	
+		constructor (string debugText){
+			startCount = getOperations()
+			text = debugText
+		
+		}
+
+		constructor (string debugText,boolean pauseR ){
+			startCount = getOperations()
+			text = debugText
+			paused = pauseR
+		}
+
+
+		void debugOperations()
+		{
+			if (DEBUGS.OPERATIONS){
+				integer nbrOp = getOperations() - startCount
+				debugC(text + " - # Operations :" + nbrOp , COLORS.DEBUG)
+				debugC("Total # of operations : " + getOperations() +"/" +OPERATIONS_LIMIT + " ("+ getOperations()/OPERATIONS_LIMIT+"%)", COLORS.DEBUG)
+				if(paused)
+					pause()
+			}
+
+		}
+	
+	}
 
 	function debugPause()=>void{
 		if(DEBUGS.CONST_DEBUG_PAUSE )
@@ -17,13 +56,13 @@
 	
 	
 
-
-function debugOperations(text)
+/*
+	function debugOperations(text)
 	{
 		debugC(text + " - Nombre op�rations :" +  getOperations(), getColor(0,255,0))
 	}
 
-
+*/
 
 	function debug_BeginTurn(){
 		debugC("*********************************************", getColor(0,255,0))
@@ -37,7 +76,7 @@ function debugOperations(text)
 		debugC("End Turn " + getTurn(), getColor(0,255,0))
 		debugC("------- " , getColor(0,255,0))
 		debugC("OPERATIONS : " + getOperations() +"/" +OPERATIONS_LIMIT + " ("+ getOperations()/OPERATIONS_LIMIT+"%)", getColor(0,255,0))
-		debugOperations("fin de tour ")
+		//debugOperations("fin de tour ")
 		debugPause()
 		
 	}

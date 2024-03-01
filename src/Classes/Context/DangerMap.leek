@@ -22,6 +22,7 @@ class DangerMap {
     * @returns {DangerMap} - The initialized DangerMap.
     */
     DangerMap initialize() {
+		Operations op = new Operations("Initialize DM " )
         // Reset the DangerMap.
         resetMap()
 
@@ -40,6 +41,7 @@ class DangerMap {
 			}
 			
         }
+		op.debugOperations()
     }
 
 
@@ -255,7 +257,7 @@ class DangerMap {
      * @returns {Map} - The danger map.
      */
     Map buildDangerMap(Leek enemy) {
-        // Initialize variable.
+		Operations op = new Operations("buildDangerMap with enemy " + enemy.name, true )
 
 		
         // Iterate over each weapon of the enemy.
@@ -275,7 +277,7 @@ class DangerMap {
 		
 		this.markDM()
 	
-
+		op.debugOperations()
         // Return the built danger map.
         return map
     }
@@ -283,15 +285,16 @@ class DangerMap {
 
 
 	void markDM(){
+		
 		if(DEBUGS.CONST_MARK_DANGERMAP){
+			Operations op = new Operations("Mark DM", true)
 			for (any di in map ){
 				//mark(di.key, getColor(COLOR_RED *di.weight/(maxDamage+ DANGER.INITIAL_DANGER), 0, 0))
 				real color = ((di.weight - DANGER.INITIAL_DANGER) / (maxDamage )) * 100
-				debug(color)
 				mark(di.key, getColor(255, 255 -color, 255 -color))
 				markText(di.key, di.weight)
 			}
-			pause()
+			op.debugOperations()
 			clearMarks()
 		}
 	}

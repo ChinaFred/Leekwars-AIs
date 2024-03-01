@@ -14,12 +14,12 @@ class World{
 
 	constructor()
 	{
-
+		Operations op = new Operations("world constructor ")
 		buildCellsCoordinatesAndCellsSet()
 		buildObstaclesSet()
 		cellsWithoutObstacles = setDifference(cellsSet, obstaclesSet)
 
-		debugOperations("world constructor ")
+		op.debugOperations()
 	}
 
 

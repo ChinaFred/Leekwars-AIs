@@ -19,25 +19,32 @@ class ShootingOption{
 	public integer tpLeft = 0
 	public integer mpLeft = 0
 	public Coordinates cellToShootFrom = new Coordinates()
-
+	
 	public boolean willShoot = false
 	public real totalMeanDamages = 0.
+	public Weapon? equipedWeapon = null
 	
 	constructor(ShootingOption previousOption){
 		actions = copyArray(previousOption.actions) 	
 		tpLeft= previousOption.tpLeft
 		usedItems = copyArray(previousOption.usedItems)
-		rejected = copyArray(previousOption.rejected)
+		mpLeft = previousOption.mpLeft
+		cellToShootFrom = previousOption.cellToShootFrom
+		willShoot = previousOption.willShoot
+		totalMeanDamages = previousOption.totalMeanDamages
+		equipedWeapon = previousOption.equipedWeapon
 	}
 	
 	void Init(Leek leek )
 	{
 		tpLeft = leek.tp 
 		mpLeft = leek.mp
+		equipedWeapon = leek.equipedWeapon
 	}
 
 	// table reprenant des copies des items pour faire une exploration en arbre
 	static Array<Item> buildDamagingItemsTable(leek){
+		Operations op = new Operations("Shooting option - build table")
 		Array<Item> damagingItems = leek.getDamagingItems()	
 		Array<Item> potentialAttacks = []
 		
@@ -48,7 +55,9 @@ class ShootingOption{
 		}
 		for (Item i in potentialAttacks)
 		debug("potential attacks " + i.name) 
+		op.debugOperations()
 		pause()
+		op.debugOperations()
 		return potentialAttacks
 	}
 	
