@@ -62,6 +62,35 @@ test("debug helpers report operation use and preserve debug color constants", ()
 	assert.equal(logs.length - beforeTurn, 7)
 })
 
+test("error reporting logs structured context and rethrows the original error", () => {
+	const failure = new TypeError("broken target")
+	assert.throws(
+		() => debug.withErrorReporting("src/Brain/PlanActScenario.ts", "planAct", () => {
+			throw failure
+		}),
+		(error) => error === failure
+	)
+
+	const report = JSON.parse(logs.at(-1)[0])
+	assert.deepEqual(
+		{
+			level: report.level,
+			file: report.file,
+			function: report.function,
+			name: report.error.name,
+			message: report.error.message
+		},
+		{
+			level: "ERROR",
+			file: "src/Brain/PlanActScenario.ts",
+			function: "planAct",
+			name: "TypeError",
+			message: "broken target"
+		}
+	)
+	assert.match(report.error.stack, /TypeError: broken target/)
+})
+
 test("speech selection is deterministic for the supplied random value and rejects invalid input", () => {
 	const originalRandom = Math.random
 	Math.random = () => 0.99

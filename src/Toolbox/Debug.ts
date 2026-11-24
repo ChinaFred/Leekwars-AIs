@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { COLORS } from "./Constants.js"
 
 export const DEBUGS = {
@@ -9,6 +9,39 @@ export const DEBUGS = {
 	MARK_CELLS_TO_SHOOT_FROM: false,
 	SAFE_PLACES: false,
 	OPERATIONS: false
+}
+
+export function reportError(file: string, functionName: string, error: unknown): void {
+	const details = error instanceof Error
+		? {
+			name: error.name,
+			message: error.message,
+			stack: error.stack ?? null
+		}
+		: {
+			name: typeof error,
+			message: String(error),
+			stack: null
+		}
+	Debug.log(JSON.stringify({
+		level: "ERROR",
+		file,
+		function: functionName,
+		error: details
+	}))
+}
+
+export function withErrorReporting<T>(
+	file: string,
+	functionName: string,
+	action: () => T
+): T {
+	try {
+		return action()
+	} catch (error) {
+		reportError(file, functionName, error)
+		throw error
+	}
 }
 
 export class Operations {

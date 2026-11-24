@@ -1,7 +1,10 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { planAct } from "../Brain/PlanActScenario.js"
+import { withErrorReporting } from "../Toolbox/Debug.js"
 
 export function turn(): void {
-	planAct(Fight.me)
+	withErrorReporting("src/Main/Kassbi_Class.ts", "turn", () => {
+		planAct(Fight.me)
+	})
 }

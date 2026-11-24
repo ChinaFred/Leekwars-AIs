@@ -1,14 +1,16 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { planAct } from "../Brain/PlanActScenario.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
-
-const profile = new LeekProfile()
-profile.setRole("AGGRESSIVE")
-profile.setAggression(75)
-profile.setPreferredRange(2, 8)
-profile.setSupportOptions(true, true, false)
+import { withErrorReporting } from "../Toolbox/Debug.js"
 
 export function turn(): void {
-	planAct(Fight.me, profile)
+	withErrorReporting("src/Main/Kassbi_test.ts", "turn", () => {
+		const profile = new LeekProfile()
+		profile.setRole("AGGRESSIVE")
+		profile.setAggression(75)
+		profile.setPreferredRange(2, 8)
+		profile.setSupportOptions(true, true, false)
+		planAct(Fight.me, profile)
+	})
 }

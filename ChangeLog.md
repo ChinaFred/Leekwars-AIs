@@ -13,6 +13,11 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 - Déplace les sources `.leek` remplacées dans `src/_oldLeekScript/`, ignoré par Git.
 - Exclut l'archive du PUSH Garden et ajoute un test de non-déploiement.
 
+## 2026-11-24 — Journalisation des erreurs en combat
+
+- Ajoute un rapport d'erreur structuré avec fichier, fonction, message et pile d'appels.
+- Protège les points d'entrée `turn()` et relance les erreurs après journalisation pour conserver l'échec visible.
+
 ## 2026-11-24 — Clarification du README LWGarden
 
 - Recentre le README LWGarden sur la synchronisation et le déploiement des sources, sans documentation des IA Kassbi.
