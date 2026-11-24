@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -62,7 +62,15 @@ export class Plannification {
 
 	private shouldPrioritizeDefense(): boolean {
 		const contact = this.predictContactNextTurn()
-		return contact.enemyCanShoot && !contact.iCanShoot
+		const lifeRatio = this.leek.life / this.leek.maxLife
+		
+		// Defense priority if:
+		// 1) Enemy can shoot but I cannot (asymmetry) → classic defensive posture
+		// 2) BOTH can shoot AND I'm moderately wounded → mutual contact danger
+		const asymmetryDefense = contact.enemyCanShoot && !contact.iCanShoot
+		const mutualContactDanger = contact.enemyCanShoot && contact.iCanShoot && lifeRatio <= 0.60
+		
+		return asymmetryDefense || mutualContactDanger
 	}
 
 	private shouldBoostAttack(): boolean {
@@ -240,7 +248,9 @@ export class Plannification {
 			}
 		}
 
-		if (this.profile.allowHealing && this.strategy.shouldHeal(lifeRatio, lostLifeRatio)) {
+		if (this.profile.allowHealing && 
+			(this.strategy.shouldHeal(lifeRatio, lostLifeRatio) || 
+			 (this.strategy as any).shouldHealWithThreat?.(lifeRatio, lostLifeRatio, this.leek.distance(this.target)))) {
 			const chip = Chip.bandage
 			const meanHealing = getMeanFeatureValue(chip.features, Effect.HEAL) *
 				(1 + this.leek.wisdom / 100)
@@ -260,7 +270,8 @@ export class Plannification {
 				if (!this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)) {
 					this.debug(
 						`Heal: ${chip.name} (healing=${meanHealing.toFixed(0)}, ` +
-						`meanDamagePerTp=${meanDamagePerTp.toFixed(2)}, skip=${this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)})`
+						`meanDamagePerTp=${meanDamagePerTp.toFixed(2)}, skip=${this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)}, ` +
+						`distance=${this.leek.distance(this.target)}, threat-aware=true)`
 					)
 					this.actions.push(new Action("heal", () => this.leek.useChip(chip, this.leek), chip.name))
 					this.tpLeft -= chip.cost

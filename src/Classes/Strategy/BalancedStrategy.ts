@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class BalancedStrategy extends LeekStrategy {
@@ -14,6 +14,17 @@ export class BalancedStrategy extends LeekStrategy {
 
 	shouldHeal(_lifeRatio: number, lostLifeRatio: number): boolean {
 		return lostLifeRatio >= 0.15 + 0.10 * this.getAggressionRatio()
+	}
+
+	shouldHealWithThreat(lifeRatio: number, lostLifeRatio: number, distance: number): boolean {
+		const baseThreshold = 0.15 + 0.10 * this.getAggressionRatio()
+		
+		// Balanced: heal earlier if wounded enough AND enemy nearby
+		if (distance <= 10 && lifeRatio <= 0.70 && lostLifeRatio >= 0.10) {
+			return true
+		}
+		
+		return lostLifeRatio >= baseThreshold
 	}
 
 	shouldShield(lifeRatio: number, distance: number, threatRange: number): boolean {

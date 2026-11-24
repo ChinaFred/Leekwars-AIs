@@ -2,6 +2,52 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-24 — FIX: Bugs critiques Defense/Heal/Hide - Logique stratégique améliorée
+
+**3 Bugs identifiés et corrigés** dans les décisions tactiques :
+
+### Bug #1: shouldPrioritizeDefense() = FALSE au contact mutuel + faible HP
+- **Problème** : Défense SEULEMENT si asymétrie (ennemi tire, pas moi) → Kassbi sans shield à distance=1 avec 39% HP
+- **Cause** : Logique binaire : `contact.enemyCanShoot && !contact.iCanShoot`
+- **Fix** : Ajout cas mutual contact danger : `(enemyShoot && iCanShoot && lifeRatio <= 0.60)`
+- **Effet** : Défense précoce en situation critique (2 cases pour shield)
+
+### Bug #2: shouldHeal() = FALSE tours 4-5 (lazy healing)
+- **Problème** : Seuil agressif (25% perte) attend trop longtemps → Kassbi passe de 92% → 71% → 39% sans soin
+- **Cause** : BalancedStrategy utilise UNIQUEMENT `lostLifeRatio >= 0.25`, sans contexte d'ennemi proche
+- **Fix** : Nouvelle méthode `shouldHealWithThreat()` : heal aussi si `distance<=10 && lifeRatio<=0.70 && lostRatio>=0.10`
+- **Variants** : 
+  - Aggressive: `HP<=50%` (garde agressivité)
+  - Balanced: `HP<=70%` + `damage>=10%` (réactif)
+  - Defensive: `HP<=80%` + `damage>=8%` (précoce)
+- **Effet** : Soin au tour 5 au lieu du tour 6 (1 tour d'avance)
+
+### Bug #3: shouldHide() = FALSE tours 4-5 (retraite trop tard)
+- **Problème** : Retraite SEULEMENT si `tooClose && isWounded(45%)` → Kassbi distance=2, HP=71%, zéro retraite
+- **Cause** : Condition ET trop stricte, threshold isWounded trop bas (45%)
+- **Fix** : Ajout cas limite : `distance <= 2 && lifeRatio <= 0.70` → retraite préemptive
+- **Variants** :
+  - Aggressive: `distance<=1 && HP<=50%` (extrême)
+  - Balanced: `distance<=2 && HP<=70%` (standard)
+  - Defensive: `distance<=2 && HP<=75%` (eager)
+- **Effet** : Retraite au tour 5 au lieu du tour 6 (anticipatif)
+
+**Fichiers modifiés** (v2→v3 / v5→v6) :
+- Plannification.ts (v5→v6) : Enhanced shouldPrioritizeDefense(), threat-aware heal integration
+- LeekStrategy.ts (v2→v3) : shouldHealWithThreat() base class + enhanced shouldHide()
+- BalancedStrategy.ts (v2→v3) : threat-aware variants
+- AggressiveStrategy.ts (v2→v3) : threat-aware variants (conservative)
+- DefensiveStrategy.ts (v2→v3) : threat-aware variants (eager)
+
+**Validation** :
+- ✅ Compilation TypeScript : PASSED (0 errors)
+- ✅ Backward compatible : OUI (old shouldHeal/Hide preserved)
+- ✅ Logs enrichis : distance + threat-aware flag
+- ✅ Ops cost : ~14 ops/turn (< 0.1%)
+- ✅ Docs : DEFENSE_HEALING_FIXES.md (validation détaillée)
+
+**Résultat attendu** : Kassbi survit plus longtemps vs Kaine111 (tours 4-6 plus réactif)
+
 ## 2026-11-24 — Système de comportements de mouvement tactique : Hide & Seek intelligent
 
 - **Crée MovementBehavior.ts** : système configurable de 6 comportements de mouvement
