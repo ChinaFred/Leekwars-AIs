@@ -1,0 +1,13 @@
+{
+  "name": "kassbi-leekwars-ai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  }
+}

@@ -116,6 +116,20 @@ class DeployLocalAIsTests(unittest.TestCase):
             with open(local_file, "r", encoding="utf-8") as source:
                 self.assertEqual(source.read(), "class Kassbi {}")
 
+    def test_pull_preserves_typescript_extension(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = FakeApi(
+                folders=["Classes"],
+                ais=[{"path": "Classes/IaDeBaseTS.ts"}],
+                codes={"Classes/IaDeBaseTS.ts": "export function turn(): void {}"}
+            )
+
+            get_all_ais(api, root)
+
+            local_file = os.path.join(root, "Classes", "IaDeBaseTS.ts")
+            with open(local_file, "r", encoding="utf-8") as source:
+                self.assertEqual(source.read(), "export function turn(): void {}")
+
     def test_primary_uses_the_api_key_instead_of_password_credentials(self):
         class FakeApi:
             def connect_with_api_key(self, api_key):
@@ -144,6 +158,42 @@ class DeployLocalAIsTests(unittest.TestCase):
             self.assertEqual(api.created_folders, ["Classes", "Classes/Items"])
             self.assertEqual(api.created_ais, [("Classes/Items", "Chip", 4)])
             self.assertEqual(api.writes, [("Classes/Items/Chip", "class Chip {}")])
+
+    def test_deploys_typescript_with_extension(self):
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "main.ts"), "w", encoding="utf-8") as source:
+                source.write("export function turn(): void {}")
+
+            api = FakeApi()
+            deploy_local_ais(api, root)
+
+            self.assertEqual(api.created_ais, [("", "main.ts", 4)])
+            self.assertEqual(api.writes, [("main.ts", "export function turn(): void {}")])
+
+    def test_does_not_deploy_archived_leekscript_sources(self):
+        with tempfile.TemporaryDirectory() as root:
+            archive = os.path.join(root, "_oldLeekScript", "Brain")
+            os.makedirs(archive)
+            with open(os.path.join(root, "main.ts"), "w", encoding="utf-8") as source:
+                source.write("export function turn(): void {}")
+            with open(os.path.join(archive, "legacy.leek"), "w", encoding="utf-8") as source:
+                source.write("void turn() {}")
+
+            api = FakeApi()
+            deploy_local_ais(api, root)
+
+            self.assertEqual(api.created_ais, [("", "main.ts", 4)])
+            self.assertEqual(api.writes, [("main.ts", "export function turn(): void {}")])
+
+    def test_refuses_local_files_that_map_to_the_same_remote_ai(self):
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "brain.ts"), "w", encoding="utf-8") as source:
+                source.write("export function turn(): void {}")
+            with open(os.path.join(root, "brain.ts.leek"), "w", encoding="utf-8") as source:
+                source.write("void")
+
+            with self.assertRaisesRegex(ValueError, "same remote AI path"):
+                deploy_local_ais(FakeApi(), root)
 
     def test_updates_matching_ai_in_existing_folder(self):
         with tempfile.TemporaryDirectory() as root:
@@ -242,10 +292,24 @@ class DeployLocalAIsTests(unittest.TestCase):
             )
             self.assertFalse(any(message.startswith("Warning:") for message in messages))
 
-    def test_refuses_to_deploy_when_source_folder_has_no_leek_files(self):
+    def test_deploy_normalizes_crlf_without_rewriting_local_source(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = os.path.join(root, "local.leek")
+            source_content = b"first line\r\nsecond line\r\n"
+            with open(path, "wb") as source:
+                source.write(source_content)
+
+            api = FakeApi()
+            deploy_local_ais(api, root)
+
+            self.assertEqual(api.writes, [("local", "first line\nsecond line\n")])
+            with open(path, "rb") as source:
+                self.assertEqual(source.read(), source_content)
+
+    def test_refuses_to_deploy_when_source_folder_has_no_supported_files(self):
         with tempfile.TemporaryDirectory() as root:
             api = FakeApi()
-            with self.assertRaisesRegex(ValueError, "No .leek files"):
+            with self.assertRaisesRegex(ValueError, "No .leek or .ts files"):
                 deploy_local_ais(api, root)
 
     def test_api_client_uses_bearer_auth_and_current_path_endpoints(self):

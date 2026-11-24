@@ -3,6 +3,10 @@ from LWApi import LWApi
 from shutil import rmtree
 
 
+SUPPORTED_AI_SOURCE_EXTENSIONS = {".leek", ".ts"}
+ARCHIVED_SOURCE_FOLDER = "_oldLeekScript"
+
+
 def connect_primary(api, principal, api_key):
     if api_key:
         return api.connect_with_api_key(api_key)
@@ -91,8 +95,8 @@ def main():
         '2': "Launch fight",
         '3': "Get Register",
         '4': "Get Farmer's Throphies",
-        '5': "PUSH local source to primary account; optionally delete remote-only items.",
-        '6': "PUSH local source to secondary accounts; optionally delete remote-only items.",
+        '5': "PUSH local .leek/.ts sources to primary account; optionally delete remote-only items.",
+        '6': "PUSH local .leek/.ts sources to secondary accounts; optionally delete remote-only items.",
         '7': "Exit"
     }
     while True:
@@ -119,14 +123,14 @@ def main():
             get_farmer_trophies(api, config["AIs_folder"])
         elif selection == '5':
             confirmation = input(
-                "PUSH local .leek files to primary account {0}? [y/N]: ".format(farmer["login"]))
+                "PUSH local .leek/.ts source files to primary account {0}? [y/N]: ".format(farmer["login"]))
             if is_yes_confirmation(confirmation):
                 deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
             confirmation = input(
-                "PUSH local .leek files to secondary accounts? [y/N]: ")
+                "PUSH local .leek/.ts source files to secondary accounts? [y/N]: ")
             if is_yes_confirmation(confirmation):
                 push_all_ais(
                     api, secondaries, config["AIs_folder"], confirm_remote_deletions
@@ -171,7 +175,9 @@ def get_all_ais(api, root_folder: str):
 
     for ai in ai_tree["files"]:
         path = normalize_ai_path(ai["path"])
-        destination = local_path_for_ai(root_folder, path + ".leek")
+        extension = os.path.splitext(path)[1].lower()
+        local_path = path if extension in SUPPORTED_AI_SOURCE_EXTENSIONS else path + ".leek"
+        destination = local_path_for_ai(root_folder, local_path)
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         code = api.read_ai(path)["code"]
         with open(destination, "w", encoding="utf-8") as outfile:
@@ -190,19 +196,24 @@ def push_all_ais(api, secondaries, root_folder, confirm_delete=None):
 
 
 def deploy_local_ais(api, root_folder, confirm_delete=None):
-    """Create or update local LeekScript files on the currently connected account."""
+    """Create or update local LeekScript and TypeScript files on the account."""
     local_entries = get_local_ais(root_folder)
     local_folders = [entry for entry in local_entries if entry.type == "folder"]
     local_files = [entry for entry in local_entries if entry.type == "file"]
     if not local_files:
-        raise ValueError("No .leek files found under " + root_folder)
+        raise ValueError("No .leek or .ts files found under " + root_folder)
 
     local_file_paths = []
     for local_file in local_files:
+        remote_name = local_file.name
+        if local_file.extension == ".ts":
+            remote_name += ".ts"
         local_path = "/".join(
-            part for part in (local_file.relative_path, local_file.name) if part
+            part for part in (local_file.relative_path, remote_name) if part
         )
         local_file_paths.append((normalize_ai_path(local_path), local_file))
+    if len({path for path, _ in local_file_paths}) != len(local_file_paths):
+        raise ValueError("Multiple local source files map to the same remote AI path.")
     local_file_path_set = {path for path, _ in local_file_paths}
     local_folder_paths = {
         normalize_ai_path(entry.relative_path) for entry in local_folders
@@ -341,8 +352,14 @@ def get_local_ais(root_folder, local_ais=None):
     for (dirpath, dirnames, filenames) in os.walk(root_folder):
         relative_dir = os.path.relpath(dirpath, root_folder)
         relative_dir = "" if relative_dir == "." else relative_dir.replace(os.sep, "/")
+        if not relative_dir:
+            dirnames[:] = [
+                dirname for dirname in dirnames
+                if dirname != ARCHIVED_SOURCE_FOLDER
+            ]
         for filename in filenames:
-            if not filename.lower().endswith(".leek"):
+            extension = os.path.splitext(filename)[1].lower()
+            if extension not in SUPPORTED_AI_SOURCE_EXTENSIONS:
                 continue
             with open(os.path.join(dirpath, filename), 'rb') as file:
                 filecontent = file.read()
@@ -352,8 +369,10 @@ def get_local_ais(root_folder, local_ais=None):
                 print("Info: {0} uses Windows-1252; decoding for API upload."
                       .format("/".join(part for part in (relative_dir, filename) if part)))
                 filecontent = filecontent.decode("cp1252")
+            filecontent = filecontent.replace("\r\n", "\n").replace("\r", "\n")
             local_ais.append(type('', (object,), {
                 "name": os.path.splitext(filename)[0],
+                "extension": extension,
                 "content": filecontent,
                 "hash": hashlib.sha512(filecontent.encode('utf-8')).hexdigest(),
                 "folder": os.path.basename(dirpath.replace(root_folder, '')),

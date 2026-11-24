@@ -1,8 +1,0 @@
-// @version:4
-// file version: 1
-function copyArray(Array<any> original)=>Array<any> {
-	Array<any> copy = []
-	for(any a in original)
-		push(copy, a)
-	return copy
-}

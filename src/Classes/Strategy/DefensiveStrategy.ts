@@ -1,0 +1,30 @@
+// @version:5.8
+// file version: 1
+import { LeekStrategy } from "./LeekStrategy.js"
+
+export class DefensiveStrategy extends LeekStrategy {
+	constructor(aggressionValue = 50) {
+		super("DEFENSIVE", aggressionValue)
+	}
+
+	scoreWeapon(damage: number, preferredMid: number, weaponMid: number): number {
+		const rangePenalty = Math.abs(preferredMid - weaponMid) * (0.07 - 0.015 * this.getAggressionRatio())
+		return damage - rangePenalty
+	}
+
+	shouldHeal(lifeRatio: number, lostLifeRatio: number): boolean {
+		return lifeRatio <= 0.90 - 0.15 * this.getAggressionRatio() || lostLifeRatio >= 0.35
+	}
+
+	shouldShield(lifeRatio: number, distance: number, threatRange: number): boolean {
+		return distance <= threatRange + 1 && lifeRatio <= 0.98 - 0.10 * this.getAggressionRatio()
+	}
+
+	shouldHide(lifeRatio: number, mpLeft: number): boolean {
+		return mpLeft > 0 && lifeRatio <= 0.80 - 0.10 * this.getAggressionRatio()
+	}
+
+	shouldUseAttackChip(lifeRatio: number): boolean {
+		return lifeRatio >= 0.75 - 0.20 * this.getAggressionRatio()
+	}
+}
