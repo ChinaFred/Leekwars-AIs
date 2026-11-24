@@ -50,8 +50,10 @@ when the configured source folder is the complete set of AIs to keep.
 Source files are read as UTF-8. Legacy Windows-1252 files are decoded in memory
 for API upload and reported as informational messages; the local source files
 are not rewritten.
-If the API rate-limits a deploy request, Garden waits for the server-provided
-retry delay and retries it up to three times before reporting the error.
+Garden spaces all API requests by at least 0.21 seconds (under five requests
+per second). If the API rate-limits a request anyway, it waits for the
+server-provided retry delay and retries it up to three times before reporting
+the error.
 An error after earlier successful requests may leave the remote garden only
 partially deployed; rerun the PUSH after resolving a persistent error.
 

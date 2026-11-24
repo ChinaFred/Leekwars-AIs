@@ -1,4 +1,4 @@
-import time, os, json, hashlib
+import os, json, hashlib
 from LWApi import LWApi
 from shutil import rmtree
 
@@ -176,7 +176,6 @@ def get_all_ais(api, root_folder: str):
         code = api.read_ai(path)["code"]
         with open(destination, "w", encoding="utf-8") as outfile:
             outfile.write(code)
-        time.sleep(0.2)
 
 
 def push_all_ais(api, secondaries, root_folder, confirm_delete=None):
@@ -234,7 +233,6 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
                 raise RuntimeError("Could not create folder {0}: {1}".format(path, result.content))
             existing_folders.add(path)
             print(" -> Done!")
-            time.sleep(0.2)
 
     created = 0
     updated = 0
@@ -268,7 +266,6 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
         else:
             updated += 1
         print(" -> Done!")
-        time.sleep(0.2)
 
     deleted_files = 0
     deleted_folders = 0
@@ -280,7 +277,6 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
                 raise RuntimeError("Could not delete remote AI {0}: {1}".format(path, result.content))
             deleted_files += 1
             print("\t -> Done!")
-            time.sleep(0.2)
 
         for path in remote_only_folders:
             print("\tMove remote-only folder to trash: " + path)
@@ -289,7 +285,6 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
                 raise RuntimeError("Could not delete remote folder {0}: {1}".format(path, result.content))
             deleted_folders += 1
             print("\t -> Done!")
-            time.sleep(0.2)
 
     print("\nDeployment complete: {0} created, {1} updated, {2} unchanged, "
           "{3} remote AIs and {4} folders moved to trash."

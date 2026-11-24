@@ -31,3 +31,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Confirmations Garden
 
 - Ignore les espaces autour des réponses de confirmation du PUSH, du PULL et des suppressions.
+
+## 2026-11-24 — Limitation du débit API
+
+- Espace toutes les requêtes Garden pour rester sous cinq appels par seconde et conserve les retries du serveur.

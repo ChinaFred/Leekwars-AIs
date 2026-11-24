@@ -124,8 +124,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 source.write("not an AI")
 
             api = FakeApi()
-            with patch("Garden.time.sleep"):
-                deploy_local_ais(api, root)
+            deploy_local_ais(api, root)
 
             self.assertEqual(api.created_folders, ["Classes", "Classes/Items"])
             self.assertEqual(api.created_ais, [("Classes/Items", "Chip.leek", 4)])
@@ -143,8 +142,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 ais=[{"path": "Main/Kassbi_Class.leek"}],
                 codes={"Main/Kassbi_Class.leek": "old code"}
             )
-            with patch("Garden.time.sleep"):
-                deploy_local_ais(api, root)
+            deploy_local_ais(api, root)
 
             self.assertEqual(api.writes, [("Main/Kassbi_Class.leek", "new code")])
             self.assertEqual(len(api.ais), 1)
@@ -171,8 +169,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 self.assertEqual(folders, ["Old/Sub", "Old"])
                 return True
 
-            with patch("Garden.time.sleep"):
-                deploy_local_ais(api, root, confirm_delete)
+            deploy_local_ais(api, root, confirm_delete)
 
             self.assertEqual(
                 api.deleted_ais,
@@ -191,8 +188,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 ais=[{"path": "remote-only.leek"}],
                 codes={}
             )
-            with patch("Garden.time.sleep"):
-                deploy_local_ais(api, root, lambda files, folders: False)
+            deploy_local_ais(api, root, lambda files, folders: False)
 
             self.assertEqual(api.deleted_ais, [])
             self.assertEqual(
@@ -210,9 +206,8 @@ class DeployLocalAIsTests(unittest.TestCase):
                 source.write("local")
 
             api = FailedDeleteApi(ais=[{"path": "remote-only.leek"}])
-            with patch("Garden.time.sleep"):
-                with self.assertRaisesRegex(RuntimeError, "Could not delete remote AI"):
-                    deploy_local_ais(api, root, lambda files, folders: True)
+            with self.assertRaisesRegex(RuntimeError, "Could not delete remote AI"):
+                deploy_local_ais(api, root, lambda files, folders: True)
 
     def test_deploys_windows_1252_source_without_losing_accents(self):
         with tempfile.TemporaryDirectory() as root:
@@ -221,7 +216,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 source.write("// Caf\xe9".encode("cp1252"))
 
             api = FakeApi()
-            with patch("Garden.time.sleep"), patch("builtins.print") as print_mock:
+            with patch("builtins.print") as print_mock:
                 deploy_local_ais(api, root)
 
             self.assertEqual(api.writes, [("accented.leek", "// Café")])
@@ -262,13 +257,14 @@ class DeployLocalAIsTests(unittest.TestCase):
 
         session = FakeSession()
         with patch("LWApi.requests.Session", return_value=session):
-            api = LWApi.LWApi()
-            self.assertTrue(api.connect("login", "password"))
-            api.get_ai_tree()
-            api.create_ai("Main", "brain.leek")
-            api.write_ai("Main/brain.leek", "code")
-            api.delete_ai("Main/old.leek")
-            api.delete_folder("Old")
+            with patch("LWApi.time.sleep"):
+                api = LWApi.LWApi()
+                self.assertTrue(api.connect("login", "password"))
+                api.get_ai_tree()
+                api.create_ai("Main", "brain.leek")
+                api.write_ai("Main/brain.leek", "code")
+                api.delete_ai("Main/old.leek")
+                api.delete_folder("Old")
 
         self.assertEqual(session.headers["Authorization"], "Bearer test-token")
         self.assertEqual(session.calls[1][1].endswith("/ai/get-farmer-tree"), True)
@@ -285,6 +281,51 @@ class DeployLocalAIsTests(unittest.TestCase):
         self.assertEqual(session.calls[5][0], "DELETE")
         self.assertTrue(session.calls[5][1].endswith("/ai-folder/delete"))
         self.assertEqual(session.calls[5][2]["json"], {"path": "Old"})
+
+    def test_api_client_spaces_requests_below_five_per_second(self):
+        class FakeClock:
+            def __init__(self):
+                self.now = 0.0
+                self.sleeps = []
+
+            def monotonic(self):
+                return self.now
+
+            def sleep(self, duration):
+                self.sleeps.append(duration)
+                self.now += duration
+
+        class FakeSession:
+            def __init__(self, clock):
+                self.headers = {}
+                self.clock = clock
+                self.call_times = []
+
+            def get(self, url, **kwargs):
+                self.call_times.append(self.clock.now)
+                return FakeResponse({"folders": [], "files": []})
+
+        import LWApi
+
+        clock = FakeClock()
+        session = FakeSession(clock)
+        with patch("LWApi.requests.Session", return_value=session):
+            with patch("LWApi.time.monotonic", side_effect=clock.monotonic):
+                with patch("LWApi.time.sleep", side_effect=clock.sleep):
+                    api = LWApi.LWApi()
+                    for _ in range(6):
+                        api.get_ai_tree()
+
+        intervals = [
+            later - earlier
+            for earlier, later in zip(session.call_times, session.call_times[1:])
+        ]
+        self.assertEqual(len(session.call_times), 6)
+        self.assertTrue(all(
+            interval + 1e-9 >= LWApi.LWApi.MIN_REQUEST_INTERVAL_SECONDS
+            for interval in intervals
+        ))
+        self.assertEqual(len(clock.sleeps), 5)
 
     def test_api_client_retries_rate_limited_writes_after_server_delay(self):
         class FakeSession:
