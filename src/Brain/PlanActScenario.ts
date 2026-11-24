@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 
@@ -12,9 +12,9 @@ export function planAct(me: Me, profile = createDefaultProfile()): void {
 	const plan = new Plannification(me, target, profile)
 	plan.chooseWeapon()
 	plan.planEquipWeapon()
-	plan.planChipsActions()
 	plan.planMove()
 	plan.planShootOrChip()
+	plan.planChipsActionsAfterShoot()
 	plan.planHide()
 	plan.execute()
 }

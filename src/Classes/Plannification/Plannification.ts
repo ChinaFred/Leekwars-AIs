@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -64,53 +64,6 @@ export class Plannification {
 		this.weaponEquipPlanned = true
 	}
 
-	planChipsActions(): void {
-		if (this.leek.maxLife <= 0) {
-			return
-		}
-		const lifeLost = this.leek.maxLife - this.leek.life
-		const lifeRatio = this.leek.life / this.leek.maxLife
-		const lostLifeRatio = lifeLost / this.leek.maxLife
-		if (this.profile.allowHealing && this.strategy.shouldHeal(lifeRatio, lostLifeRatio)) {
-			const chip = Chip.bandage
-			const meanHealing = getMeanFeatureValue(chip.features, Effect.HEAL) *
-				(1 + this.leek.wisdom / 100)
-			if (
-				this.leek.chips.includes(chip) &&
-				chip.currentCooldown === 0 &&
-				chip.cost <= this.tpLeft &&
-				meanHealing > 0 &&
-				meanHealing <= lifeLost &&
-				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
-			) {
-				this.actions.push(new Action("heal", () => this.leek.useChip(chip, this.leek), chip.name))
-				this.tpLeft -= chip.cost
-			}
-		}
-
-		if (this.profile.allowShielding && this.strategy.shouldShield(
-			lifeRatio,
-			this.leek.distance(this.target),
-			this.target.mp + (this.target.weapon?.maxRange ?? this.chosenWeapon?.maxRange ?? 0)
-		)) {
-			const shield = this.leek.chips.find((chip) =>
-				chip.currentCooldown === 0 &&
-				chip.cost <= this.tpLeft &&
-				chip.features.some((feature) =>
-					feature.type === Effect.ABSOLUTE_SHIELD ||
-					feature.type === Effect.RELATIVE_SHIELD
-				) &&
-				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
-			)
-			if (shield !== undefined) {
-				this.actions.push(
-					new Action("shield", () => this.leek.useChip(shield, this.leek), shield.name)
-				)
-				this.tpLeft -= shield.cost
-			}
-		}
-	}
-
 	planMove(): void {
 		if (this.chosenWeapon === null) {
 			this.chooseWeapon()
@@ -165,19 +118,77 @@ export class Plannification {
 		}
 	}
 
+	planChipsActionsAfterShoot(): void {
+		if (this.leek.maxLife <= 0) {
+			return
+		}
+		const lifeLost = this.leek.maxLife - this.leek.life
+		const lifeRatio = this.leek.life / this.leek.maxLife
+		const lostLifeRatio = lifeLost / this.leek.maxLife
+
+		if (this.profile.allowHealing && this.strategy.shouldHeal(lifeRatio, lostLifeRatio)) {
+			const chip = Chip.bandage
+			const meanHealing = getMeanFeatureValue(chip.features, Effect.HEAL) *
+				(1 + this.leek.wisdom / 100)
+			if (
+				this.leek.chips.includes(chip) &&
+				chip.currentCooldown === 0 &&
+				chip.cost <= this.tpLeft &&
+				meanHealing > 0 &&
+				meanHealing <= lifeLost &&
+				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
+			) {
+				const meanDamagePerTp = this.chosenWeapon !== null && this.chosenWeapon.cost > 0
+					? getMeanFeatureValue(this.chosenWeapon.features, Effect.DAMAGE) *
+						(1 + this.leek.strength / 100) / this.chosenWeapon.cost
+					: 0
+
+				if (!this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)) {
+					this.actions.push(new Action("heal", () => this.leek.useChip(chip, this.leek), chip.name))
+					this.tpLeft -= chip.cost
+				}
+			}
+		}
+
+		if (this.profile.allowShielding && this.strategy.shouldShield(
+			lifeRatio,
+			this.leek.distance(this.target),
+			this.target.mp + (this.target.weapon?.maxRange ?? this.chosenWeapon?.maxRange ?? 0)
+		)) {
+			const shield = this.leek.chips.find((chip) =>
+				chip.currentCooldown === 0 &&
+				chip.cost <= this.tpLeft &&
+				chip.features.some((feature) =>
+					feature.type === Effect.ABSOLUTE_SHIELD ||
+					feature.type === Effect.RELATIVE_SHIELD
+				) &&
+				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
+			)
+			if (shield !== undefined) {
+				this.actions.push(
+					new Action("shield", () => this.leek.useChip(shield, this.leek), shield.name)
+				)
+				this.tpLeft -= shield.cost
+			}
+		}
+	}
+
 	planHide(): void {
 		if (
 			!this.profile.allowHiding ||
 			this.mpLeft <= 0 ||
-			this.leek.maxLife <= 0 ||
-			!this.strategy.shouldHide(this.leek.life / this.leek.maxLife, this.mpLeft)
+			this.leek.maxLife <= 0
 		) {
 			return
 		}
-		this.actions.push(
-			new Action("hide", () => this.leek.moveAwayFrom(this.target), "Move away from enemy")
-		)
-		this.mpLeft = 0
+
+		const distance = this.leek.distance(this.target)
+		if (this.strategy.shouldHide(this.leek.life / this.leek.maxLife, distance, this.profile.preferredMinRange)) {
+			this.actions.push(
+				new Action("hide", () => this.leek.moveAwayFrom(this.target), "Move away from enemy")
+			)
+			this.mpLeft = 0
+		}
 	}
 
 	execute(): void {

@@ -2,6 +2,18 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-24 — Amélioration stratégique de Kassbi : Hide & Seek + Soin opportuniste
+
+- **Positional Hide & Seek** : modifie `shouldHide()` pour factoriser la distance à l'ennemi, non plus basé sur MP.
+  - Fuite proactive quand trop proche (distance < minSafeDistance) ET blessé, au lieu de réactif pur.
+  - Seuil varie par stratégie : AGGRESSIVE (30-45%), BALANCED (55%), DEFENSIVE (80%).
+- **Soin opportuniste** : réorganise le flux d'action pour prioriser les tirs avant le soin.
+  - Nouvelles méthodes : `planChipsActionsAfterShoot()` + `shouldSkipHealForDamage()` pour arbitrer TP.
+  - Soin s'active après les tirs si TP restant aurait produit <2× dégâts vs soin.
+- **Nouveau flux** : `equip → move → tir weapon + chip → soin opportuniste → hide`.
+  - Ancien : `equip → soin/bouclier préalable → move → tir`.
+- **Impact testable** : ratio dégâts/soin augmente, fuite plus stratégique et moins prévisible.
+
 ## 2026-11-24 — Fin du lot de migration TypeScript
 
 - Ajoute les 16 équivalents TypeScript manquants pour compléter les 31 correspondances avec les sources `.leek`, conservées.

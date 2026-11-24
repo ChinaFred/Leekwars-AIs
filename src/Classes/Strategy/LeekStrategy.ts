@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 export class LeekStrategy {
 	public name = "BALANCED"
 	public aggression = 50
@@ -35,11 +35,20 @@ export class LeekStrategy {
 		return distance <= threatRange && lifeRatio <= 0.95 - 0.20 * this.getAggressionRatio()
 	}
 
-	shouldHide(lifeRatio: number, mpLeft: number): boolean {
-		return mpLeft > 0 && lifeRatio <= 0.55 - 0.20 * this.getAggressionRatio()
+	shouldHide(lifeRatio: number, distance: number, preferredMinRange: number): boolean {
+		const minSafeDistance = Math.max(2, preferredMinRange - 1)
+		const isTooClose = distance < minSafeDistance
+		const isWounded = lifeRatio <= 0.55 - 0.20 * this.getAggressionRatio()
+		return isTooClose && isWounded
 	}
 
 	shouldUseAttackChip(lifeRatio: number): boolean {
 		return lifeRatio >= 0.50 - 0.20 * this.getAggressionRatio()
+	}
+
+	shouldSkipHealForDamage(healingCost: number, meanHealing: number, tpLeft: number, meanDamagePerTp: number): boolean {
+		if (meanDamagePerTp <= 0 || tpLeft <= 0) return false
+		const potentialDamage = meanDamagePerTp * healingCost
+		return potentialDamage > meanHealing * 2
 	}
 }

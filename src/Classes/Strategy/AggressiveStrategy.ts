@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class AggressiveStrategy extends LeekStrategy {
@@ -20,8 +20,11 @@ export class AggressiveStrategy extends LeekStrategy {
 		return lifeRatio <= 0.45 - 0.15 * this.getAggressionRatio() && distance <= threatRange
 	}
 
-	shouldHide(lifeRatio: number, mpLeft: number): boolean {
-		return lifeRatio <= 0.30 - 0.15 * this.getAggressionRatio() && mpLeft > 0
+	shouldHide(lifeRatio: number, distance: number, preferredMinRange: number): boolean {
+		const minSafeDistance = Math.max(2, preferredMinRange - 1)
+		const isTooClose = distance < minSafeDistance
+		const isWounded = lifeRatio <= 0.30 - 0.15 * this.getAggressionRatio()
+		return isTooClose && isWounded
 	}
 
 	shouldUseAttackChip(lifeRatio: number): boolean {

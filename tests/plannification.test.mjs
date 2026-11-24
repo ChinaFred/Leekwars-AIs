@@ -108,8 +108,8 @@ test("planAct heals, shields, moves, attacks with chips, and shoots in order", (
 	planAct(me)
 
 	assert.equal(equippedWeapon, strongWeapon)
-	assert.deepEqual(actions, ["equip", "bandage", "shield", "move", "attack chip", "shoot"])
-	assert.equal(tp, 1)
+	assert.deepEqual(actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
+	assert.equal(tp, 0)
 	assert.equal(mp, 2)
 })
 
