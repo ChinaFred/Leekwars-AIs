@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -9,6 +9,7 @@ import { BalancedStrategy } from "../Strategy/BalancedStrategy.js"
 import { DefensiveStrategy } from "../Strategy/DefensiveStrategy.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavior.js"
+import { globalCombatLogger } from "../../Toolbox/CombatLogger.js"
 
 export class Plannification {
 	readonly actions: Action[] = []
@@ -19,6 +20,7 @@ export class Plannification {
 	private willShoot = false
 	private weaponEquipPlanned = false
 	private movementBehavior: MovementBehavior
+	private debugEnabled = true
 
 	constructor(
 		private readonly leek: Me,
@@ -31,6 +33,12 @@ export class Plannification {
 		this.movementBehavior = new MovementBehavior(leek, target, leek.weapon, target.weapon)
 	}
 
+	private debug(message: string): void {
+		if (this.debugEnabled) {
+			console.log(`[Plannification] ${message}`)
+		}
+	}
+
 	private predictContactNextTurn(): { iCanShoot: boolean; enemyCanShoot: boolean } {
 		const currentDistance = this.leek.distance(this.target)
 		const myMaxRange = this.chosenWeapon?.maxRange ?? 1
@@ -38,10 +46,18 @@ export class Plannification {
 		const myMaxReach = Math.max(currentDistance - this.mpLeft, 0)
 		const enemyMaxReach = Math.max(currentDistance - this.target.mp, 0)
 
-		return {
+		const result = {
 			iCanShoot: myMaxReach <= myMaxRange,
 			enemyCanShoot: enemyMaxReach <= enemyMaxRange
 		}
+
+		this.debug(
+			`PredictContactNextTurn: distance=${currentDistance}, ` +
+			`myMaxReach=${myMaxReach}, myMaxRange=${myMaxRange}, iCanShoot=${result.iCanShoot}, ` +
+			`enemyMaxReach=${enemyMaxReach}, enemyMaxRange=${enemyMaxRange}, enemyCanShoot=${result.enemyCanShoot}`
+		)
+
+		return result
 	}
 
 	private shouldPrioritizeDefense(): boolean {
@@ -70,12 +86,17 @@ export class Plannification {
 				? meanDamage * Math.floor(this.tpLeft / weapon.cost)
 				: 0
 			const score = this.strategy.scoreWeapon(turnDamage, preferredMid, weaponMid)
+			this.debug(
+				`Weapon ${weapon.name}: damage=${meanDamage.toFixed(1)}, turnDamage=${turnDamage.toFixed(1)}, ` +
+				`range=${weapon.minRange}-${weapon.maxRange}, score=${score.toFixed(2)}`
+			)
 			if (score > bestScore) {
 				this.chosenWeapon = weapon
 				bestScore = score
 			}
 		}
 
+		this.debug(`ChosenWeapon: ${this.chosenWeapon?.name} (score: ${bestScore.toFixed(2)})`)
 		this.movementBehavior = new MovementBehavior(this.leek, this.target, this.chosenWeapon, this.target.weapon)
 	}
 
@@ -85,8 +106,10 @@ export class Plannification {
 		}
 		const weapon = this.chosenWeapon
 		if (weapon === null || this.leek.weapon === weapon || this.tpLeft < 1) {
+			this.debug(`SkipEquipWeapon: weapon=${weapon?.name}, current=${this.leek.weapon?.name}, tpLeft=${this.tpLeft}`)
 			return
 		}
+		this.debug(`EquipWeapon: ${weapon.name} (cost 1 TP, ${this.tpLeft} → ${this.tpLeft - 1})`)
 		this.actions.push(new Action("equip weapon", () => this.leek.setWeapon(weapon), weapon.name))
 		this.tpLeft -= 1
 		this.weaponEquipPlanned = true
@@ -97,6 +120,7 @@ export class Plannification {
 			this.chooseWeapon()
 		}
 		if (this.chosenWeapon === null) {
+			this.debug(`SkipMove: no weapon chosen`)
 			return
 		}
 
@@ -110,6 +134,11 @@ export class Plannification {
 				distance
 			})
 
+			this.debug(
+				`Move: distance=${distance}, behavior=${behavior}, ` +
+				`mpLeft=${this.mpLeft} → 0`
+			)
+
 			this.actions.push(
 				new Action(
 					`move [${behavior}]`,
@@ -118,11 +147,14 @@ export class Plannification {
 				)
 			)
 			this.mpLeft = 0
+		} else {
+			this.debug(`SkipMove: canUseWeapon=${this.leek.canUseWeapon(this.target)}, mpLeft=${this.mpLeft}`)
 		}
 	}
 
 	planShootOrChip(): void {
 		if (!this.willShoot || this.leek.maxLife <= 0) {
+			this.debug(`SkipShootOrChip: willShoot=${this.willShoot}, alive=${this.leek.maxLife > 0}`)
 			return
 		}
 		const lifeRatio = this.leek.life / this.leek.maxLife
@@ -134,6 +166,7 @@ export class Plannification {
 				this.leek.chipCells(chip, this.target).includes(this.leek.cell)
 			)
 			if (attackChip !== undefined) {
+				this.debug(`AttackChip: ${attackChip.name} (cost ${attackChip.cost} TP, ${this.tpLeft} → ${this.tpLeft - attackChip.cost})`)
 				this.actions.push(
 					new Action("attack chip", () => this.leek.useChip(attackChip, this.target), attackChip.name)
 				)
@@ -146,9 +179,13 @@ export class Plannification {
 			this.chosenWeapon.cost <= 0 ||
 			(!this.weaponEquipPlanned && this.leek.weapon !== this.chosenWeapon)
 		) {
+			this.debug(`SkipShoot: weapon=${this.chosenWeapon?.name}, cost=${this.chosenWeapon?.cost}`)
 			return
 		}
+
+		let shootCount = 0
 		while (this.tpLeft >= this.chosenWeapon.cost) {
+			shootCount++
 			this.actions.push(new Action("shoot", () => {
 				if (this.leek.canUseWeapon(this.target)) {
 					this.leek.useWeapon(this.target)
@@ -156,10 +193,15 @@ export class Plannification {
 			}, this.chosenWeapon.name))
 			this.tpLeft -= this.chosenWeapon.cost
 		}
+
+		if (shootCount > 0) {
+			this.debug(`Shoot: ${this.chosenWeapon.name} ×${shootCount} (cost ${shootCount * this.chosenWeapon.cost} TP)`)
+		}
 	}
 
 	planChipsActionsAfterShoot(): void {
 		if (this.leek.maxLife <= 0) {
+			this.debug(`SkipChipsAfterShoot: dead`)
 			return
 		}
 		const lifeLost = this.leek.maxLife - this.leek.life
@@ -168,6 +210,11 @@ export class Plannification {
 
 		const shouldDefense = this.shouldPrioritizeDefense()
 		const shouldOffense = this.shouldBoostAttack()
+
+		this.debug(
+			`ChipsAfterShoot: life=${lifeRatio.toFixed(2)}, lifeLost=${lostLifeRatio.toFixed(2)}, ` +
+			`shouldDefense=${shouldDefense}, shouldOffense=${shouldOffense}`
+		)
 
 		if (this.profile.allowShielding && shouldDefense && this.strategy.shouldShield(
 			lifeRatio,
@@ -184,6 +231,7 @@ export class Plannification {
 				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
 			)
 			if (shield !== undefined) {
+				this.debug(`Shield (defense priority): ${shield.name}`)
 				this.actions.push(
 					new Action("shield", () => this.leek.useChip(shield, this.leek), shield.name)
 				)
@@ -210,8 +258,14 @@ export class Plannification {
 					: 0
 
 				if (!this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)) {
+					this.debug(
+						`Heal: ${chip.name} (healing=${meanHealing.toFixed(0)}, ` +
+						`meanDamagePerTp=${meanDamagePerTp.toFixed(2)}, skip=${this.strategy.shouldSkipHealForDamage(chip.cost, meanHealing, this.tpLeft, meanDamagePerTp)})`
+					)
 					this.actions.push(new Action("heal", () => this.leek.useChip(chip, this.leek), chip.name))
 					this.tpLeft -= chip.cost
+				} else {
+					this.debug(`SkipHeal: more damage per TP available`)
 				}
 			}
 		}
@@ -231,6 +285,7 @@ export class Plannification {
 				this.leek.chipCells(chip, this.leek).includes(this.leek.cell)
 			)
 			if (shield !== undefined) {
+				this.debug(`Shield (after healing): ${shield.name}`)
 				this.actions.push(
 					new Action("shield", () => this.leek.useChip(shield, this.leek), shield.name)
 				)
@@ -243,13 +298,25 @@ export class Plannification {
 		if (
 			!this.profile.allowHiding ||
 			this.mpLeft <= 0 ||
-			this.leek.maxLife <= 0
+			this.leek.maxLife <= 0 ||
+			this.target.life <= 0
 		) {
+			this.debug(
+				`SkipHide: allowHiding=${this.profile.allowHiding}, mpLeft=${this.mpLeft}, alive=${this.leek.maxLife > 0}`
+			)
 			return
 		}
 
 		const distance = this.leek.distance(this.target)
-		if (this.strategy.shouldHide(this.leek.life / this.leek.maxLife, distance, this.profile.preferredMinRange)) {
+		const lifeRatio = this.leek.life / this.leek.maxLife
+		const shouldHide = this.strategy.shouldHide(lifeRatio, distance, this.profile.preferredMinRange)
+
+		this.debug(
+			`HideCheck: distance=${distance}, lifeRatio=${lifeRatio.toFixed(2)}, shouldHide=${shouldHide}`
+		)
+
+		if (shouldHide) {
+			this.debug(`Hide: retreat to corner`)
 			this.actions.push(
 				new Action("hide", () => this.movementBehavior.executeBehavior(MOVEMENT_BEHAVIOR.RETREAT_TO_CORNER), "Smart Retreat")
 			)
@@ -258,9 +325,13 @@ export class Plannification {
 	}
 
 	execute(): void {
+		this.debug(`Execute: ${this.actions.length} actions (TP: ${this.tpLeft} left, MP: ${this.mpLeft} left)`)
 		while (this.actions.length > 0) {
-			this.actions.shift()?.action()
+			const action = this.actions.shift()
+			this.debug(`  → ${action?.name}`)
+			action?.action()
 		}
+		this.debug(`Done: TP: ${this.tpLeft}, MP: ${this.mpLeft}`)
 	}
 }
 
