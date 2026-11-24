@@ -294,7 +294,7 @@ def get_local_ais(root_folder, local_ais=None):
             try:
                 filecontent = filecontent.decode("utf-8")
             except UnicodeDecodeError:
-                print("Warning: {0} is not UTF-8; reading as Windows-1252."
+                print("Info: {0} uses Windows-1252; decoding for API upload."
                       .format("/".join(part for part in (relative_dir, filename) if part)))
                 filecontent = filecontent.decode("cp1252")
             local_ais.append(type('', (object,), {

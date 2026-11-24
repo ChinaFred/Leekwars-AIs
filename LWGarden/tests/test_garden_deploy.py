@@ -124,10 +124,16 @@ class DeployLocalAIsTests(unittest.TestCase):
                 source.write("// Caf\xe9".encode("cp1252"))
 
             api = FakeApi()
-            with patch("Garden.time.sleep"):
+            with patch("Garden.time.sleep"), patch("builtins.print") as print_mock:
                 deploy_local_ais(api, root)
 
             self.assertEqual(api.writes, [("accented.leek", "// Café")])
+            messages = [call.args[0] for call in print_mock.call_args_list if call.args]
+            self.assertIn(
+                "Info: accented.leek uses Windows-1252; decoding for API upload.",
+                messages
+            )
+            self.assertFalse(any(message.startswith("Warning:") for message in messages))
 
     def test_refuses_to_deploy_when_source_folder_has_no_leek_files(self):
         with tempfile.TemporaryDirectory() as root:

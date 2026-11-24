@@ -45,8 +45,9 @@ option `5` to deploy the `.leek` files under the repository's root `src/`
 directory to the primary account configured in `LWGarden\src\config.json`.
 The deploy keeps the local folder hierarchy, creates missing AIs, updates
 changed AIs, and leaves unrelated remote AIs untouched.
-Source files are read as UTF-8, with Windows-1252 used for files that are not
-valid UTF-8.
+Source files are read as UTF-8. Legacy Windows-1252 files are decoded in memory
+for API upload and reported as informational messages; the local source files
+are not rewritten.
 If the API rate-limits a deploy request, Garden waits for the server-provided
 retry delay and retries it up to three times before reporting the error.
 An error after earlier successful requests may leave the remote garden only

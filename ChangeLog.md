@@ -19,3 +19,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Exécution de LWGarden depuis la racine
 
 - Résout la configuration et le dossier AI par rapport à LWGarden pour lancer PUSH et PULL depuis la racine du dépôt vers `src/`.
+
+## 2026-11-24 — Encodage des sources pour le PUSH
+
+- Traite le repli Windows-1252 comme une information et préserve le contenu des sources lors de leur envoi.
