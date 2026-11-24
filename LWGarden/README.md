@@ -43,8 +43,10 @@ switches for their corresponding support actions.
 Run `python LWGarden\src\Garden.py` from the repository root, then choose
 option `5` to deploy the `.leek` files under the repository's root `src/`
 directory to the primary account configured in `LWGarden\src\config.json`.
-The deploy keeps the local folder hierarchy, creates missing AIs, updates
-changed AIs, and leaves unrelated remote AIs untouched.
+The deploy keeps the local folder hierarchy and creates or updates local AIs.
+Remote AIs and folders absent from the source can also be moved to the Leek Wars
+trash, but only after Garden lists them and you type `DELETE`. Use this only
+when the configured source folder is the complete set of AIs to keep.
 Source files are read as UTF-8. Legacy Windows-1252 files are decoded in memory
 for API upload and reported as informational messages; the local source files
 are not rewritten.
@@ -76,8 +78,10 @@ resolved relative to `LWGarden/src`, regardless of the current working
 directory; in this checkout, set it to `../../src/`. This keeps all AI logic in
 the repository's root `src/` directory. Option `1` pulls from Leek Wars into
 that directory, replacing it after you type `OVERWRITE`. Options `5` and `6`
-push its `.leek` files to the primary and secondary accounts, respectively,
-without deleting remote AIs.
+push its `.leek` files to the primary and secondary accounts, respectively.
+For each account, remote-only AIs and folders are listed before any deletion;
+type `DELETE` to move them to the server trash, or enter anything else to keep
+them.
 
 ## LeekScript version
 

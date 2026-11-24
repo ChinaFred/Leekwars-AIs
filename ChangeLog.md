@@ -23,3 +23,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Encodage des sources pour le PUSH
 
 - Traite le repli Windows-1252 comme une information et préserve le contenu des sources lors de leur envoi.
+
+## 2026-11-24 — Synchronisation des suppressions distantes
+
+- Permet de déplacer vers la corbeille les IA et dossiers distants absents de la source, après confirmation explicite.

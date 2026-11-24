@@ -59,10 +59,10 @@ class LWApi:
         """Get the path-based AI filesystem for the connected farmer."""
         return self.__session.get(self.__root_url + Uri.get_ai_tree).json()
 
-    def __post_with_rate_limit_retry(self, url, **kwargs):
+    def __request_with_rate_limit_retry(self, request, url, **kwargs):
         retries = 0
         while True:
-            response = self.__session.post(url, **kwargs)
+            response = request(url, **kwargs)
             if response.ok or retries >= self.RATE_LIMIT_RETRIES:
                 return response
             try:
@@ -81,42 +81,48 @@ class LWApi:
 
     def create_ai(self, folder, name, version=4):
         """Create an AI file and return its server path."""
-        return self.__post_with_rate_limit_retry(
+        return self.__request_with_rate_limit_retry(
+            self.__session.post,
             self.__root_url + Uri.create_ai,
             json={"folder": folder, "name": name, "version": version}
         )
 
     def read_ai(self, path):
         """Read an AI file by its server-relative path."""
-        return self.__post_with_rate_limit_retry(
+        return self.__request_with_rate_limit_retry(
+            self.__session.post,
             self.__root_url + Uri.read_ai,
             json={"path": path}
         ).json()
 
     def write_ai(self, path, code):
         """Create or update an AI file by its server-relative path."""
-        return self.__post_with_rate_limit_retry(
+        return self.__request_with_rate_limit_retry(
+            self.__session.post,
             self.__root_url + Uri.write_ai,
             json={"path": path, "code": code}
         )
 
     def new_folder(self, path):
         """Create a folder by its server-relative path."""
-        return self.__post_with_rate_limit_retry(
+        return self.__request_with_rate_limit_retry(
+            self.__session.post,
             self.__root_url + Uri.new_folder_ai,
             json={"path": path}
         )
 
     def delete_ai(self, path):
         """Move an AI file to the server trash by path."""
-        return self.__session.delete(
+        return self.__request_with_rate_limit_retry(
+            self.__session.delete,
             self.__root_url + Uri.delete_ai,
             json={"path": path}
         )
 
     def delete_folder(self, path):
         """Move a folder to the server trash by path."""
-        return self.__session.delete(
+        return self.__request_with_rate_limit_retry(
+            self.__session.delete,
             self.__root_url + Uri.delete_folder,
             json={"path": path}
         )

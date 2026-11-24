@@ -20,6 +20,18 @@ def load_config():
     return config
 
 
+def confirm_remote_deletions(remote_files, remote_folders):
+    if not remote_files and not remote_folders:
+        return False
+
+    print("\nRemote-only items to move to the Leek Wars trash:")
+    for path in remote_files:
+        print("\tAI: " + path)
+    for path in remote_folders:
+        print("\tFolder: " + path)
+    return input("Type DELETE to remove these remote-only items: ") == "DELETE"
+
+
 def main():
     """Main function, it constites of a Menu where you can select
     an action to perform:
@@ -75,8 +87,8 @@ def main():
         '2': "Launch fight",
         '3': "Get Register",
         '4': "Get Farmer's Throphies",
-        '5': "PUSH (local -> primary Leek Wars account): create/update, no remote deletions.",
-        '6': "PUSH (local -> secondary Leek Wars accounts): create/update, no remote deletions.",
+        '5': "PUSH local source to primary account; optionally delete remote-only items.",
+        '6': "PUSH local source to secondary accounts; optionally delete remote-only items.",
         '7': "Exit"
     }
     while True:
@@ -105,14 +117,16 @@ def main():
             confirmation = input(
                 "PUSH local .leek files to primary account {0}? [y/N]: ".format(farmer["login"]))
             if confirmation.lower() in ("y", "yes"):
-                deploy_local_ais(api, config["AIs_folder"])
+                deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
             confirmation = input(
                 "PUSH local .leek files to secondary accounts? [y/N]: ")
             if confirmation.lower() in ("y", "yes"):
-                push_all_ais(api, secondaries, config["AIs_folder"])
+                push_all_ais(
+                    api, secondaries, config["AIs_folder"], confirm_remote_deletions
+                )
                 # reconnect to the main
                 if not connect_primary(api, principal, api_key):
                     raise RuntimeError("Could not reconnect to the primary account.")
@@ -161,18 +175,18 @@ def get_all_ais(api, root_folder: str):
         time.sleep(0.2)
 
 
-def push_all_ais(api, secondaries, root_folder):
-    """Deploy local AI files to each secondary account without deleting remote files."""
+def push_all_ais(api, secondaries, root_folder, confirm_delete=None):
+    """Deploy local AI files to each secondary account."""
     print("\npush_all_ais()\n")
     for secondary in secondaries:
         if not api.connect(secondary["username"], secondary["password"]):
             raise RuntimeError("Could not connect to a secondary account.")
         farmer2 = api.get_farmer_self()["farmer"]
         print("\nDeploy to the account {farmer_name}\n".format(farmer_name=farmer2["login"]))
-        deploy_local_ais(api, root_folder)
+        deploy_local_ais(api, root_folder, confirm_delete)
 
 
-def deploy_local_ais(api, root_folder):
+def deploy_local_ais(api, root_folder, confirm_delete=None):
     """Create or update local LeekScript files on the currently connected account."""
     local_entries = get_local_ais(root_folder)
     local_folders = [entry for entry in local_entries if entry.type == "folder"]
@@ -180,8 +194,33 @@ def deploy_local_ais(api, root_folder):
     if not local_files:
         raise ValueError("No .leek files found under " + root_folder)
 
+    local_file_paths = []
+    for local_file in local_files:
+        local_path = "/".join(
+            part for part in (local_file.relative_path, local_file.name + ".leek") if part
+        )
+        local_file_paths.append((normalize_ai_path(local_path), local_file))
+    local_file_path_set = {path for path, _ in local_file_paths}
+    local_folder_paths = {
+        normalize_ai_path(entry.relative_path) for entry in local_folders
+    }
+
     remote_tree = api.get_ai_tree()
     existing_folders = {normalize_ai_path(path) for path in remote_tree["folders"]}
+    existing_files = {normalize_ai_path(ai["path"]) for ai in remote_tree["files"]}
+    remote_only_files = sorted(existing_files - local_file_path_set)
+    remote_only_folders = sorted(
+        existing_folders - local_folder_paths,
+        key=lambda path: (path.count("/"), path),
+        reverse=True
+    )
+    delete_remote_only = False
+    if remote_only_files or remote_only_folders:
+        if confirm_delete is None:
+            print("Remote-only items were kept; no deletion confirmation was provided.")
+        else:
+            delete_remote_only = confirm_delete(remote_only_files, remote_only_folders)
+
     for local_folder in sorted(local_folders, key=lambda entry: entry.relative_path.count("/")):
         path = normalize_ai_path(local_folder.relative_path)
         if path not in existing_folders:
@@ -193,15 +232,10 @@ def deploy_local_ais(api, root_folder):
             print(" -> Done!")
             time.sleep(0.2)
 
-    existing_files = {normalize_ai_path(ai["path"]) for ai in remote_tree["files"]}
     created = 0
     updated = 0
     unchanged = 0
-    for local_file in local_files:
-        local_path = "/".join(
-            part for part in (local_file.relative_path, local_file.name + ".leek") if part
-        )
-        local_path = normalize_ai_path(local_path)
+    for local_path, local_file in local_file_paths:
         if local_path in existing_files:
             remote_code = api.read_ai(local_path)["code"]
             remote_hash = hashlib.sha512(remote_code.encode("utf-8")).hexdigest()
@@ -232,8 +266,30 @@ def deploy_local_ais(api, root_folder):
         print(" -> Done!")
         time.sleep(0.2)
 
-    print("\nDeployment complete: {0} created, {1} updated, {2} unchanged. No remote AIs were deleted."
-          .format(created, updated, unchanged))
+    deleted_files = 0
+    deleted_folders = 0
+    if delete_remote_only:
+        for path in remote_only_files:
+            print("\tMove remote-only AI to trash: " + path)
+            result = api.delete_ai(path)
+            if not result.ok:
+                raise RuntimeError("Could not delete remote AI {0}: {1}".format(path, result.content))
+            deleted_files += 1
+            print("\t -> Done!")
+            time.sleep(0.2)
+
+        for path in remote_only_folders:
+            print("\tMove remote-only folder to trash: " + path)
+            result = api.delete_folder(path)
+            if not result.ok:
+                raise RuntimeError("Could not delete remote folder {0}: {1}".format(path, result.content))
+            deleted_folders += 1
+            print("\t -> Done!")
+            time.sleep(0.2)
+
+    print("\nDeployment complete: {0} created, {1} updated, {2} unchanged, "
+          "{3} remote AIs and {4} folders moved to trash."
+          .format(created, updated, unchanged, deleted_files, deleted_folders))
 
 
 def Fight(api, config):

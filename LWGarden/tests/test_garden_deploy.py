@@ -6,7 +6,12 @@ from unittest.mock import patch
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from Garden import connect_primary, deploy_local_ais, load_config
+from Garden import (
+    confirm_remote_deletions,
+    connect_primary,
+    deploy_local_ais,
+    load_config
+)
 
 
 class FakeResponse:
@@ -27,6 +32,8 @@ class FakeApi:
         self.created_folders = []
         self.created_ais = []
         self.writes = []
+        self.deleted_ais = []
+        self.deleted_folders = []
 
     def get_ai_tree(self):
         return {"folders": self.folders, "files": self.ais}
@@ -51,8 +58,27 @@ class FakeApi:
             self.ais.append({"path": path})
         return FakeResponse()
 
+    def delete_ai(self, path):
+        self.deleted_ais.append(path)
+        self.ais = [ai for ai in self.ais if ai["path"] != path]
+        return FakeResponse()
+
+    def delete_folder(self, path):
+        self.deleted_folders.append(path)
+        self.folders = [folder for folder in self.folders if folder != path]
+        return FakeResponse()
+
 
 class DeployLocalAIsTests(unittest.TestCase):
+    def test_remote_deletions_require_the_exact_confirmation_word(self):
+        with patch("builtins.input") as prompt:
+            self.assertFalse(confirm_remote_deletions([], []))
+            prompt.assert_not_called()
+        with patch("builtins.input", return_value="y"):
+            self.assertFalse(confirm_remote_deletions(["Old/ai.leek"], []))
+        with patch("builtins.input", return_value="DELETE"):
+            self.assertTrue(confirm_remote_deletions(["Old/ai.leek"], []))
+
     def test_config_paths_are_resolved_relative_to_garden_script(self):
         with tempfile.TemporaryDirectory() as root:
             garden_directory = os.path.join(root, "LWGarden", "src")
@@ -117,6 +143,71 @@ class DeployLocalAIsTests(unittest.TestCase):
             self.assertEqual(api.writes, [("Main/Kassbi_Class.leek", "new code")])
             self.assertEqual(len(api.ais), 1)
 
+    def test_confirmed_push_moves_remote_only_ais_and_folders_to_trash(self):
+        with tempfile.TemporaryDirectory() as root:
+            main_folder = os.path.join(root, "Main")
+            os.makedirs(main_folder)
+            with open(os.path.join(main_folder, "Kassbi_Class.leek"), "w") as source:
+                source.write("same code")
+
+            api = FakeApi(
+                folders=["Main", "Old", "Old/Sub"],
+                ais=[
+                    {"path": "Main/Kassbi_Class.leek"},
+                    {"path": "Old/stale.leek"},
+                    {"path": "Old/Sub/staler.leek"}
+                ],
+                codes={"Main/Kassbi_Class.leek": "same code"}
+            )
+
+            def confirm_delete(files, folders):
+                self.assertEqual(files, ["Old/Sub/staler.leek", "Old/stale.leek"])
+                self.assertEqual(folders, ["Old/Sub", "Old"])
+                return True
+
+            with patch("Garden.time.sleep"):
+                deploy_local_ais(api, root, confirm_delete)
+
+            self.assertEqual(
+                api.deleted_ais,
+                ["Old/Sub/staler.leek", "Old/stale.leek"]
+            )
+            self.assertEqual(api.deleted_folders, ["Old/Sub", "Old"])
+            self.assertEqual(api.ais, [{"path": "Main/Kassbi_Class.leek"}])
+            self.assertEqual(api.folders, ["Main"])
+
+    def test_declined_remote_deletions_leave_remote_only_items_untouched(self):
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "local.leek"), "w") as source:
+                source.write("local")
+
+            api = FakeApi(
+                ais=[{"path": "remote-only.leek"}],
+                codes={}
+            )
+            with patch("Garden.time.sleep"):
+                deploy_local_ais(api, root, lambda files, folders: False)
+
+            self.assertEqual(api.deleted_ais, [])
+            self.assertEqual(
+                {ai["path"] for ai in api.ais},
+                {"remote-only.leek", "local.leek"}
+            )
+
+    def test_remote_deletion_api_errors_are_reported(self):
+        class FailedDeleteApi(FakeApi):
+            def delete_ai(self, path):
+                return FakeResponse(ok=False, content="forbidden")
+
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "local.leek"), "w") as source:
+                source.write("local")
+
+            api = FailedDeleteApi(ais=[{"path": "remote-only.leek"}])
+            with patch("Garden.time.sleep"):
+                with self.assertRaisesRegex(RuntimeError, "Could not delete remote AI"):
+                    deploy_local_ais(api, root, lambda files, folders: True)
+
     def test_deploys_windows_1252_source_without_losing_accents(self):
         with tempfile.TemporaryDirectory() as root:
             path = os.path.join(root, "accented.leek")
@@ -157,6 +248,10 @@ class DeployLocalAIsTests(unittest.TestCase):
                 self.calls.append(("GET", url, kwargs))
                 return FakeResponse({"folders": [], "files": []})
 
+            def delete(self, url, **kwargs):
+                self.calls.append(("DELETE", url, kwargs))
+                return FakeResponse({"deleted": 1})
+
         import LWApi
 
         session = FakeSession()
@@ -166,6 +261,8 @@ class DeployLocalAIsTests(unittest.TestCase):
             api.get_ai_tree()
             api.create_ai("Main", "brain.leek")
             api.write_ai("Main/brain.leek", "code")
+            api.delete_ai("Main/old.leek")
+            api.delete_folder("Old")
 
         self.assertEqual(session.headers["Authorization"], "Bearer test-token")
         self.assertEqual(session.calls[1][1].endswith("/ai/get-farmer-tree"), True)
@@ -176,6 +273,12 @@ class DeployLocalAIsTests(unittest.TestCase):
         )
         self.assertEqual(session.calls[3][1].endswith("/ai/write"), True)
         self.assertEqual(session.calls[3][2]["json"], {"path": "Main/brain.leek", "code": "code"})
+        self.assertEqual(session.calls[4][0], "DELETE")
+        self.assertTrue(session.calls[4][1].endswith("/ai/delete"))
+        self.assertEqual(session.calls[4][2]["json"], {"path": "Main/old.leek"})
+        self.assertEqual(session.calls[5][0], "DELETE")
+        self.assertTrue(session.calls[5][1].endswith("/ai-folder/delete"))
+        self.assertEqual(session.calls[5][2]["json"], {"path": "Old"})
 
     def test_api_client_retries_rate_limited_writes_after_server_delay(self):
         class FakeSession:
@@ -202,6 +305,37 @@ class DeployLocalAIsTests(unittest.TestCase):
             with patch("LWApi.time.sleep") as sleep:
                 api = LWApi.LWApi()
                 result = api.write_ai("Main/brain.leek", "code")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(len(session.calls), 2)
+        self.assertEqual(session.calls[0], session.calls[1])
+        sleep.assert_called_once_with(1)
+
+    def test_api_client_retries_rate_limited_deletes_after_server_delay(self):
+        class FakeSession:
+            def __init__(self):
+                self.headers = {}
+                self.calls = []
+                self.responses = [
+                    FakeResponse(
+                        {"error": "rate_limit", "retry_after": 1},
+                        ok=False,
+                        content=b'{"error":"rate_limit","retry_after":1}'
+                    ),
+                    FakeResponse({"deleted": 1})
+                ]
+
+            def delete(self, url, **kwargs):
+                self.calls.append((url, kwargs))
+                return self.responses.pop(0)
+
+        import LWApi
+
+        session = FakeSession()
+        with patch("LWApi.requests.Session", return_value=session):
+            with patch("LWApi.time.sleep") as sleep:
+                api = LWApi.LWApi()
+                result = api.delete_ai("Old/stale.leek")
 
         self.assertTrue(result.ok)
         self.assertEqual(len(session.calls), 2)
