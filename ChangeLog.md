@@ -2,6 +2,19 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-24 — Préparation au contact : Prédiction tactique et boost/défense
+
+- Ajoute `predictContactNextTurn()` pour détecter si contact sera établi au prochain tour.
+  - Calcule : `distance - mpLeft` pour ma portée de tir max
+  - Calcule : `distance - enemy.mp` pour la portée max de l'ennemi
+  - Retourne : `iCanShoot` et `enemyCanShoot`
+- Ajoute `shouldPrioritizeDefense()` : si ennemi peut tirer et pas moi → priorité bouclier
+- Ajoute `shouldBoostAttack()` : si je peux tirer et pas l'ennemi → priorité offensif (réservé pour futurs chips boost)
+- **Réorganise priorité chips** :
+  - **Si défense prioritaire** : bouclier EN PREMIER, puis soin
+  - **Sinon** : soin EN PREMIER, puis bouclier
+- **Impact** : Kassbi se prépare intelligemment selon le scénario du prochain tour.
+
 ## 2026-11-24 — Kassbi parle en combat : Greetings et Taunts
 
 - Ajoute `isFirstTurn` flag pour détecter le premier tour du combat.
