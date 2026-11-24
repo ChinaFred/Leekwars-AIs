@@ -29,7 +29,11 @@ def confirm_remote_deletions(remote_files, remote_folders):
         print("\tAI: " + path)
     for path in remote_folders:
         print("\tFolder: " + path)
-    return input("Type DELETE to remove these remote-only items: ") == "DELETE"
+    return input("Type DELETE to remove these remote-only items: ").strip() == "DELETE"
+
+
+def is_yes_confirmation(value):
+    return value.strip().lower() in ("y", "yes")
 
 
 def main():
@@ -103,7 +107,7 @@ def main():
         if selection == '1':
             confirmation = input(
                 "PULL will replace the configured local AI folder. Type OVERWRITE to continue: ")
-            if confirmation == "OVERWRITE":
+            if confirmation.strip() == "OVERWRITE":
                 get_all_ais(api, config["AIs_folder"])
             else:
                 print("PULL cancelled.")
@@ -116,14 +120,14 @@ def main():
         elif selection == '5':
             confirmation = input(
                 "PUSH local .leek files to primary account {0}? [y/N]: ".format(farmer["login"]))
-            if confirmation.lower() in ("y", "yes"):
+            if is_yes_confirmation(confirmation):
                 deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
             confirmation = input(
                 "PUSH local .leek files to secondary accounts? [y/N]: ")
-            if confirmation.lower() in ("y", "yes"):
+            if is_yes_confirmation(confirmation):
                 push_all_ais(
                     api, secondaries, config["AIs_folder"], confirm_remote_deletions
                 )

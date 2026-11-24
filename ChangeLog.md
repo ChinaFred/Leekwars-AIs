@@ -27,3 +27,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Synchronisation des suppressions distantes
 
 - Permet de déplacer vers la corbeille les IA et dossiers distants absents de la source, après confirmation explicite.
+
+## 2026-11-24 — Confirmations Garden
+
+- Ignore les espaces autour des réponses de confirmation du PUSH, du PULL et des suppressions.

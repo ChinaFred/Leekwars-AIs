@@ -10,6 +10,7 @@ from Garden import (
     confirm_remote_deletions,
     connect_primary,
     deploy_local_ais,
+    is_yes_confirmation,
     load_config
 )
 
@@ -76,8 +77,13 @@ class DeployLocalAIsTests(unittest.TestCase):
             prompt.assert_not_called()
         with patch("builtins.input", return_value="y"):
             self.assertFalse(confirm_remote_deletions(["Old/ai.leek"], []))
-        with patch("builtins.input", return_value="DELETE"):
+        with patch("builtins.input", return_value=" DELETE "):
             self.assertTrue(confirm_remote_deletions(["Old/ai.leek"], []))
+
+    def test_yes_confirmation_ignores_surrounding_whitespace(self):
+        self.assertTrue(is_yes_confirmation(" y "))
+        self.assertTrue(is_yes_confirmation(" YES "))
+        self.assertFalse(is_yes_confirmation("no"))
 
     def test_config_paths_are_resolved_relative_to_garden_script(self):
         with tempfile.TemporaryDirectory() as root:
