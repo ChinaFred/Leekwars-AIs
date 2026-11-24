@@ -6,7 +6,7 @@ from unittest.mock import patch
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from Garden import connect_primary, deploy_local_ais
+from Garden import connect_primary, deploy_local_ais, load_config
 
 
 class FakeResponse:
@@ -53,6 +53,22 @@ class FakeApi:
 
 
 class DeployLocalAIsTests(unittest.TestCase):
+    def test_config_paths_are_resolved_relative_to_garden_script(self):
+        with tempfile.TemporaryDirectory() as root:
+            garden_directory = os.path.join(root, "LWGarden", "src")
+            os.makedirs(garden_directory)
+            source_directory = os.path.join(root, "src")
+            os.makedirs(source_directory)
+            config_path = os.path.join(garden_directory, "config.json")
+            with open(config_path, "w") as configfile:
+                configfile.write('{"AIs_folder": "../../src/", "accounts": []}')
+
+            garden_script = os.path.join(garden_directory, "Garden.py")
+            with patch("Garden.__file__", garden_script):
+                config = load_config()
+
+            self.assertEqual(config["AIs_folder"], os.path.abspath(source_directory))
+
     def test_primary_uses_the_api_key_instead_of_password_credentials(self):
         class FakeApi:
             def connect_with_api_key(self, api_key):

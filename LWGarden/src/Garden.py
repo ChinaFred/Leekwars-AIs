@@ -9,6 +9,17 @@ def connect_primary(api, principal, api_key):
     return api.connect(principal["username"], principal["password"])
 
 
+def load_config():
+    garden_directory = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(garden_directory, "config.json")
+    with open(config_path, "r") as configfile:
+        config = json.load(configfile)
+    config["AIs_folder"] = os.path.abspath(
+        os.path.join(garden_directory, config["AIs_folder"])
+    )
+    return config
+
+
 def main():
     """Main function, it constites of a Menu where you can select
     an action to perform:
@@ -41,9 +52,8 @@ def main():
 
     print("\nWelcome to the Leek Garden, a tool to empower your leeks on LeekWars!")
     print(
-        "\nTry to login on the LeekWars Api, please ensure that a config.json is present, with your username and password")
-    with open("./config.json", "r") as configfile:
-        config = json.load(configfile)
+        "\nTry to login on the LeekWars Api, please ensure that LWGarden/src/config.json is present, with your username and password")
+    config = load_config()
     api = LWApi()
     accounts = config["accounts"]
     principal = next(p for p in accounts if p["primary"] == 'true')
