@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 export class LeekStrategy {
 	public name = "BALANCED"
 	public aggression = 50
@@ -57,9 +57,11 @@ export class LeekStrategy {
 			return true
 		}
 		
-		// ALSO hide if VERY CLOSE (<=2) AND MODERATELY WOUNDED (<=70%)
-		// This handles incoming threats before they deal critical damage
-		if (distance <= 2 && lifeRatio <= 0.70) {
+		// CRITICAL FIX: Threat-aware preemptive retreat
+		// Even if not "too close" by range, if distance is medium (<=8) AND critically wounded (<=45%)
+		// we must retreat to corner to escape zone_control trap
+		const isCriticallyWounded = lifeRatio <= 0.45 - 0.10 * this.getAggressionRatio()
+		if (distance <= 8 && isCriticallyWounded) {
 			return true
 		}
 		

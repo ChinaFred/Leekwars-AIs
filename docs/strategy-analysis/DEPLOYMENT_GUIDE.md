@@ -63,7 +63,7 @@ tests/kassbi-combat-analysis.test.mjs (530+ lignes)
 FINAL_REPORT.md
 COMBAT_ANALYSIS_REPORT.md
 VALIDATION_SUMMARY.md
-TECHNICAL_CHANGE_SUMMARY.md
+../reports/TECHNICAL_CHANGE_SUMMARY.md
 TEST_COVERAGE_REPORT.md
 ```
 

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class BalancedStrategy extends LeekStrategy {
@@ -35,7 +35,20 @@ export class BalancedStrategy extends LeekStrategy {
 		const minSafeDistance = Math.max(2, preferredMinRange - 1)
 		const isTooClose = distance < minSafeDistance
 		const isWounded = lifeRatio <= 0.55 - 0.20 * this.getAggressionRatio()
-		return isTooClose && isWounded
+		
+		// Hide if TOO CLOSE + WOUNDED (classic case)
+		if (isTooClose && isWounded) {
+			return true
+		}
+		
+		// BALANCED: Threat-aware preemptive retreat (more aggressive than base)
+		// If distance medium (<=8) AND critically wounded (<=40%), MUST escape zone_control
+		const isCriticallyWounded = lifeRatio <= 0.40
+		if (distance <= 8 && isCriticallyWounded) {
+			return true
+		}
+		
+		return false
 	}
 
 	shouldUseAttackChip(lifeRatio: number): boolean {

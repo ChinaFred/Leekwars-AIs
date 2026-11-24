@@ -135,22 +135,24 @@ test("planHide() should not add hide action when target is dead", () => {
 	console.log(`Actions before: ${actionsBeforeHide}, After: ${actionsAfterHide}`)
 })
 
-test("planHide() correctly checks if hiding is needed when wounded", () => {
+test("planHide() correctly checks if hiding is needed when wounded with zone control trap", () => {
 	// This test verifies the shouldHide() formula works correctly
 	// by using the strategy directly instead of through Plannification
 	const strategy = new BalancedStrategy(50)
 	
-	// Test case 1: Player at 40% HP and 1 cell away
+	// Test case 1: Player at 40% HP and 1 cell away (should hide - wounded + too close)
 	const shouldHide1 = strategy.shouldHide(0.4, 1, 2)
 	assert.equal(shouldHide1, true, "Should hide at 40% HP and 1 cell away")
 	
-	// Test case 2: Player at 60% HP and 1 cell away
+	// Test case 2: Player at 60% HP and 1 cell away (should NOT hide - not wounded enough)
 	const shouldHide2 = strategy.shouldHide(0.6, 1, 2)
 	assert.equal(shouldHide2, false, "Should NOT hide at 60% HP")
 	
-	// Test case 3: Player at 40% HP but 3 cells away (safe distance)
-	const shouldHide3 = strategy.shouldHide(0.4, 3, 2)
-	assert.equal(shouldHide3, false, "Should NOT hide when at safe distance")
+	// Test case 3: Player at 40% HP but 10 cells away (should NOT hide - far enough)
+	// BUT now with zone_control trap: distance <= 8 && lifeRatio <= 0.40
+	// At distance=10: 10 > 8, so zone_control doesn't trigger
+	const shouldHide3 = strategy.shouldHide(0.4, 10, 2)
+	assert.equal(shouldHide3, false, "Should NOT hide when far away (distance > 8)")
 	
 	console.log("All shouldHide() formula tests passed correctly")
 })
@@ -185,16 +187,17 @@ test("shouldHide() should NOT hide when player is healthy", () => {
 	assert.equal(shouldHide, false, "Should NOT hide when at 60% HP")
 })
 
-test("shouldHide() should NOT hide when player is far away", () => {
+test("shouldHide() should NOT hide when player is far away from zone_control", () => {
 	const strategy = new BalancedStrategy(50)
 
-	// distance = 3 >= minSafeDistance = 2, so isTooClose = false
-	const lifeRatio = 0.4 // 40% HP (wounded)
-	const distance = 3 // Safe distance
+	// distance = 10 > minSafeDistance = 2, so isTooClose = false
+	// distance = 10 > 8 (zone_control trap boundary), so zone_control escape doesn't trigger
+	const lifeRatio = 0.4 // 40% HP (would be wounded)
+	const distance = 10 // Far away
 	const preferredMinRange = 2
 
 	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
-	assert.equal(shouldHide, false, "Should NOT hide when at safe distance")
+	assert.equal(shouldHide, false, "Should NOT hide when far away (distance > 8)")
 })
 
 test("shouldHide() should hide when both wounded AND too close", () => {

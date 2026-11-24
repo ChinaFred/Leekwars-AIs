@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class AggressiveStrategy extends LeekStrategy {
@@ -39,6 +39,13 @@ export class AggressiveStrategy extends LeekStrategy {
 		
 		// Aggressive: hide only in extreme situations (distance=1 AND critical HP)
 		if (distance <= 1 && lifeRatio <= 0.50) {
+			return true
+		}
+		
+		// AGGRESSIVE: Zone control trap detection
+		// If distance medium (<=10) AND at panic levels (<=25%), MUST escape
+		const isPanic = lifeRatio <= 0.25
+		if (distance <= 10 && isPanic) {
 			return true
 		}
 		

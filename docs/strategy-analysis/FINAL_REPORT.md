@@ -87,7 +87,7 @@ if (
 ### Documentation
 - `COMBAT_ANALYSIS_REPORT.md` (rapport technique détaillé)
 - `VALIDATION_SUMMARY.md` (résumé exécutif)
-- `TECHNICAL_CHANGE_SUMMARY.md` (détail technique)
+- [`TECHNICAL_CHANGE_SUMMARY.md`](../reports/TECHNICAL_CHANGE_SUMMARY.md) (détail technique)
 - `TEST_COVERAGE_REPORT.md` (couverture complète)
 
 ---
@@ -166,7 +166,7 @@ npm test -- --grep "Kassbi|planHide|shouldHide"
 # Tous les rapports générés
 cat COMBAT_ANALYSIS_REPORT.md
 cat VALIDATION_SUMMARY.md
-cat TECHNICAL_CHANGE_SUMMARY.md
+cat ../reports/TECHNICAL_CHANGE_SUMMARY.md
 cat TEST_COVERAGE_REPORT.md
 ```
 

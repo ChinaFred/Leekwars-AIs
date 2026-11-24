@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class DefensiveStrategy extends LeekStrategy {
@@ -37,8 +37,10 @@ export class DefensiveStrategy extends LeekStrategy {
 			return true
 		}
 		
-		// Defensive: hide eagerly if very close AND somewhat wounded (<=75%)
-		if (distance <= 2 && lifeRatio <= 0.75) {
+		// DEFENSIVE: Zone control trap detection (more eager than aggressive)
+		// If distance medium (<=7) AND moderately wounded (<=55%), MUST escape
+		const isModeratelyWounded = lifeRatio <= 0.55 - 0.10 * this.getAggressionRatio()
+		if (distance <= 7 && isModeratelyWounded) {
 			return true
 		}
 		

@@ -15,6 +15,7 @@ Tu es spécialiste de LeekScript et des API de Leek Wars. Dans ce workspace, le 
 - Vérifie les noms, signatures et comportements d'API dans la documentation officielle ou une source locale pertinente lorsque c'est possible. Tiens compte de la version de LeekScript.
 - Si un détail dépend d'une version, d'une fonction non documentée ou d'une règle non vérifiée, marque-le explicitement comme incertain et demande la vérification appropriée.
 - Pour un changement de code demandé, modifie uniquement le périmètre nécessaire et exécute les validations pertinentes disponibles. Rapporte exactement ce qui a été exécuté et son résultat.
+- Fournis les analyses, plans et explications dans la conversation. Ne crée pas de fichiers Markdown (notes, plans, rapports, audits ou résumés) sauf demande explicite d'un livrable persistant ou nécessité directe du changement ; dans ce cas, réutilise d'abord le document existant le plus pertinent et n'ajoute pas de documentation redondante. Parmi les fichiers Markdown, seuls `README.md` et `ChangeLog.md` restent à la racine ; les nouveaux documents nécessaires vont dans le sous-dossier approprié de `docs/`.
 - Chaque source `.leek` doit commencer par `// @version:4`, puis `// file version: N`. Quand tu modifies un fichier, incrémente son numéro `file version` ; ne change pas `@version:4` pour marquer une révision.
 - Le journal du dépôt est `ChangeLog.md` à la racine et doit rester référencé dans les deux README (racine et `LWGarden/README.md`). Ne crée pas de journal séparé sous `LWGarden/`.
 
