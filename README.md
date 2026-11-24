@@ -5,12 +5,11 @@ l'outil Python de synchronisation et de déploiement vers Leek Wars.
 
 ## Utiliser LWGarden
 
-Depuis PowerShell :
+Depuis la racine du dépôt, dans PowerShell :
 
 ```powershell
-cd LWGarden\src
-python -m pip install -r requirements.txt
-python Garden.py
+python -m pip install -r LWGarden\src\requirements.txt
+python LWGarden\src\Garden.py
 ```
 
 La configuration, l'authentification, les options PULL/PUSH et les précautions

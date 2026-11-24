@@ -11,8 +11,12 @@ Python 🐍  console app for managing your garden on LeekWars
 * Get Register, to check saved data
 
 ## How-To
-* Install python 3 on your computer
-* pip3 install -r requirements.txt
+Install Python 3, then from the repository root run:
+
+```powershell
+python -m pip install -r LWGarden\src\requirements.txt
+python LWGarden\src\Garden.py
+```
 
 ## Kassbi AI entry point and combat profiles
 
@@ -36,10 +40,11 @@ switches for their corresponding support actions.
 
 ## Deploying AIs
 
-Run the manager from the `src` directory with `python Garden.py`, then choose
-option `5` to deploy the local `.leek` files to the primary account configured
-in `config.json`. The deploy keeps the local folder hierarchy, creates missing
-AIs, updates changed AIs, and leaves unrelated remote AIs untouched.
+Run `python LWGarden\src\Garden.py` from the repository root, then choose
+option `5` to deploy the `.leek` files under the repository's root `src/`
+directory to the primary account configured in `LWGarden\src\config.json`.
+The deploy keeps the local folder hierarchy, creates missing AIs, updates
+changed AIs, and leaves unrelated remote AIs untouched.
 Source files are read as UTF-8, with Windows-1252 used for files that are not
 valid UTF-8.
 If the API rate-limits a deploy request, Garden waits for the server-provided
@@ -52,25 +57,26 @@ Garden uses the current path-based API (`ai/get-farmer-tree`, `ai-folder/create`
 
 For the primary account, Garden uses `LEEKWARS_API_KEY` when it is set;
 otherwise it falls back to the primary account credentials in `config.json`.
-From a PowerShell terminal in `src`, enter the key without putting it in shell
-history, then start Garden:
+From a PowerShell terminal at the repository root, enter the key without
+putting it in shell history, then start Garden:
 
 ```powershell
 $secureKey = Read-Host "Leek Wars API key" -AsSecureString
 $env:LEEKWARS_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
-python Garden.py
+python LWGarden\src\Garden.py
 Remove-Item Env:LEEKWARS_API_KEY
 ```
 
 The key is only used for the primary account. Secondary accounts still use
 their configured credentials. Never commit or share the key.
 
-The source directory configured by `AIs_folder` is the deployment scope, so
-review it before deploying. In this checkout, set it to `../../src/` when
-running Garden from `LWGarden/src`. Option `1` is a PULL from Leek Wars to local and
-replaces that directory; it requires typing `OVERWRITE`. Options `5` and `6`
-are PUSH operations from local to the primary and secondary accounts,
-respectively, and do not delete remote AIs.
+The source directory configured by `AIs_folder` is the deployment scope. It is
+resolved relative to `LWGarden/src`, regardless of the current working
+directory; in this checkout, set it to `../../src/`. This keeps all AI logic in
+the repository's root `src/` directory. Option `1` pulls from Leek Wars into
+that directory, replacing it after you type `OVERWRITE`. Options `5` and `6`
+push its `.leek` files to the primary and secondary accounts, respectively,
+without deleting remote AIs.
 
 ## LeekScript version
 

@@ -15,3 +15,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 
 - Place le journal à la racine du dépôt et ajoute ses liens dans les README.
 - Établit cette organisation comme convention dans les quatre agents Copilot.
+
+## 2026-11-24 — Exécution de LWGarden depuis la racine
+
+- Résout la configuration et le dossier AI par rapport à LWGarden pour lancer PUSH et PULL depuis la racine du dépôt vers `src/`.
