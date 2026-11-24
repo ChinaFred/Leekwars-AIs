@@ -15,7 +15,7 @@ Python 🐍  console app for managing your garden on LeekWars
 
 ## Kassbi AI entry point and combat profiles
 
-`Kassbi-AIs/src/Main/Kassbi_Class.leek` is the primary Kassbi entry source and
+`../src/Main/Kassbi_Class.leek` is the primary Kassbi entry source and
 uses the `planAct` planner. Deploying the file uploads its source; it does not
 select the AI for a leek in Leek Wars, so select `Main/Kassbi_Class.leek` in the
 game separately. `Main/Kassbi_test.leek` is an example profile for testing.
@@ -65,7 +65,8 @@ The key is only used for the primary account. Secondary accounts still use
 their configured credentials. Never commit or share the key.
 
 The source directory configured by `AIs_folder` is the deployment scope, so
-review it before deploying. Option `1` is a PULL from Leek Wars to local and
+review it before deploying. In this checkout, set it to `../../src/` when
+running Garden from `LWGarden/src`. Option `1` is a PULL from Leek Wars to local and
 replaces that directory; it requires typing `OVERWRITE`. Options `5` and `6`
 are PUSH operations from local to the primary and secondary accounts,
 respectively, and do not delete remote AIs.
