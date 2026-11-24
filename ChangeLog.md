@@ -2,6 +2,32 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-24 — Système de comportements de mouvement tactique : Hide & Seek intelligent
+
+- **Crée MovementBehavior.ts** : système configurable de 6 comportements de mouvement
+  - `RETREAT_TO_CORNER` : Fuite vers coin le plus éloigné (défense ultime)
+  - `AGGRESSIVE_KITING` : Poursuite active à distance optimale (offensive)
+  - `ZONE_CONTROL` : Maintien avantage tactique (situation équilibrée)
+  - `TERRAIN_AWARE` : Repositionnement avec couverture
+  - `SIMPLE_ADVANCE` : Avance basique (fallback)
+  - `SIMPLE_RETREAT` : Retraite directe (fallback)
+- **Sélection automatique** : `getOptimalBehavior()` choisit selon scenario:
+  - Ennemi peut tirer, pas nous → RETREAT_TO_CORNER (priorité survie)
+  - Nous pouvons tirer, pas l'ennemi → AGGRESSIVE_KITING (exploiter avantage)
+  - Les deux peuvent tirer → ZONE_CONTROL (positioner tactiquement)
+  - Aucun ne peut tirer → SIMPLE_ADVANCE (fermer distance)
+- **Intégration Plannification.ts** (v3→v4) :
+  - `planMove()` utilise MovementBehavior.executeBehavior() au lieu de moveToward simple
+  - `planHide()` utilise explicitement RETREAT_TO_CORNER pour retraite défensive
+  - Logs incluent nom comportement pour debug
+- **Avantages tactiques** :
+  - Corner-trapping permet pièger ennemi (comme observé en combat réel)
+  - Kiting agressif maintient avantage distance
+  - Zone control adaptatif selon matchup armes
+  - Terrain-aware offre couverture supplémentaire
+- **Cration MOVEMENT_BEHAVIORS.md** : documentation complète des 6 behaviors et sélection
+- **Impact testable** : Kassbi passe du mouvement prévisible à stratégie contextuelle
+
 ## 2026-11-24 — Préparation au contact : Prédiction tactique et boost/défense
 
 - Ajoute `predictContactNextTurn()` pour détecter si contact sera établi au prochain tour.

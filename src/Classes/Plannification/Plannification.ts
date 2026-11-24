@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -8,6 +8,7 @@ import {
 import { BalancedStrategy } from "../Strategy/BalancedStrategy.js"
 import { DefensiveStrategy } from "../Strategy/DefensiveStrategy.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
+import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavior.js"
 
 export class Plannification {
 	readonly actions: Action[] = []
@@ -17,6 +18,7 @@ export class Plannification {
 	private chosenWeapon: Weapon | null = null
 	private willShoot = false
 	private weaponEquipPlanned = false
+	private movementBehavior: MovementBehavior
 
 	constructor(
 		private readonly leek: Me,
@@ -26,6 +28,7 @@ export class Plannification {
 		this.tpLeft = leek.tp
 		this.mpLeft = leek.mp
 		this.strategy = createStrategy(profile)
+		this.movementBehavior = new MovementBehavior(leek, target, leek.weapon, target.weapon)
 	}
 
 	private predictContactNextTurn(): { iCanShoot: boolean; enemyCanShoot: boolean } {
@@ -72,6 +75,8 @@ export class Plannification {
 				bestScore = score
 			}
 		}
+
+		this.movementBehavior = new MovementBehavior(this.leek, this.target, this.chosenWeapon, this.target.weapon)
 	}
 
 	planEquipWeapon(): void {
@@ -97,8 +102,20 @@ export class Plannification {
 
 		this.willShoot = true
 		if (this.mpLeft > 0 && !this.leek.canUseWeapon(this.target)) {
+			const contact = this.predictContactNextTurn()
+			const distance = this.leek.distance(this.target)
+			const behavior = this.movementBehavior.getOptimalBehavior({
+				iCanShoot: contact.iCanShoot,
+				enemyCanShoot: contact.enemyCanShoot,
+				distance
+			})
+
 			this.actions.push(
-				new Action("move toward", () => this.leek.moveToward(this.target), "Move towards enemy")
+				new Action(
+					`move [${behavior}]`,
+					() => this.movementBehavior.executeBehavior(behavior),
+					`Move: ${behavior}`
+				)
 			)
 			this.mpLeft = 0
 		}
@@ -234,7 +251,7 @@ export class Plannification {
 		const distance = this.leek.distance(this.target)
 		if (this.strategy.shouldHide(this.leek.life / this.leek.maxLife, distance, this.profile.preferredMinRange)) {
 			this.actions.push(
-				new Action("hide", () => this.leek.moveAwayFrom(this.target), "Move away from enemy")
+				new Action("hide", () => this.movementBehavior.executeBehavior(MOVEMENT_BEHAVIOR.RETREAT_TO_CORNER), "Smart Retreat")
 			)
 			this.mpLeft = 0
 		}
