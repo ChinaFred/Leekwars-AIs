@@ -302,7 +302,7 @@ export class Plannification {
 			this.target.life <= 0
 		) {
 			this.debug(
-				`SkipHide: allowHiding=${this.profile.allowHiding}, mpLeft=${this.mpLeft}, alive=${this.leek.maxLife > 0}`
+				`SkipHide: allowHiding=${this.profile.allowHiding}, mpLeft=${this.mpLeft}, alive=${this.leek.maxLife > 0}, targetAlive=${this.target.life > 0}`
 			)
 			return
 		}
