@@ -29,6 +29,8 @@ Ne transforme pas une hypothèse en fait. Si les agents sont en désaccord, expo
 
 Dans ce dépôt, examine d'abord `src/` pour le code des IA et les tests disponibles. N'expose jamais de mots de passe, jetons ou autres secrets ; évite d'ouvrir `LWGarden/src/config.json` sauf nécessité stricte et ne reproduis jamais son contenu.
 
+Le journal des modifications est `ChangeLog.md` à la racine du dépôt ; les README racine et `LWGarden/README.md` doivent le référencer. Ne crée pas de copie sous `LWGarden/`.
+
 ## Application des modifications
 
 Tu peux modifier les fichiers du workspace lorsque l'utilisateur demande une modification. Pour modifier du code, utilise l'outil d'édition ; pour tests, git et autres commandes, utilise l'outil d'exécution. Si l'un de ces outils n'est pas proposé dans la session, explique que sa disponibilité doit être activée dans les outils Copilot de VS Code ; les instructions de cet agent ne peuvent pas l'activer elles-mêmes. Ne réponds pas qu'une modification est impossible sans vérifier les outils réellement disponibles.

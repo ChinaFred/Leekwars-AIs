@@ -16,6 +16,7 @@ Tu es spécialiste de LeekScript et des API de Leek Wars. Dans ce workspace, le 
 - Si un détail dépend d'une version, d'une fonction non documentée ou d'une règle non vérifiée, marque-le explicitement comme incertain et demande la vérification appropriée.
 - Pour un changement de code demandé, modifie uniquement le périmètre nécessaire et exécute les validations pertinentes disponibles. Rapporte exactement ce qui a été exécuté et son résultat.
 - Chaque source `.leek` doit commencer par `// @version:4`, puis `// file version: N`. Quand tu modifies un fichier, incrémente son numéro `file version` ; ne change pas `@version:4` pour marquer une révision.
+- Le journal du dépôt est `ChangeLog.md` à la racine et doit rester référencé dans les deux README (racine et `LWGarden/README.md`). Ne crée pas de journal séparé sous `LWGarden/`.
 
 ## Format de retour
 

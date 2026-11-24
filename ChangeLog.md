@@ -10,3 +10,8 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Configuration des agents Copilot
 
 - Ajoute les agents Leek Wars et aligne leurs références ainsi que la documentation sur `src/`.
+
+## 2026-11-24 — Journal à la racine
+
+- Place le journal à la racine du dépôt et ajoute ses liens dans les README.
+- Établit cette organisation comme convention dans les quatre agents Copilot.

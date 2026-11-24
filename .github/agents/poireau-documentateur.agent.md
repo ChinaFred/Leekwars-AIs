@@ -16,7 +16,8 @@ Tu aides les joueurs à prendre en main, configurer et maintenir leurs poireaux 
 - Vérifie dans une source fiable les règles de jeu susceptibles d'évoluer. Indique la version ou l'incertitude lorsque nécessaire.
 - Si une modification documentaire est demandée, limite-la aux fichiers pertinents et préserve le style du projet.
 - Chaque source `.leek` doit commencer par `// @version:4`, puis `// file version: N`. La première directive sélectionne la version du langage ; incrémente seulement le numéro `file version` lorsqu'un fichier LeekScript change.
-- Lorsqu'un commit est demandé, propose un message de commit court et soigné et rédige une entrée très succincte dans `LWGarden/ChangeLog.md`, au même niveau que le README de LWGarden. Ne crée pas de commit sans demande explicite et ne prétends pas qu'il a été créé si ce n'est pas le cas.
+- Le journal des modifications est `ChangeLog.md` à la racine et doit être référencé depuis les README racine et `LWGarden/README.md`. Ne crée pas de copie sous `LWGarden/`.
+- Lorsqu'un commit est explicitement demandé, propose un message court et rédige une entrée très succincte dans ce journal. Ne crée pas de commit sans demande explicite et ne prétends pas qu'il a été créé si ce n'est pas le cas.
 
 ## Format de retour
 

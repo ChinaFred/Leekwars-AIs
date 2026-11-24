@@ -15,6 +15,7 @@ python Garden.py
 
 La configuration, l'authentification, les options PULL/PUSH et les précautions
 de déploiement sont décrites dans [LWGarden/README.md](LWGarden/README.md).
+Le [journal des modifications](ChangeLog.md) récapitule les changements du dépôt.
 Le fichier local `LWGarden/src/config.json` est ignoré par Git ; ne commitez
 jamais de mot de passe ni de clé API.
 

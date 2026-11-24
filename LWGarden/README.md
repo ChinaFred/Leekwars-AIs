@@ -1,7 +1,8 @@
 # LWGarden
 
 LWGarden is the deployment tool maintained in this repository for synchronizing
-local Leek Wars AI sources. General project documentation: [root README](../README.md).
+local Leek Wars AI sources. See the [root README](../README.md) and
+[project changelog](../ChangeLog.md).
 
 Python 🐍  console app for managing your garden on LeekWars
 
