@@ -2,6 +2,14 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-24 — Kassbi parle en combat : Greetings et Taunts
+
+- Ajoute `isFirstTurn` flag pour détecter le premier tour du combat.
+- **Greeting au début** : `me.say(getRandomMessage(SPEECH.GREETINGS))` tour 1
+- **Taunts à la fin** : si ennemi < 15% HP, `me.say(getRandomMessage(SPEECH.TAUNTS))`
+- Ajoute `say(message: string): void` à l'interface `Me` dans `leekwars.d.ts`
+- Messages utilisent le catalogue existant de `Speeches.ts` (11 taunts, 3 greetings)
+
 ## 2026-11-24 — Amélioration stratégique de Kassbi : Hide & Seek + Soin opportuniste
 
 - **Positional Hide & Seek** : modifie `shouldHide()` pour factoriser la distance à l'ennemi, non plus basé sur MP.

@@ -75,6 +75,7 @@ interface Me extends Entity {
 	canUseWeapon(target: Entity, weapon?: Weapon): boolean
 	canUseChip(chip: Chip, target: Entity): boolean
 	chipCells(chip: Chip, target: Entity): Cell[]
+	say(message: string): void
 }
 
 interface FightApi {
