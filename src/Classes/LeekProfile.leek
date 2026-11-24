@@ -1,0 +1,38 @@
+// @version:4
+// file version: 1
+class LeekProfile {
+	public string role = "BALANCED"
+	public integer aggression = 50
+	public integer preferredMinRange = 1
+	public integer preferredMaxRange = 8
+	public boolean allowHealing = true
+	public boolean allowShielding = true
+	public boolean allowHiding = true
+	public string strategyName = "BALANCED"
+
+	constructor() {}
+
+	void setRole(string value) {
+		if (value == "ATTACKER")
+			value = "AGGRESSIVE"
+		if (value != "AGGRESSIVE" and value != "DEFENSIVE")
+			value = "BALANCED"
+		role = value
+		strategyName = value
+	}
+
+	void setAggression(integer value) {
+		aggression = max(0, min(100, value))
+	}
+
+	void setPreferredRange(integer minRange, integer maxRange) {
+		preferredMinRange = max(0, minRange)
+		preferredMaxRange = max(preferredMinRange, maxRange)
+	}
+
+	void setSupportOptions(boolean healing, boolean shielding, boolean hiding) {
+		allowHealing = healing
+		allowShielding = shielding
+		allowHiding = hiding
+	}
+}

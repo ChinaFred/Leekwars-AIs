@@ -1,3 +1,5 @@
+// @version:4
+// file version: 2
 include("/Classes/Items/Weapon")
 include("/Classes/Items/Chip")
 include("/Toolbox/Debug")
@@ -5,28 +7,27 @@ include("/Toolbox/Speeches")
 include("/Classes/Context/Coordinates")
 include("/Classes/Context/World")
 include("/Classes/Context/DangerMap")
-
-
-
+include("/Classes/LeekProfile")
 class Leek {
 	public integer id
 	public AI = null
 	public string AIname = ""
+	public LeekProfile profile = new LeekProfile()
 
 	public string name = ""
-	public integer life = new Integer()
-	public integer totalLife = new Integer()
-	public integer strength = new Integer()
-	public integer wisdom = new Integer()
-	public integer agility = new Integer()
-	public integer resistance = new Integer()
-	public integer science = new Integer()
-	public integer magic = new Integer()
-	public integer frequency = new Integer()
-	public integer cores = new Integer() // 1M operations per core
-	public integer ram = new Integer() // 1M variables pers ram
-	public integer mp = new Integer()
-	public integer tp = new Integer()
+	public integer life = 0
+	public integer totalLife = 0
+	public integer strength = 0
+	public integer wisdom = 0
+	public integer agility = 0
+	public integer resistance = 0
+	public integer science = 0
+	public integer magic = 0
+	public integer frequency = 0
+	public integer cores = 0
+	public integer ram = 0
+	public integer mp = 0
+	public integer tp = 0
 
 
 	public Array < Weapon > wearedWeapons = []
@@ -36,7 +37,7 @@ class Leek {
 	public Array < Chip > cooledChips = []
 
 	public Leek | null target
-	public integer cell = new Integer()
+	public integer cell = -1
 	public Coordinates coordinates = new Coordinates()
 	public Array actions = []
 
@@ -51,7 +52,7 @@ class Leek {
 		updateData()
 
 		equipedWeapon = null
-		target = new Leek()
+		target = null
 
 		op.debugOperations()
 	}
@@ -59,14 +60,26 @@ class Leek {
 	constructor(integer myId, myIA) {
 		id = myId
 		updateData()
-		equipedWeapon = new Weapon()
-		target = new Leek()
+		equipedWeapon = null
+		target = null
 		AI = myIA
 		AIname = getAIName()
 		say("Hello world, je suis " + name)
 		say(getRandomMessage(speech_GREATINGS))
 
 
+	}
+
+	constructor(integer myId, myIA, LeekProfile myProfile) {
+		id = myId
+		updateData()
+		equipedWeapon = null
+		target = null
+		profile = myProfile
+		AI = myIA
+		AIname = getAIName()
+		say("Hello world, je suis " + name)
+		say(getRandomMessage(speech_GREATINGS))
 	}
 
 	void updateData() {
@@ -110,38 +123,55 @@ class Leek {
 
 	updateDataMyLeeks() {
 		debug("update data my leek")
-		if(target != null){
-			target = world.getEnemyLeek(this.target.id)
-			dangerMap.initialize()
-			dangerMap.buildDangerMap(this.target)
-		}
+		Leek? previousTarget = target
+		if (previousTarget == null)
+			return
+		Leek? updatedTarget = world.getEnemyLeek(previousTarget.id)
+		target = updatedTarget
+		if (updatedTarget == null)
+			return
+		if (dangerMap == null)
+			dangerMap = new DangerMap()
+		dangerMap.initialize()
+		dangerMap.buildDangerMap(updatedTarget)
 
 	}
 
 	/***************setters*******************************************/
-	void setTarget(integer id) {
-		target = world.getEnemyLeek(id)
+	void setTarget(integer targetId) {
+		target = null
+		Leek? foundTarget = world.getEnemyLeek(targetId)
+		if (foundTarget == null) {
+			debug("No valid target found for " + name)
+			return
+		}
+		target = foundTarget
+		if (dangerMap == null)
+			dangerMap = new DangerMap()
 		dangerMap.initialize()
-		dangerMap.buildDangerMap(this.target)
-		debug("My target is " + target.name)
-
+		dangerMap.buildDangerMap(foundTarget)
+		debug("My target is " + foundTarget.name)
 	}
 
 	void equipWeaponById(integer weaponID) {
-		setWeapon(weaponID)
-		equipedWeapon = new Weapon(weaponID, this)
+		equipWeapon(new Weapon(weaponID, this))
 	}
 
 	void equipWeapon(Weapon w) {
-		if( equipedWeapon.id  != w.id){
-			setWeapon(w.id)
-			equipedWeapon = w
-			debug("weapon " + w.name + "equiped")
-		}else
-		{
-			debugC("no change : weapon already equiped",COLORS.WARNING)
+		if (equipedWeapon != null) {
+			if (equipedWeapon.id == w.id) {
+				debugC("no change : weapon already equiped", COLORS.WARNING)
+				return
+			}
 		}
-		
+		if (tp < 1) {
+			debug("Not enough TP to equip " + w.name)
+			return
+		}
+		setWeapon(w.id)
+		equipedWeapon = w
+		tp = tp - 1
+		debug("weapon " + w.name + " equiped")
 	}
 
 	Array < Item > getDamagingItems() {
@@ -175,14 +205,33 @@ class Leek {
 
 	/******************************Act**********************************/
 	void shoot() {
-		integer attackResult = useWeapon(target.id)
-		tp = tp - equipedWeapon.cost
-		debug("shoot target " + target.id + " " + target.name + " -- " + tp + " TP remains - result " + attackResult)
+		Leek? actionTarget = target
+		Weapon? weapon = equipedWeapon
+		if (!canUseWeaponOnTarget(actionTarget, tp)) {
+			debug("Cannot shoot: target, weapon, range, line of sight, or TP unavailable")
+			return
+		}
+		if (actionTarget == null)
+			return
+		if (weapon == null)
+			return
+		integer attackResult = useWeapon(actionTarget.id)
+		tp = tp - weapon.cost
+		debug("shoot target " + actionTarget.id + " " + actionTarget.name + " -- " + tp + " TP remains - result " + attackResult)
 	}
 	
-	void shootOnTarget(Leek theTarget) {
+	void shootOnTarget(Leek? theTarget) {
+		Weapon? weapon = equipedWeapon
+		if (!canUseWeaponOnTarget(theTarget, tp)) {
+			debug("Cannot shoot: target, weapon, range, line of sight, or TP unavailable")
+			return
+		}
+		if (theTarget == null)
+			return
+		if (weapon == null)
+			return
 		integer attackResult = useWeapon(theTarget.id)
-		tp = tp - equipedWeapon.cost
+		tp = tp - weapon.cost
 		debug("shoot target " + theTarget.id + " " + theTarget.name + " -- " + tp + " TP remains - result " + attackResult)
 	}
 	
@@ -190,14 +239,48 @@ class Leek {
 		useChip(chipId, target.id)
 	}*/
 
-	void useChip(Chip chip, Leek target) {
-		chip.useOnTarget(target)
+	void useChip(Chip? chip, Leek? actionTarget) {
+		if (chip == null)
+			return
+		if (actionTarget == null)
+			return
+		if (!canUseChipOnTarget(chip, actionTarget, tp)) {
+			debug("Cannot use chip " + chip.name + ": target, cooldown, range, line of sight, or TP unavailable")
+			return
+		}
+		chip.useOnTarget(actionTarget)
+		tp = tp - chip.cost
 	}
 	
 
 
+	boolean canUseWeaponOnTarget(Leek? actionTarget, integer availableTP) {
+		Weapon? weapon = equipedWeapon
+		if (weapon == null)
+			return false
+		if (actionTarget == null)
+			return false
+		if (availableTP < weapon.cost)
+			return false
+		return canUseWeaponOnCell(weapon.id, actionTarget.cell)
+	}
+
 	boolean canShootOnTarget() {
-		return canUseWeaponOnCell(equipedWeapon.id, target.cell)
+		return canUseWeaponOnTarget(target, tp)
+	}
+
+	boolean canUseChipOnTarget(Chip? chip, Leek? actionTarget, integer availableTP) {
+		if (chip == null)
+			return false
+		if (actionTarget == null)
+			return false
+		if (availableTP < chip.cost)
+			return false
+		if (getChipById(chip.id) == null)
+			return false
+		if (getCooldown(chip.id, id) != 0)
+			return false
+		return canUseChipOnCell(chip.id, actionTarget.cell)
 	}
 	
 	Chip? getChipById(integer id ){
@@ -210,6 +293,8 @@ class Leek {
 
 	/***************************Moves*************************************************/
 	void moveTowardTarget() {
+		if (target == null or mp <= 0)
+			return
 		moveToward(target.id, 1)
 		mp = mp - 1
 	}
@@ -219,6 +304,8 @@ class Leek {
 	}
 
 	void fleeTarget() {
+		if (target == null)
+			return
 		moveAwayFrom(target.id)
 		mp = 0
 	}
@@ -239,7 +326,6 @@ class Leek {
 		if(DEBUGS.CONST_REACHABLE_CELLS){
 			debug("getReachableCells green")
 			mark(arrReachablesCells, getColor(0, 255, 0))
-			pause()
 		}
 	
 

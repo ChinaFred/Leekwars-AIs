@@ -1,3 +1,5 @@
+// @version:4
+// file version: 1
 include("Item")
 include("/Toolbox/Computations")
 include("/Classes/Context/World")
@@ -47,12 +49,8 @@ class Chip extends Item{
 		Set < integer > fromWhereToUse(Leek target, Set < integer > reachabelCells) {
 			Set cellsFromWhereToUse = arrayToSet(getCellsToUseChip(this.id, target.id))
 			debug("cell where to use")
-			mark(setToArray(cellsFromWhereToUse),COLOR_BLUE)
-			pause()
 			Set x = setIntersection(cellsFromWhereToUse, reachabelCells)
 			debug("where to shoot in range")
-			mark(setToArray(x), COLORS.BROWN)
-			pause()
 			return x
 		}
 

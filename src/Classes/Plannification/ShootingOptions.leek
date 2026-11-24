@@ -1,3 +1,5 @@
+// @version:4
+// file version: 2
 include("/Classes/Context/World")
 include("/Classes/Leek")
 include("/Classes/Items/Chip")
@@ -20,6 +22,9 @@ class ShootingOptions {
 
 	// euristic based logic
 	void exploreOptions(Leek leek) {
+		Leek? actionTarget = leek.target
+		if (actionTarget == null)
+			return
 		Operations op = new Operations("Explore shooting options ", true)
 		// d'abord on choisit la meilleure arme : celle qui peut tirer et fait le plus de dégats
 		// on choisit ensuite un complément 
@@ -27,7 +32,7 @@ class ShootingOptions {
 
 		// prendre toutes les armes utilisables dans mp cases
 		// Array<Item> damagingItems = leek.getDamagingItems()
-		Array < Item > damagingItems = leek.getUsableDamagingItems(getCellDistance(leek.cell, leek.target.cell),
+		Array < Item > damagingItems = leek.getUsableDamagingItems(getCellDistance(leek.cell, actionTarget.cell),
 			true, // la los peut changer après mouvement 
 			leek.tp,
 			leek.mp)
@@ -38,7 +43,7 @@ class ShootingOptions {
 		}
 		else {
 			// se préparer au tour suivant donc équiper la meilleure arme
-			damagingItems = leek.getUsableDamagingItems(getCellDistance(leek.cell, leek.target.cell),
+			damagingItems = leek.getUsableDamagingItems(getCellDistance(leek.cell, actionTarget.cell),
 			true, // la los peut changer après mouvement 
 			leek.tp,
 			leek.mp * 2) // a deux tours de marche
@@ -51,11 +56,13 @@ class ShootingOptions {
 					if(orderedItems[i].isWeapon())
 					{
 						
-						ShootingOption equipOnly = new ShootingOption()
+						ShootingOption equipOnly = new ShootingOption(leek)
 						equipOnly = equipIfNeeded(orderedItems[i], leek, equipOnly)
-						push(options, equipOnly)
+						if (equipOnly.equipedWeapon != null) {
+							if (equipOnly.equipedWeapon.id == orderedItems[i].id)
+								push(options, equipOnly)
+						}
 						
-						Set<integer> reachable = orderedItems[i].fromWhereToUseOnCell(leek.target.cell, leek.reachableCells)
 						notChoosen = false
 						
 					}
@@ -74,27 +81,29 @@ class ShootingOptions {
 	}
 
 	Array < ShootingOption > buildOptions(Leek leek, Array < Item > items) {
-	
+		Leek? actionTarget = leek.target
+		if (actionTarget == null)
+			return options
 		for (Item currentItem in items){
 		
 			if(currentItem.isWeapon()){
-				Set<integer> reachable = currentItem.fromWhereToUseOnCell(leek.target.cell, leek.reachableCells)
+				Set<integer> reachable = currentItem.fromWhereToUseOnCell(actionTarget.cell, leek.reachableCells)
 				if(setSize(reachable)>0){
 					// si on peut tirer 
 					
 					// d'abord tirer plusieurs fois avec la même arme'
-					ShootingOption onlyOne = new ShootingOption()
+					ShootingOption onlyOne = new ShootingOption(leek)
 					getSameWeaponShootMultipleTimes(currentItem, leek, onlyOne)
 					push(options, onlyOne)
 					
 					// Ensuite essayer de combiner
-					ShootingOption combination = new ShootingOption()
+					ShootingOption combination = new ShootingOption(leek)
 					combination = getSameWeaponShootOnce(currentItem, leek, combination)
 					combineItems(items, currentItem,  leek, combination)
 				}
 			}
 			else{
-				ShootingOption combination = new ShootingOption()
+				ShootingOption combination = new ShootingOption(leek)
 				combination = getSameWeaponShootOnce(currentItem, leek, combination)
 				combineItems(items, currentItem,  leek, combination)
 						
@@ -115,6 +124,10 @@ class ShootingOptions {
 			else 
 				needToEquip = true
 			if( needToEquip){
+				if (option.tpLeft < 1) {
+					debug("Not enough TP to equip " + currentItem.name)
+					return option
+				}
 				push(option.actions, currentItem.getActionEquip(leek))
 				option.tpLeft = option.tpLeft -1 
 				option.equipedWeapon = currentItem
@@ -125,12 +138,21 @@ class ShootingOptions {
 	
 	
 	private ShootingOption getSameWeaponShootMultipleTimes( Item currentItem, Leek leek, ShootingOption option){
+		if (currentItem.cost <= 0)
+			return option
+		Leek? actionTarget = leek.target
+		if (actionTarget == null)
+			return option
 		if(currentItem.isWeapon()){
 			//option.tpLeft = leek.tp
 			// equiper si ce n'est pas la bonne arme qui est équipée'
 			option = equipIfNeeded(currentItem, leek, option)
+			if (option.equipedWeapon == null)
+				return option
+			if (option.equipedWeapon.id != currentItem.id)
+				return option
 			while  ( option.tpLeft >= currentItem.cost){
-				push(option.actions, currentItem.getActionUse(leek, leek.target)) 
+				push(option.actions, currentItem.getActionUse(leek, actionTarget))
 				option.tpLeft = option.tpLeft - currentItem.cost
 				option.willShoot =true 
 				option.totalMeanDamages =option.totalMeanDamages + currentItem.meanDamage
@@ -138,7 +160,7 @@ class ShootingOptions {
 			push(option.usedItems, currentItem)
 		}	
 		else{
-			getSameWeaponShootMultipleTimes(currentItem, leek, option)
+			option = getSameWeaponShootOnce(currentItem, leek, option)
 		}
 
 		
@@ -148,12 +170,29 @@ class ShootingOptions {
 	}
 	
 	ShootingOption  getSameWeaponShootOnce( Item currentItem, Leek leek, ShootingOption option){
-
-		option.tpLeft = leek.tp
+		Leek? actionTarget = leek.target
+		if (actionTarget == null)
+			return option
+		if (currentItem.cost <= 0)
+			return option
 		// equiper si ce n'est pas la bonne arme qui est équipée'
-		option = equipIfNeeded(currentItem, leek, option)
+		if (currentItem.isWeapon()) {
+			option = equipIfNeeded(currentItem, leek, option)
+			if (option.equipedWeapon == null)
+				return option
+			if (option.equipedWeapon.id != currentItem.id)
+				return option
+		} else if (currentItem.isChip()) {
+			Chip? chip = leek.getChipById(currentItem.id)
+			if (!leek.canUseChipOnTarget(chip, actionTarget, option.tpLeft))
+				return option
+		} else {
+			return option
+		}
 
-		push(option.actions, currentItem.getActionUse(leek, leek.target)) 
+		if (option.tpLeft < currentItem.cost)
+			return option
+		push(option.actions, currentItem.getActionUse(leek, actionTarget))
 		option.tpLeft = option.tpLeft - currentItem.cost
 		option.willShoot =true 
 		push(option.usedItems, currentItem)
@@ -180,7 +219,6 @@ class ShootingOptions {
 				debug("count(options) " + count(options) )
 				debug("combinationCopy tp left " + combinationCopy.tpLeft )
 			//	combineItems(tempItems, currentItem, leek, combinationCopy
-
 			}
 		}
 		
@@ -224,7 +262,7 @@ class ShootingOptions {
 			ordered = temp
 		}
 
-		op.debugOperations
+		op.debugOperations()
 		return ordered
 	}
 
@@ -236,7 +274,6 @@ class ShootingOptions {
 
 		}
 		debug("--------------------------FIN-" + text)
-		pause()
 	}
 	
 	void debugShootingOptions(){

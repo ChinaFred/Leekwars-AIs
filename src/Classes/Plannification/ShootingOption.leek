@@ -1,3 +1,5 @@
+// @version:4
+// file version: 2
 include("/Classes/Context/World")
 include("/Classes/Leek")
 include("/Classes/Items/Chip")
@@ -24,6 +26,10 @@ class ShootingOption{
 	public real totalMeanDamages = 0.
 	public Weapon? equipedWeapon = null
 	
+	constructor(Leek leek) {
+		Init(leek)
+	}
+
 	constructor(ShootingOption previousOption){
 		actions = copyArray(previousOption.actions) 	
 		tpLeft= previousOption.tpLeft
@@ -37,8 +43,14 @@ class ShootingOption{
 	
 	void Init(Leek leek )
 	{
+		actions = []
+		usedItems = []
+		rejected = []
 		tpLeft = leek.tp 
 		mpLeft = leek.mp
+		cellToShootFrom = new Coordinates()
+		willShoot = false
+		totalMeanDamages = 0.
 		equipedWeapon = leek.equipedWeapon
 	}
 
@@ -49,14 +61,14 @@ class ShootingOption{
 		Array<Item> potentialAttacks = []
 		
 		for (Item di in damagingItems){
-			for (integer i =1; i<= leek.tp \ di.cost;i++ )	{
-				push(potentialAttacks, di)
+			if (di.cost > 0) {
+				for (integer i = 1; i <= leek.tp \ di.cost; i++)
+					push(potentialAttacks, di)
 			}
 		}
 		for (Item i in potentialAttacks)
 		debug("potential attacks " + i.name) 
 		op.debugOperations()
-		pause()
 		op.debugOperations()
 		return potentialAttacks
 	}

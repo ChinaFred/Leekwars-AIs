@@ -1,8 +1,19 @@
+// @version:4
+// file version: 1
 include("Item")
 include("/Toolbox/Computations")
 include("/Classes/Context/World")
 
 	class Weapon extends Item {
+
+		constructor() {
+			super(-1)
+			type = ITEM_TYPE.WEAPON
+			name = ""
+			range = [0, 0]
+			cost = 0
+			effects = new Effects()
+		}
 
 		constructor(integer myId, Leek ow ) {
 			super(myId) // Appel du constructeur de Item

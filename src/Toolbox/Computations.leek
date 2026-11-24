@@ -1,6 +1,7 @@
+// @version:4
+// file version: 1
 
-
-function  p_getAbsoluteShield(targetId){
+function p_getAbsoluteShield(targetId){
 	var ret = 0;
 	if(getLevel()>=38)
 	{

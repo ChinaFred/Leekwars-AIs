@@ -1,3 +1,5 @@
+// @version:4
+// file version: 1
 class Effect{
 	integer type = -1
 	real min = -1.

@@ -1,3 +1,5 @@
+// @version:4
+// file version: 1
 include("/Classes/Context/World")
 
 /**
@@ -18,6 +20,12 @@ class Coordinates {
      * The cell number.
      */
     public integer cell = -100
+
+    constructor() {
+        x = 0
+        y = 0
+        cell = -1
+    }
 
     /**
      * Constructor to initialize the coordinates.
@@ -61,7 +69,7 @@ class Coordinates {
      * @param {Coordinates} other - The other coordinates.
      * @returns {integer} - The Manhattan distance.
      */
-    public integer getDistance(Coordinaintertes other) {
+    public integer getDistance(Coordinates other) {
         return getCellDistance(this.cell , other.cell)
     }
 

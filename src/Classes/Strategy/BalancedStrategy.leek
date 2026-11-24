@@ -1,0 +1,34 @@
+// @version:4
+// file version: 2
+include("/Classes/Strategy/LeekStrategy")
+
+class BalancedStrategy extends LeekStrategy {
+	constructor() {
+		super("BALANCED", 50)
+	}
+
+	constructor(integer aggressionValue) {
+		super("BALANCED", aggressionValue)
+	}
+
+	real scoreWeapon(real damage, integer preferredMid, integer weaponMid) {
+		real rangePenalty = abs(preferredMid - weaponMid) * (0.045 - 0.015 * getAggressionRatio())
+		return damage - rangePenalty
+	}
+
+	boolean shouldHeal(real lifeRatio, real lostLifeRatio) {
+		return lostLifeRatio >= 0.15 + 0.10 * getAggressionRatio()
+	}
+
+	boolean shouldShield(real lifeRatio, integer distance, integer threatRange) {
+		return distance <= threatRange and lifeRatio <= 0.95 - 0.20 * getAggressionRatio()
+	}
+
+	boolean shouldHide(real lifeRatio, integer mpLeft) {
+		return mpLeft > 0 and lifeRatio <= 0.55 - 0.20 * getAggressionRatio()
+	}
+
+	boolean shouldUseAttackChip(real lifeRatio) {
+		return lifeRatio >= 0.50 - 0.20 * getAggressionRatio()
+	}
+}

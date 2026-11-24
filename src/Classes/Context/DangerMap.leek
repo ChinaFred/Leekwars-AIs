@@ -1,3 +1,5 @@
+// @version:4
+// file version: 1
 include("/Toolbox/Constants")
 include("/Classes/Leek")
 include("/Classes/Context/World")
@@ -121,34 +123,39 @@ class DangerMap {
 
         // Perform different comparisons based on the provided comparison type.
         if (comparison == CONST_COMPARISON.EQUAL) {
-            // Iterate over each DangerInfo in the DangerMap and add cells with matching weights to the set.
-            for (DangerInfo d in map)
+            for (Coordinates key in mapKeys(map)) {
+                DangerInfo d = mapGet(map, key)
                 if (d.weight == weight)
-                    setPut(ret, d)
+                    setPut(ret, key)
+            }
         }
         else if (comparison == CONST_COMPARISON.MIN_OR_EQUAL) {
-            // Iterate over each DangerInfo in the DangerMap and add cells with weights less than or equal to the provided weight to the set.
-            for (DangerInfo d in map)
+            for (Coordinates key in mapKeys(map)) {
+                DangerInfo d = mapGet(map, key)
                 if (d.weight <= weight)
-                    setPut(ret, d)
+                    setPut(ret, key)
+            }
         }
         else if (comparison == CONST_COMPARISON.MIN) {
-            // Iterate over each DangerInfo in the DangerMap and add cells with weights less than the provided weight to the set.
-            for (DangerInfo d in map)
+            for (Coordinates key in mapKeys(map)) {
+                DangerInfo d = mapGet(map, key)
                 if (d.weight < weight)
-                    setPut(ret, d)
+                    setPut(ret, key)
+            }
         }
         else if (comparison == CONST_COMPARISON.SUP_OR_EQUAL) {
-            // Iterate over each DangerInfo in the DangerMap and add cells with weights greater than or equal to the provided weight to the set.
-            for (DangerInfo d in map)
+            for (Coordinates key in mapKeys(map)) {
+                DangerInfo d = mapGet(map, key)
                 if (d.weight >= weight)
-                    setPut(ret, d)
+                    setPut(ret, key)
+            }
         }
         else if (comparison == CONST_COMPARISON.SUP) {
-            // Iterate over each DangerInfo in the DangerMap and add cells with weights greater than the provided weight to the set.
-            for (DangerInfo d in map)
+            for (Coordinates key in mapKeys(map)) {
+                DangerInfo d = mapGet(map, key)
                 if (d.weight > weight)
-                    setPut(ret, d)
+                    setPut(ret, key)
+            }
         }
 
         // Return the set of cells satisfying the comparison.
@@ -221,7 +228,6 @@ class DangerMap {
 			if(DEBUGS.SAFE_PLACES){
 				debug("safePlaces " + safePlaces)
 				mark(setToArray(safePlaces), COLORS.LIGHT_GREEN)
-				pause()
 			}
         
 			if(setSize(safePlaces) >0){
@@ -231,10 +237,8 @@ class DangerMap {
 					if(DEBUGS.SAFE_PLACES){
 						debug("placeToHide safe" + placeToHide)
 						mark(placeToHide.cell, COLORS.YELLOW)
-						pause()
 					}
 				}
-				 pause()
 			}
 			if (placeToHide == null) {
 				// If no safe cell found, find the furthest less dangerous cell.
@@ -242,7 +246,6 @@ class DangerMap {
 				if(DEBUGS.SAFE_PLACES){
 			   		debug("placeToHide less safe" + placeToHide)
 					mark(placeToHide.cell, COLORS.WARNING)
-					pause()
 				}
 			}
             
@@ -269,9 +272,10 @@ class DangerMap {
             for (integer c in cellsToShootTo) {
 				if(i.meanDamage > maxDamage)
 					maxDamage = i.meanDamage
-				DangerInfo dangerOnTheCell = mapGet(map, world.getCoordinatesFromCell(c), new DangerInfo())
+				Coordinates targetCoordinates = world.getCoordinatesFromCell(c)
+				DangerInfo dangerOnTheCell = mapGet(map, targetCoordinates, new DangerInfo(c))
 				dangerOnTheCell.weight = dangerOnTheCell.weight + i.meanDamage
-                mapPut(map, c,dangerOnTheCell)
+                mapPut(map, targetCoordinates, dangerOnTheCell)
             }
         }
 		

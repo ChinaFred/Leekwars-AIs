@@ -1,3 +1,5 @@
+// @version:4
+// file version: 2
 include("/Classes/Items/Effects")
 
 class Item {
@@ -60,7 +62,10 @@ class Item {
 	}
 		
 	Action getActionUse(Leek leek,Leek target){
-		return new Action() 
+		return new Action("unsupported item use", function() {
+				debug("ERROR: no use action is defined for " + this.name)
+			},
+			"No use action is defined for " + this.name)
 	}
 		
 	Action getActionEquip(Leek leek){

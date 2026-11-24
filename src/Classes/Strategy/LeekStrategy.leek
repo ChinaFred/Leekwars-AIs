@@ -1,0 +1,44 @@
+// @version:4
+// file version: 2
+class LeekStrategy {
+	public string name = "BALANCED"
+	public integer aggression = 50
+
+	constructor() {}
+	constructor(string strategyName) {
+		name = strategyName
+	}
+	constructor(string strategyName, integer aggressionValue) {
+		name = strategyName
+		setAggression(aggressionValue)
+	}
+
+	void setAggression(integer value) {
+		aggression = max(0, min(100, value))
+	}
+
+	real getAggressionRatio() {
+		return aggression / 100.0
+	}
+
+	real scoreWeapon(real damage, integer preferredMid, integer weaponMid) {
+		real rangePenalty = abs(preferredMid - weaponMid) * (0.045 - 0.015 * getAggressionRatio())
+		return damage - rangePenalty
+	}
+
+	boolean shouldHeal(real lifeRatio, real lostLifeRatio) {
+		return lostLifeRatio >= 0.15 + 0.10 * getAggressionRatio()
+	}
+
+	boolean shouldShield(real lifeRatio, integer distance, integer threatRange) {
+		return distance <= threatRange and lifeRatio <= 0.95 - 0.20 * getAggressionRatio()
+	}
+
+	boolean shouldHide(real lifeRatio, integer mpLeft) {
+		return mpLeft > 0 and lifeRatio <= 0.55 - 0.20 * getAggressionRatio()
+	}
+
+	boolean shouldUseAttackChip(real lifeRatio) {
+		return lifeRatio >= 0.50 - 0.20 * getAggressionRatio()
+	}
+}
