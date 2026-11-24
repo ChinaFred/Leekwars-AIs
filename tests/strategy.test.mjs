@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { LeekProfile } from "../dist/LeekProfile.js"
-import { AggressiveStrategy } from "../dist/Strategy/AggressiveStrategy.js"
-import { BalancedStrategy } from "../dist/Strategy/BalancedStrategy.js"
-import { DefensiveStrategy } from "../dist/Strategy/DefensiveStrategy.js"
+import { LeekProfile } from "../dist/Classes/LeekProfile.js"
+import { AggressiveStrategy } from "../dist/Classes/Strategy/AggressiveStrategy.js"
+import { BalancedStrategy } from "../dist/Classes/Strategy/BalancedStrategy.js"
+import { DefensiveStrategy } from "../dist/Classes/Strategy/DefensiveStrategy.js"
 
 test("profile normalizes role, aggression, range, and support settings", () => {
 	const profile = new LeekProfile()
