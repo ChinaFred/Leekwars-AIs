@@ -35,3 +35,7 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 ## 2026-11-24 — Limitation du débit API
 
 - Espace toutes les requêtes Garden pour rester sous cinq appels par seconde et conserve les retries du serveur.
+
+## 2026-11-24 — Noms des IA et fichiers locaux
+
+- Garde `.leek` uniquement sur les fichiers sources locaux ; PUSH et PULL synchronisent les noms d'IA sans suffixe côté Leek Wars.

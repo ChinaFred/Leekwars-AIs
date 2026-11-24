@@ -171,7 +171,7 @@ def get_all_ais(api, root_folder: str):
 
     for ai in ai_tree["files"]:
         path = normalize_ai_path(ai["path"])
-        destination = local_path_for_ai(root_folder, path)
+        destination = local_path_for_ai(root_folder, path + ".leek")
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         code = api.read_ai(path)["code"]
         with open(destination, "w", encoding="utf-8") as outfile:
@@ -200,7 +200,7 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
     local_file_paths = []
     for local_file in local_files:
         local_path = "/".join(
-            part for part in (local_file.relative_path, local_file.name + ".leek") if part
+            part for part in (local_file.relative_path, local_file.name) if part
         )
         local_file_paths.append((normalize_ai_path(local_path), local_file))
     local_file_path_set = {path for path, _ in local_file_paths}

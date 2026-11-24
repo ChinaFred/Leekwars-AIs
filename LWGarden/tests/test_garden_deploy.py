@@ -10,6 +10,7 @@ from Garden import (
     confirm_remote_deletions,
     connect_primary,
     deploy_local_ais,
+    get_all_ais,
     is_yes_confirmation,
     load_config
 )
@@ -101,6 +102,20 @@ class DeployLocalAIsTests(unittest.TestCase):
 
             self.assertEqual(config["AIs_folder"], os.path.abspath(source_directory))
 
+    def test_pull_adds_leek_extension_to_local_files(self):
+        with tempfile.TemporaryDirectory() as root:
+            api = FakeApi(
+                folders=["Main"],
+                ais=[{"path": "Main/Kassbi_Class"}],
+                codes={"Main/Kassbi_Class": "class Kassbi {}"}
+            )
+
+            get_all_ais(api, root)
+
+            local_file = os.path.join(root, "Main", "Kassbi_Class.leek")
+            with open(local_file, "r", encoding="utf-8") as source:
+                self.assertEqual(source.read(), "class Kassbi {}")
+
     def test_primary_uses_the_api_key_instead_of_password_credentials(self):
         class FakeApi:
             def connect_with_api_key(self, api_key):
@@ -127,8 +142,8 @@ class DeployLocalAIsTests(unittest.TestCase):
             deploy_local_ais(api, root)
 
             self.assertEqual(api.created_folders, ["Classes", "Classes/Items"])
-            self.assertEqual(api.created_ais, [("Classes/Items", "Chip.leek", 4)])
-            self.assertEqual(api.writes, [("Classes/Items/Chip.leek", "class Chip {}")])
+            self.assertEqual(api.created_ais, [("Classes/Items", "Chip", 4)])
+            self.assertEqual(api.writes, [("Classes/Items/Chip", "class Chip {}")])
 
     def test_updates_matching_ai_in_existing_folder(self):
         with tempfile.TemporaryDirectory() as root:
@@ -139,12 +154,12 @@ class DeployLocalAIsTests(unittest.TestCase):
 
             api = FakeApi(
                 folders=["Main"],
-                ais=[{"path": "Main/Kassbi_Class.leek"}],
-                codes={"Main/Kassbi_Class.leek": "old code"}
+                ais=[{"path": "Main/Kassbi_Class"}],
+                codes={"Main/Kassbi_Class": "old code"}
             )
             deploy_local_ais(api, root)
 
-            self.assertEqual(api.writes, [("Main/Kassbi_Class.leek", "new code")])
+            self.assertEqual(api.writes, [("Main/Kassbi_Class", "new code")])
             self.assertEqual(len(api.ais), 1)
 
     def test_confirmed_push_moves_remote_only_ais_and_folders_to_trash(self):
@@ -157,15 +172,15 @@ class DeployLocalAIsTests(unittest.TestCase):
             api = FakeApi(
                 folders=["Main", "Old", "Old/Sub"],
                 ais=[
-                    {"path": "Main/Kassbi_Class.leek"},
-                    {"path": "Old/stale.leek"},
-                    {"path": "Old/Sub/staler.leek"}
+                    {"path": "Main/Kassbi_Class"},
+                    {"path": "Old/stale"},
+                    {"path": "Old/Sub/staler"}
                 ],
-                codes={"Main/Kassbi_Class.leek": "same code"}
+                codes={"Main/Kassbi_Class": "same code"}
             )
 
             def confirm_delete(files, folders):
-                self.assertEqual(files, ["Old/Sub/staler.leek", "Old/stale.leek"])
+                self.assertEqual(files, ["Old/Sub/staler", "Old/stale"])
                 self.assertEqual(folders, ["Old/Sub", "Old"])
                 return True
 
@@ -173,10 +188,10 @@ class DeployLocalAIsTests(unittest.TestCase):
 
             self.assertEqual(
                 api.deleted_ais,
-                ["Old/Sub/staler.leek", "Old/stale.leek"]
+                ["Old/Sub/staler", "Old/stale"]
             )
             self.assertEqual(api.deleted_folders, ["Old/Sub", "Old"])
-            self.assertEqual(api.ais, [{"path": "Main/Kassbi_Class.leek"}])
+            self.assertEqual(api.ais, [{"path": "Main/Kassbi_Class"}])
             self.assertEqual(api.folders, ["Main"])
 
     def test_declined_remote_deletions_leave_remote_only_items_untouched(self):
@@ -185,7 +200,7 @@ class DeployLocalAIsTests(unittest.TestCase):
                 source.write("local")
 
             api = FakeApi(
-                ais=[{"path": "remote-only.leek"}],
+                ais=[{"path": "remote-only"}],
                 codes={}
             )
             deploy_local_ais(api, root, lambda files, folders: False)
@@ -193,7 +208,7 @@ class DeployLocalAIsTests(unittest.TestCase):
             self.assertEqual(api.deleted_ais, [])
             self.assertEqual(
                 {ai["path"] for ai in api.ais},
-                {"remote-only.leek", "local.leek"}
+                {"remote-only", "local"}
             )
 
     def test_remote_deletion_api_errors_are_reported(self):
@@ -205,7 +220,7 @@ class DeployLocalAIsTests(unittest.TestCase):
             with open(os.path.join(root, "local.leek"), "w") as source:
                 source.write("local")
 
-            api = FailedDeleteApi(ais=[{"path": "remote-only.leek"}])
+            api = FailedDeleteApi(ais=[{"path": "remote-only"}])
             with self.assertRaisesRegex(RuntimeError, "Could not delete remote AI"):
                 deploy_local_ais(api, root, lambda files, folders: True)
 
@@ -219,7 +234,7 @@ class DeployLocalAIsTests(unittest.TestCase):
             with patch("builtins.print") as print_mock:
                 deploy_local_ais(api, root)
 
-            self.assertEqual(api.writes, [("accented.leek", "// Café")])
+            self.assertEqual(api.writes, [("accented", "// Café")])
             messages = [call.args[0] for call in print_mock.call_args_list if call.args]
             self.assertIn(
                 "Info: accented.leek uses Windows-1252; decoding for API upload.",

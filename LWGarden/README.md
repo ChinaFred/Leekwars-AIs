@@ -81,6 +81,10 @@ directory; in this checkout, set it to `../../src/`. This keeps all AI logic in
 the repository's root `src/` directory. Option `1` pulls from Leek Wars into
 that directory, replacing it after you type `OVERWRITE`. Options `5` and `6`
 push its `.leek` files to the primary and secondary accounts, respectively.
+The `.leek` suffix belongs to local source filenames; Garden removes it when
+creating or matching an AI on Leek Wars, whose AI path/name has no source-file
+extension. PULL adds `.leek` to downloaded filenames so they are usable in
+`src/` and picked up by the next PUSH.
 For each account, remote-only AIs and folders are listed before any deletion;
 type `DELETE` to move them to the server trash, or enter anything else to keep
 them.
