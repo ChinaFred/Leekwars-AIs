@@ -355,10 +355,10 @@ test("provider interruption retains only a complete incumbent when the execution
 	}
 })
 
-test("global search ceiling is exactly 85 %: 849 999 completes, 850 000 stops (shared with the plan B)", () => {
-	for (const [after, stopped] of [[849999, false], [850000, true], [850001, true]]) {
+test("global search ceiling is exactly 80 %: 799 999 completes, 800 000 stops (shared with the plan B)", () => {
+	for (const [after, stopped] of [[799999, false], [800000, true], [800001, true]]) {
 		const w = world()
-		let operations = 600000 // départ + 249 999 < plafond relatif de 300 000 : seul le plafond global joue
+		let operations = 550000 // départ + 249 999 < plafond relatif de 300 000 : seul le plafond global joue
 		globalThis.System = { get operations() { return operations }, maxOperations: 1000000 }
 		const nativeWeaponCells = Fight.weaponCells
 		Fight.weaponCells = (...args) => {
@@ -627,6 +627,47 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 	initLeekLogging(new LogConfig().setAll(false))
 	turn()
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
+})
+
+test("active turn feeds the stagnation counter: observed once at the start of the turn and handed to the planner", async () => {
+	globalThis.Color = { rgb: () => 0 }
+	const { turn, stagnation } = await import("../dist/Main/Kassbi_Class.js")
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
+	Object.assign(w.enemies[0], {
+		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
+		weapons: [], chips: [], effects: [], launchedEffects: []
+	})
+	const observed = [], offense = []
+	const lifeBefore = w.enemies[0].life, distanceBefore = distance(w.me.cell, w.enemies[0].cell)
+	const observe = stagnation.observe, noteOffense = stagnation.noteOffense
+	stagnation.observe = function (...args) { observed.push(args); return observe.apply(this, args) }
+	stagnation.noteOffense = function () { offense.push(true); return noteOffense.apply(this) }
+	try {
+		initLeekLogging(new LogConfig().setAll(false))
+		turn()
+	} finally { delete stagnation.observe; delete stagnation.noteOffense }
+	assert.deepEqual(observed, [[1, lifeBefore, distanceBefore]])
+	assert.equal(offense.length, 1, "planAct received the counter: the enemy in a firing zone notified the tracker")
+})
+
+test("active turn hands the enemy positions to the stagnation counter just before observing (a moving enemy keeps the rule out of play)", async () => {
+	globalThis.Color = { rgb: () => 0 }
+	const { turn, stagnation } = await import("../dist/Main/Kassbi_Class.js")
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
+	Object.assign(w.enemies[0], {
+		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
+		weapons: [], chips: [], effects: [], launchedEffects: []
+	})
+	const calls = []
+	const observe = stagnation.observe, note = stagnation.noteEnemyPositions
+	stagnation.noteEnemyPositions = function (key) { calls.push(["positions", key]); return note.call(this, key) }
+	stagnation.observe = function (...args) { calls.push(["observe"]); return observe.apply(this, args) }
+	try {
+		initLeekLogging(new LogConfig().setAll(false))
+		turn()
+	} finally { delete stagnation.observe; delete stagnation.noteEnemyPositions }
+	assert.deepEqual(calls.map(([name]) => name), ["positions", "observe"], "positions first, then the observation of the same turn")
+	assert.ok(calls[0][1].includes(`${w.enemies[0].cell.x},${w.enemies[0].cell.y}`), `key ${calls[0][1]}`)
 })
 
 test("killing the last enemy cancels its danger: finish it rather than shield and leave it alive", () => {

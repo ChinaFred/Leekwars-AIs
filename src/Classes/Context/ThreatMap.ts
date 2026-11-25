@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 6
-import { isCellInLaunchPattern } from "./LaunchPattern.js"
+// file version: 7
+import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
+import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
 	EMPTY_PLAN,
@@ -24,6 +25,19 @@ import {
 export const MAX_THREAT_PAIRS = 8000
 
 /**
+ * Plafond d'opérations de la construction (au-delà, la carte est `truncated`) : le plafond global de recherche,
+ * `SEARCH_GLOBAL_FRACTION` de `System.maxOperations`, comme la recherche tactique et le plan B qui ne démarrent
+ * plus passé ce seuil. Sans lui, 8 000 paires pouvaient dépasser à elles seules le total du tour (erreur
+ * d'exécution, aucune action) ; avec lui, la carte s'arrête et le planificateur se replie sur `operations reserve`.
+ * Contrôlé une fois par case X (au plus les cases de tir de chaque ennemi entre deux contrôles). Sans `System` : aucun plafond d'ops.
+ */
+function operationsCeiling(): number {
+	return typeof System === "undefined" || !Number.isFinite(System.maxOperations) || System.maxOperations <= 0
+		? Number.POSITIVE_INFINITY
+		: System.maxOperations * SEARCH_GLOBAL_FRACTION
+}
+
+/**
  * Fournisseur de « cases de tir » : point d'échange pour une implémentation native future
  * (`Fight.weaponCells(cell, item)`, mise en cache par (case, item)). Seule la version géométrique
  * (`GeometricShotCells`) existe aujourd'hui.
@@ -35,6 +49,11 @@ export interface ShotCellsProvider {
 	 * écarte sans appel les paires hors de toutes les portées.
 	 */
 	canHit(from: Cell, target: Cell, item: ShotItem): boolean
+	/**
+	 * Optionnelle : équivalent groupé de `canHit` pour tous les `items` d'une paire (voir `GeometricShotCells`).
+	 * Absente, `buildThreatMap` appelle `canHit` item par item. Doit donner exactement les mêmes réponses.
+	 */
+	hitSignature?(from: Cell, target: Cell, items: readonly ShotItem[], weights: readonly number[], hits: boolean[]): number
 	/** Appels à `Field.lineOfSight` réellement effectués (statistique, optionnelle). */
 	readonly lineOfSightCalls?: number
 }
@@ -58,6 +77,10 @@ function pairKey(from: Cell, to: Cell): number {
  * des obstacles de la grille, pas des entités ; dans le jeu une entité peut bloquer la vue (le cache partagé
  * figerait alors une réponse dépendant de la position d'une entité).
  * `launchType` absent → CIRCLE. Ignore la zone d'effet (`area`).
+ *
+ * `hitSignature` est la forme groupée utilisée par `buildThreatMap` : tous les items d'une paire (S, X) en un
+ * appel, une seule lecture de dx/dy/distance et une seule ligne de vue par paire. Mêmes réponses et mêmes appels
+ * à `Field.lineOfSight` que `canHit` item par item.
  */
 export class GeometricShotCells implements ShotCellsProvider {
 	lineOfSightCalls = 0
@@ -71,12 +94,47 @@ export class GeometricShotCells implements ShotCellsProvider {
 		if (distance < item.minRange || distance > item.maxRange) {
 			return false
 		}
-		if (!isCellInLaunchPattern(item.launchType, dx, dy)) {
+		if (item.launchType !== LAUNCH_TYPE.CIRCLE && !isCellInLaunchPattern(item.launchType, dx, dy)) {
 			return false
 		}
 		if (!item.needsLos) {
 			return true
 		}
+		return this.visible(from, target)
+	}
+
+	/**
+	 * Variante groupée utilisée par `bestThreat` : une seule lecture de dx/dy/distance pour tous les items d'une
+	 * paire. Même réponse que `distance >= minRange && distance <= maxRange && canHit(...)` item par item, mêmes
+	 * appels (et même ordre) à `Field.lineOfSight`. Remplit `hits` et renvoie la somme des `weights` des items qui touchent.
+	 */
+	hitSignature(from: Cell, target: Cell, items: readonly ShotItem[], weights: readonly number[], hits: boolean[]): number {
+		const dx = target.x - from.x
+		const dy = target.y - from.y
+		const distance = Math.abs(dx) + Math.abs(dy)
+		let signature = 0
+		let sight = -1 // ligne de vue de la paire : inconnue (-1), obstruée (0), dégagée (1) ; un seul appel par paire
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i]!
+			let hit = distance >= item.minRange && distance <= item.maxRange
+			if (hit && item.launchType !== LAUNCH_TYPE.CIRCLE) {
+				hit = isCellInLaunchPattern(item.launchType, dx, dy)
+			}
+			if (hit && item.needsLos) {
+				if (sight < 0) {
+					sight = this.visible(from, target) ? 1 : 0
+				}
+				hit = sight === 1
+			}
+			hits[i] = hit
+			if (hit) {
+				signature += weights[i]!
+			}
+		}
+		return signature
+	}
+
+	private visible(from: Cell, target: Cell): boolean {
 		const key = pairKey(from, target)
 		let visible = this.sight.get(key)
 		if (visible === undefined) {
@@ -320,7 +378,21 @@ interface PreparedEnemy {
 	readonly plans: Map<number, ShotPlan>
 	/** Réponses de `canHit` de la paire en cours (réutilisé, entièrement réécrit à chaque paire). */
 	readonly hits: boolean[]
+	/** 2^i pour l'item i : la signature d'une paire est la somme des poids des items qui touchent. */
+	readonly weights: readonly number[]
+	/** Meilleur plan d'une paire par signature (un même ensemble d'items qui touchent donne le même résultat). */
+	readonly outcomes: Map<number, PairOutcome | null>
 }
+
+/** Meilleur plan d'une paire (S, X) : il ne dépend que de l'ensemble des items qui touchent depuis S. */
+interface PairOutcome {
+	readonly plan: ShotPlan
+	readonly swap: number
+	readonly variant: number
+}
+
+/** Au-delà, 2^i n'est plus exact en nombre à virgule flottante : pas de mémo par signature. */
+const MAX_SIGNATURE_ITEMS = 52
 
 /** Puces offensives retenues par configuration (les mieux classées en dégâts/PT) : borne le masque de plans. */
 const MAX_MASK_CHIPS = 30
@@ -475,9 +547,13 @@ function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 	for (const reachable of enemy.reachable.entries()) {
 		shotCells.push(reachable.cell)
 	}
+	const weights: number[] = []
+	for (let i = 0, weight = 1; i < items.length; i++, weight *= 2) {
+		weights.push(weight)
+	}
 	return {
 		enemy, variants, items, minRange, maxRange, shotCells,
-		plans: new Map(), hits: new Array<boolean>(items.length).fill(false)
+		plans: new Map(), hits: new Array<boolean>(items.length).fill(false), weights, outcomes: new Map()
 	}
 }
 
@@ -506,6 +582,51 @@ function planFor(
 }
 
 /**
+ * Meilleur plan d'une paire (S, X) d'après `prepared.hits` (items qui touchent depuis S) : le premier maximum
+ * strictement positif dans l'ordre configurations, armes, puce(s) seule(s) ; null si aucun plan ne fait de dégâts.
+ */
+function pairOutcome(prepared: PreparedEnemy): PairOutcome | null {
+	const { variants, hits } = prepared
+	let best: ShotPlan = EMPTY_PLAN
+	let bestSwap = 0
+	let bestVariant = 0
+	let found = false
+	for (let v = 0; v < variants.length; v++) {
+		const variant = variants[v]!
+		let mask = 0
+		for (let c = 0; c < variant.chips.length; c++) {
+			if (hits[variant.chips[c]!.index]) {
+				mask |= 1 << c
+			}
+		}
+		let weaponHit = false
+		for (let w = 0; w < variant.weapons.length; w++) {
+			if (!hits[variant.weapons[w]!.index]) {
+				continue
+			}
+			weaponHit = true
+			const plan = planFor(prepared, v, w, mask)
+			if (plan.damage > best.damage) {
+				best = plan
+				bestSwap = variant.weapons[w]!.swapTp
+				bestVariant = v
+				found = true
+			}
+		}
+		if (!weaponHit && mask !== 0) {
+			const plan = planFor(prepared, v, -1, mask)
+			if (plan.damage > best.damage) {
+				best = plan
+				bestSwap = 0
+				bestVariant = v
+				found = true
+			}
+		}
+	}
+	return found ? { plan: best, swap: bestSwap, variant: bestVariant } : null
+}
+
+/**
  * Meilleur plan de l'ennemi contre la case `target` : MAX sur ses cases de tir S (pas de somme entre cases),
  * sur ses configurations de force (boosts payés en PT) et sur ses armes (une seule par plan ; hors équipée,
  * elle coûte `WEAPON_SWAP_TP` PT). Hypothèse « se déplace puis tire tout » : un plan = une case S, pas de
@@ -515,7 +636,11 @@ function planFor(
  * Économies sans changer le résultat : une case X hors de portée de toute case de tir est écartée sans
  * parcours (distance au départ de l'ennemi − PM > portée maximale) ; une paire hors de toutes les portées
  * n'appelle pas `canHit` ; chaque item est testé une fois par paire pour toutes les configurations ; chaque
- * combinaison (configuration, arme, masque de puces) n'est planifiée qu'une fois par carte.
+ * combinaison (configuration, arme, masque de puces) n'est planifiée qu'une fois par carte ; le meilleur plan
+ * d'une paire ne dépend que de l'ensemble des items qui touchent (signature) : il est calculé une fois par
+ * signature et par carte, une paire dont aucun item ne touche est écartée sans parcourir les configurations.
+ * Le premier plan strictement meilleur dans l'ordre configurations puis armes puis puces seules reste retenu
+ * (le premier maximum d'une paire, puis la première paire qui atteint le maximum, comme avant).
  */
 function bestThreat(
 	prepared: PreparedEnemy,
@@ -523,11 +648,12 @@ function bestThreat(
 	provider: ShotCellsProvider,
 	budget: { pairs: number, max: number }
 ): EnemyThreat | null | "aborted" {
-	const { enemy, variants, items, hits } = prepared
+	const { enemy, variants, items, hits, weights, outcomes } = prepared
 	const origin = enemy.reachable.startCell
 	if (Math.abs(origin.x - target.x) + Math.abs(origin.y - target.y) - enemy.reachable.mp > prepared.maxRange) {
 		return null
 	}
+	const memoizable = items.length <= MAX_SIGNATURE_ITEMS
 	let best: ShotPlan = EMPTY_PLAN
 	let bestSwap = 0
 	let bestVariant = 0
@@ -544,41 +670,34 @@ function bestThreat(
 		if (distance < prepared.minRange || distance > prepared.maxRange) {
 			continue
 		}
-		for (let i = 0; i < items.length; i++) {
-			const item = items[i]!
-			hits[i] = distance >= item.minRange && distance <= item.maxRange && provider.canHit(from, target, item)
+		let signature = 0
+		if (provider.hitSignature !== undefined) {
+			signature = provider.hitSignature(from, target, items, weights, hits)
+		} else {
+			for (let i = 0; i < items.length; i++) {
+				const item = items[i]!
+				const hit = distance >= item.minRange && distance <= item.maxRange && provider.canHit(from, target, item)
+				hits[i] = hit
+				if (hit) {
+					signature += weights[i]!
+				}
+			}
 		}
-		for (let v = 0; v < variants.length; v++) {
-			const variant = variants[v]!
-			let mask = 0
-			for (let c = 0; c < variant.chips.length; c++) {
-				if (hits[variant.chips[c]!.index]) {
-					mask |= 1 << c
-				}
+		if (signature === 0) {
+			continue
+		}
+		let outcome: PairOutcome | null | undefined = memoizable ? outcomes.get(signature) : undefined
+		if (outcome === undefined) {
+			outcome = pairOutcome(prepared)
+			if (memoizable) {
+				outcomes.set(signature, outcome)
 			}
-			let weaponHit = false
-			for (let w = 0; w < variant.weapons.length; w++) {
-				if (!hits[variant.weapons[w]!.index]) {
-					continue
-				}
-				weaponHit = true
-				const plan = planFor(prepared, v, w, mask)
-				if (plan.damage > best.damage) {
-					best = plan
-					bestSwap = variant.weapons[w]!.swapTp
-					bestVariant = v
-					bestCell = from
-				}
-			}
-			if (!weaponHit && mask !== 0) {
-				const plan = planFor(prepared, v, -1, mask)
-				if (plan.damage > best.damage) {
-					best = plan
-					bestSwap = 0
-					bestVariant = v
-					bestCell = from
-				}
-			}
+		}
+		if (outcome !== null && outcome.plan.damage > best.damage) {
+			best = outcome.plan
+			bestSwap = outcome.swap
+			bestVariant = outcome.variant
+			bestCell = from
 		}
 	}
 	if (bestCell === null) {
@@ -628,8 +747,13 @@ export function buildThreatMap(
 
 	const byKey = new Map<number, ThreatCell>()
 	let truncated = false
+	const ceiling = operationsCeiling()
 	cells:
 	for (const mine of myReachable.entries()) {
+		if (ceiling !== Number.POSITIVE_INFINITY && System.operations >= ceiling) {
+			truncated = true
+			break
+		}
 		let danger = 0
 		const breakdown: EnemyThreat[] = []
 		for (const item of prepared) {

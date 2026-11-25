@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 14
+// file version: 17
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { castBoostInContact, castBoostWithSpareTp, logChipInventory } from "../Brain/StrengthBoost.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, isLogEnabled, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
@@ -24,6 +25,26 @@ export const enemyMemory = new EnemyMemory()
 
 /** Coffres : listés et observés à part, jamais ciblés ni comptés comme ennemis. */
 export const chestMemory = new EnemyMemory()
+
+/** Tours consécutifs sans tir ni progrès, mémorisés entre les tours (sortie de minimum local). */
+export const stagnation = new StagnationTracker()
+
+/**
+ * Met à jour le compteur de stagnation au début du tour (PV ennemis vivants, distance au plus proche : voir
+ * `StagnationTracker`). Une erreur est journalisée sans interrompre le tour.
+ */
+function observeStagnation(me: Me): void {
+	try {
+		const enemies = aliveEnemies()
+		const enemyLife = enemies.reduce((total, enemy) => total + enemy.life, 0)
+		const enemyDistance = enemies.reduce((best, enemy) =>
+			Math.min(best, Math.abs(me.cell.x - enemy.cell.x) + Math.abs(me.cell.y - enemy.cell.y)), Number.POSITIVE_INFINITY)
+		stagnation.noteEnemyPositions(enemies.map((enemy) => `${enemy.cell.x},${enemy.cell.y}`).sort().join(";"))
+		stagnation.observe(Fight.turn, enemyLife, enemyDistance)
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "observeStagnation", error)
+	}
+}
 
 /**
  * Liste les coffres vivants et enregistre leurs actions (armes/puces vues). Les coups attribués par la mémoire
@@ -238,6 +259,7 @@ export function turn(): void {
 		displayAccessibleZones(me)
 		observeThreatMap(me)
 		displayDangerZone()
+		observeStagnation(me)
 
 		const mpAtStart = me.mp
 		const tpAtStart = me.tp
@@ -246,7 +268,8 @@ export function turn(): void {
 
 		planAct(me, undefined, {
 			reachable: enemyMemory.getReachable(me.id),
-			threat: enemyMemory.getThreatMap()
+			threat: enemyMemory.getThreatMap(),
+			stagnation
 		})
 
 		// Après le plan : l'équipement du tour 1 et le boost de force n'utilisent que des PT non dépensés par le plan.

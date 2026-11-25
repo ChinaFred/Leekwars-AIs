@@ -9,17 +9,17 @@ function counter(start, run) {
 	try { run(n => { ops += n }) } finally { delete globalThis.System }
 }
 
-test("the search ceiling shared by the tactical search and the plan B is 85 % of the total", () => {
-	assert.equal(SEARCH_GLOBAL_FRACTION, 0.85)
+test("the search ceiling shared by the tactical search and the plan B is 80 % of the total", () => {
+	assert.equal(SEARCH_GLOBAL_FRACTION, 0.80)
 })
 
-test("execution starts beyond the 85% search ceiling, but keeps the explicit 3% tail", () => {
-	counter(851002, spend => {
-		assert.ok(851002 > 1000000 * SEARCH_GLOBAL_FRACTION)
+test("execution starts beyond the 80% search ceiling, but keeps the explicit 3% tail", () => {
+	counter(801002, spend => {
+		assert.ok(801002 > 1000000 * SEARCH_GLOBAL_FRACTION)
 		const budget = new ExecutionBudget()
 		assert.ok(hasExecutionRoom())
 		assert.ok(budget.available())
-		spend(118997)
+		spend(168997)
 		assert.equal(hasExecutionRoom(), true)
 		spend(1)
 		assert.equal(hasExecutionRoom(), false)

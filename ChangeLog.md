@@ -6,9 +6,13 @@ Les changements sont consignés ici sous forme d'entrées concises lors de la pr
 
 - L'archive garde l'âge, le message d'erreur et le mode d'authentification des logs refusés et traite les combats de moins de 10 min comme « logs pas encore disponibles » (hypothèse non confirmée).
 
-## 2026-11-25 — Plafond global de recherche à 85 %
+## 2026-11-25 — Sortie de stagnation
 
-- La recherche tactique et le plan B peuvent aller jusqu'à 850 000 opérations sur 1 000 000 (70 % avant), plafond unique partagé.
+- Après 2 tours sans dégâts ni record de proximité avec des ennemis immobiles, si le plan normal est bloqué, Kassbi quitte un minimum local vers une case sûre plus proche d'une zone de tir par la marche (combat 54940819) ; anti-oscillation sur tout l'épisode ; limite acceptée : un ennemi qui alterne immobilité et fuite peut ralentir le premier tir.
+
+## 2026-11-25 — Plafond global de recherche à 80 %
+
+- La recherche tactique et le plan B peuvent aller jusqu'à 800 000 opérations sur 1 000 000 (70 % avant), plafond unique partagé.
 
 ## 2026-11-25 — Client API Garden résilient au 401
 

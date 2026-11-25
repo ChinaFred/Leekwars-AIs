@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { evaluateTacticalPlans } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
+import { StagnationTracker } from "../dist/Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"
 import { initLeekLogging, LogConfig } from "../dist/Toolbox/Logger.js"
 
@@ -95,7 +96,7 @@ const chip = (name, cost, cooldown, minRange, maxRange, features, currentCooldow
  * Tour 5 : `searchCost` ops ajoutés par le premier fournisseur natif (la recherche tactique démarre à `startOps`).
  * `startOps` = coût déjà dépensé avant la recherche (observé : 59 000 au tour 4, 103 000 au tour 5).
  */
-function turn5({ startOps = 100000, searchCost = 0, withSystem = true } = {}) {
+function turn5({ startOps = 100000, searchCost = 0, withSystem = true, stagnation } = {}) {
 	delete globalThis.System
 	globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5,
 		ABSOLUTE_SHIELD: 6, BUFF_MP: 7, BUFF_TP: 8, DEBUFF: 9, POISON: 13, RAW_BUFF_TP: 32, RAW_BUFF_STRENGTH: 38 }
@@ -146,10 +147,25 @@ function turn5({ startOps = 100000, searchCost = 0, withSystem = true } = {}) {
 	profile.setSupportOptions(true, true, true)
 	if (withSystem) globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	try {
-		const result = evaluateTacticalPlans(me, profile, { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() })
+		const result = evaluateTacticalPlans(me, profile, {
+			reachable: memory.getReachable(me.id), threat: memory.getThreatMap(), ...(stagnation ? { stagnation } : {})
+		})
 		return { ...result, memory, me, getOps: () => ops }
 	} finally { delete globalThis.System }
 }
+
+test("turn 5 with the stagnation counter below its threshold: same retreat to 394 (the rule changes nothing)", () => {
+	const tracker = new StagnationTracker()
+	tracker.observe(4, 199, distance(cells[463], cells[310])) // tour 4 réel : distance 9
+	tracker.observe(5, 199, distance(cells[KASSBI_CELL], cells[ENEMY_CELL])) // tour 5 : 7, nouveau record
+	assert.equal(tracker.turns, 0)
+	const result = turn5({ withSystem: false, stagnation: tracker })
+	assert.equal(result.reason, "complete search")
+	assert.equal(result.plan.destination.id, SAFE_CELL)
+	assert.equal(result.plan.weaponShots, 0)
+	assert.equal(result.plan.progressModel, undefined, "normal Manhattan progress, not the stagnation route")
+	assert.equal(result.plan.stagnation, undefined)
+})
 
 test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search retreats to 394 without shooting", () => {
 	const { plan, memory, me } = turn5({ withSystem: false })
@@ -183,18 +199,18 @@ test("the relative ceiling is 30 % of the total: 300 000 abandons, with the plan
 	}
 })
 
-test("the global ceiling is 85 %: a search crossing 700 000 is no longer abandoned, 850 000 stops it", () => {
+test("the global ceiling is 80 %: a search crossing 700 000 is no longer abandoned, 800 000 stops it", () => {
 	// Avant : plafond global de 70 % → ces deux recherches (relatif < 300 000) étaient abandonnées au passage de 700 000.
-	for (const [startOps, searchCost] of [[500000, 250000], [590000, 250000]]) {
+	for (const [startOps, searchCost] of [[500000, 250000], [540000, 250000]]) {
 		const result = turn5({ startOps, searchCost })
 		assert.equal(result.reason, "complete search", `start ${startOps}, cost ${searchCost}`)
 		assert.equal(result.plan.destination.id, SAFE_CELL)
-		assert.ok(result.getOps() > 700000 && result.getOps() < 850000)
+		assert.ok(result.getOps() > 700000 && result.getOps() < 800000)
 	}
-	for (const [startOps, searchCost] of [[600000, 250000], [650000, 260000]]) {
+	for (const [startOps, searchCost] of [[550000, 250000], [600000, 260000]]) {
 		const result = turn5({ startOps, searchCost })
 		assert.equal(result.reason, "operations reserve", `start ${startOps}, cost ${searchCost}`)
 		assert.equal(result.plan, null)
-		assert.ok(result.getOps() >= 850000)
+		assert.ok(result.getOps() >= 800000)
 	}
 })

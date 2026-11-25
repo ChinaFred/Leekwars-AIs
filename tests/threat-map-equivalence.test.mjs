@@ -102,7 +102,7 @@ const reach = (ent, mp, ignore) => computeReachableCells(ent, mp, 1, { ignoreEnt
 
 // `prune: false` : aucune configuration écartée par dominance (énumération complète des sous-ensembles de boosts,
 // force et PT) — le MAX doit être identique, la dominance n'étant qu'un élagage.
-function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
+function naiveBest(enemy, target, provider, counter, { prune = true, maskCap = Infinity } = {}) {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
 	const candidates = []
 	for (const chip of enemy.boosts ?? []) {
@@ -173,7 +173,7 @@ function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
 		}
 		const weapons = found.filter((f) => !found.some((g) => g !== f && dominates(g, f) &&
 			(!dominates(f, g) || found.indexOf(g) < found.indexOf(f))))
-		const chips = sortByRatio(enemy.chips.map((c) => toCandidate(c, true, strength)).filter((c) => c && c.cost <= tpLeft))
+		const chips = sortByRatio(enemy.chips.map((c) => toCandidate(c, true, strength)).filter((c) => c && c.cost <= tpLeft)).slice(0, maskCap)
 		for (const from of enemy.reachable.cells()) {
 			if (from.x === target.x && from.y === target.y) continue
 			const hitting = weapons.filter((f) => { counter.n++; return provider.canHit(from, target, f.candidate.item) })
@@ -374,6 +374,50 @@ test("bounds: more than 30 offensive chips and more than 4 weapons never throw a
 	for (let i = 0; i < 12; i++) expected += 100 - i
 	assert.equal(map.dangerAt(me.cell), expected)
 	assert.equal(map.breakdownAt(me.cell)[0].chips.length, 12)
+})
+
+// Le mémo par signature (somme des 2^i des items qui touchent) n'est exact que jusqu'à 52 items : au-delà, 2^i dépasse
+// la précision des nombres à virgule flottante et deux ensembles différents partageraient une signature. Chaque
+// configuration de boosts garde ses 30 meilleures puces abordables (MAX_MASK_CHIPS) ; deux paliers de PT donnent donc
+// des ensembles différents (35 puces chères à fort ratio, 35 bon marché), soit plus de 52 items distincts pour l'ennemi.
+// Mutation (garde MAX_SIGNATURE_ITEMS relevé à 1000) : ce test échoue (graine 14, danger 167.7 au lieu de 225).
+test("more than 52 distinct items: no signature collision, the map still equals the naive max (30 best chips per configuration)", () => {
+	let widest = 0
+	for (let seed = 1; seed <= 40; seed++) {
+		const r = seeded(seed * 7919)
+		const int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1))
+		const density = r() * 0.25
+		const grid = makeGrid(int(12, 20), int(12, 20), () => r() < density)
+		const free = grid.free()
+		const pick = () => free.splice(int(0, free.length - 1), 1)[0]
+		const me = grid.place(entity(1, 0), pick())
+		const foe = grid.place(entity(2, 0), pick())
+		const chips = Array.from({ length: 70 }, (_, k) => {
+			const base = attackChip(r)
+			return k < 35
+				? { ...base, cost: int(6, 8), minRange: 0, maxRange: 20, features: [{ type: 1, minValue: 60, maxValue: 90 }] }
+				: { ...base, cost: int(1, 3), minRange: 0, maxRange: 20, features: [{ type: 1, minValue: 5, maxValue: 12 }] }
+		})
+		const weapons = Array.from({ length: 2 }, () => gun(r))
+		const input = {
+			id: 2, name: "e2", strength: 0, tp: 20, weapon: weapons[0], otherWeapons: weapons.slice(1), chips,
+			boosts: [boostOf(15, 50), boostOf(10, 30)], reachable: reach(foe, int(1, 6), me.id)
+		}
+		const myReach = computeReachableCells(me, int(1, 4), 1)
+		const seen = new Set()
+		const base = new GeometricShotCells()
+		const map = buildThreatMap(me, myReach, [input], 1, {
+			provider: { canHit: (a, b, c) => { seen.add(c.id); return base.canHit(a, b, c) } }
+		})
+		widest = Math.max(widest, seen.size)
+		const naive = new GeometricShotCells()
+		for (const mine of myReach.entries()) {
+			const expected = naiveBest(input, mine.cell, naive, { n: 0 }, { maskCap: 30 })
+			assert.ok(Math.abs(map.dangerAt(mine.cell) - expected) < 1e-6,
+				`seed ${seed} cell ${mine.cell.x},${mine.cell.y}: ${map.dangerAt(mine.cell)} vs ${expected}`)
+		}
+	}
+	assert.ok(widest > 52, `only ${widest} distinct items examined: the guard is not exercised`)
 })
 
 // --- pré-rejet des cases X hors de portée : jamais une case atteignable par un tir -----

@@ -510,9 +510,9 @@ test("historical compatibility continues at 711002 with small observed execution
 	} finally { delete globalThis.System }
 })
 
-test("complete main incumbent survives research85% and executes shots plus retreat beyond it", () => {
+test("complete main incumbent survives research80% and executes shots plus retreat beyond it", () => {
 	const w = arena({ turn: 7, distance: 1, life: 170, equipped: true,
-		initialOps: 800000, danger: c => c.x <= -2 ? 60.3 : 100 })
+		initialOps: 750000, danger: c => c.x <= -2 ? 60.3 : 100 })
 	try {
 		const t = w.run(), actions = t.trace.filter(e => e.kind === "action")
 		const index = t.trace.findIndex(e => e.text?.startsWith("[Tactical] plan before execution "))
@@ -521,7 +521,7 @@ test("complete main incumbent survives research85% and executes shots plus retre
 		assert.match(plan.searchStatus, /bounded search.*complete incumbent/)
 		assert.equal(actions.filter(e => e.name === "shot").length, 2)
 		assert.ok(actions.some(e => e.name === "move"), "reachable modeled retreat must still execute")
-		assert.ok(actions.every(e => e.ops > 850000 && e.ops < 1000000))
+		assert.ok(actions.every(e => e.ops > 800000 && e.ops < 1000000))
 		assert.deepEqual({ x: w.me.cell.x, y: w.me.cell.y }, plan.destination)
 		assert.ok(!t.trace.some(e => e.text?.includes("[Reserve]")), "never launch a second sequence")
 		assert.equal(w.stats.providers.size, 1, "no new native provider after research stops")

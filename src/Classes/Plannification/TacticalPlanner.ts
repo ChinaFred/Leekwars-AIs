@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 13
+// file version: 21
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -8,10 +8,13 @@ import { ShotCandidate, baseMeanDamage, maxUsesOf, toCandidate } from "../Contex
 import { LeekProfile } from "../LeekProfile.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
+import { StagnationTracker, STAGNATION_TURNS } from "../Context/StagnationTracker.js"
 
 export interface TacticalContext {
 	readonly reachable: ReachableCells | null
 	readonly threat: ThreatMap | null
+	/** Compteur de tours sans tir ni progrès (optionnel : sans lui, aucune sortie de stagnation). */
+	readonly stagnation?: StagnationTracker
 }
 
 /** Éphémère, sans dépense : réutilisable par le secours uniquement au même état. */
@@ -44,7 +47,9 @@ export interface TacticalPlan {
 	readonly danger: number
 	readonly score: number
 	readonly progress?: number
-	readonly progressModel?: "future firing route"
+	readonly progressModel?: "future firing route" | "stagnation walk route"
+	/** Sortie de stagnation : tours sans progrès et distance de MARCHE (BFS) vers une zone de tir, avant/après. */
+	readonly stagnation?: { readonly turns: number; readonly walkBefore: number; readonly walkAfter: number }
 	/** Distance dans le graphe courant vers une case de tir native, si connue. */
 	readonly firingDistance?: number
 	/** Distance vers une case de tir géométrique hypothétique, non native. */
@@ -67,6 +72,15 @@ export const TACTICAL_LIMITS = {
  */
 const SEARCH_FRACTION = 0.30
 
+/**
+ * Sortie de stagnation : au plus 613 cases explorées (toute la carte) et un arrêt facultatif à 2 % de
+ * `System.maxOperations` depuis son entrée, comme le trajet futur existant. Aucune mesure d'opérations réelle.
+ */
+const STAGNATION_ROUTE_CELLS = 613
+const STAGNATION_ROUTE_FRACTION = 0.02
+
+/** Compteurs de l'évaluation : puces écartées, et cause d'un plan nul sans progrès (sinon raison générique). */
+interface Skipped { unverified: number; refused: number; noProgress: string | null }
 class Budget {
 	private work = 0
 	private readonly start = typeof System === "undefined" ? 0 : System.operations
@@ -251,20 +265,33 @@ function killsLastEnemy(damage: number, target: Entity, enemyCount: number): boo
 	return enemyCount === 1 && damage >= target.life * KILL_MARGIN
 }
 
-function better(candidate: TacticalPlan, best: TacticalPlan | null): boolean {
+/**
+ * Comparaison d'un candidat décrit par ses seuls critères (sans construire l'objet) : permet de ne créer que les
+ * plans qui améliorent le meilleur. Ordre : score, danger, PT dépensés, distance de tir courante puis future (même
+ * cible), PM totaux. `better` en est la forme sur un plan complet : une seule règle.
+ */
+function beats(
+	best: TacticalPlan | null, score: number, danger: number, tpUsed: number, target: Entity,
+	firingDistance: number | undefined, futureRouteDistance: number | undefined, totalMp: number
+): boolean {
 	if (best === null) return true
-	if (candidate.score !== best.score) return candidate.score > best.score
-	if (candidate.danger !== best.danger) return candidate.danger < best.danger
-	if (candidate.tpUsed !== best.tpUsed) return candidate.tpUsed < best.tpUsed
-	if (candidate.target === best.target && candidate.firingDistance !== undefined &&
-		best.firingDistance !== undefined && candidate.firingDistance !== best.firingDistance) {
-		return candidate.firingDistance < best.firingDistance
+	if (score !== best.score) return score > best.score
+	if (danger !== best.danger) return danger < best.danger
+	if (tpUsed !== best.tpUsed) return tpUsed < best.tpUsed
+	if (target === best.target && firingDistance !== undefined &&
+		best.firingDistance !== undefined && firingDistance !== best.firingDistance) {
+		return firingDistance < best.firingDistance
 	}
-	if (candidate.target === best.target && candidate.futureRouteDistance !== undefined &&
-		best.futureRouteDistance !== undefined && candidate.futureRouteDistance !== best.futureRouteDistance) {
-		return candidate.futureRouteDistance < best.futureRouteDistance
+	if (target === best.target && futureRouteDistance !== undefined &&
+		best.futureRouteDistance !== undefined && futureRouteDistance !== best.futureRouteDistance) {
+		return futureRouteDistance < best.futureRouteDistance
 	}
-	return candidate.beforeMp + candidate.afterMp < best.beforeMp + best.afterMp
+	return totalMp < best.beforeMp + best.afterMp
+}
+
+function better(candidate: TacticalPlan, best: TacticalPlan | null): boolean {
+	return beats(best, candidate.score, candidate.danger, candidate.tpUsed, candidate.target,
+		candidate.firingDistance, candidate.futureRouteDistance, candidate.beforeMp + candidate.afterMp)
 }
 
 /**
@@ -308,8 +335,9 @@ function futureWeaponRoute(
 			if (visible) { goal = cell; break }
 		}
 		if (cost >= maximumDistance || queue.length >= maximumCells) continue
+		// Les contrôles de budget encadrent chaque appel natif (avant : fin du précédent ou en-tête de case ;
+		// après : ci-dessous) : aucun contrôle supplémentaire n'est utile entre deux voisins déjà écartés.
 		for (const [offsetX, offsetY] of MOVE_NEIGHBOR_OFFSETS) {
-			if (!room()) return null
 			const x = cell.x + offsetX, y = cell.y + offsetY
 			const id = x * 4096 + y
 			if (seen.has(id)) continue
@@ -341,6 +369,116 @@ function futureWeaponRoute(
 	return distances
 }
 
+interface StagnationInput {
+	me: Me
+	target: Entity
+	turns: number
+	weapons: readonly Weapon[]
+	attackChips: readonly Chip[]
+	chipZones: ReadonlyMap<Chip, Cell[]>
+	entries: ReadonlyArray<{ cell: Cell; cost: number }>
+	dangers: ReadonlyMap<number, number>
+	preparation: TacticalPreparation
+	skipped: Skipped
+	budget: Budget
+	visited: (cell: Cell) => boolean
+}
+
+/**
+ * Sortie de stagnation (combat 54940819) : après `STAGNATION_TURNS` tours sans tir ni progrès, aller vers la case
+ * atteignable ce tour qui rapproche le plus, en distance de MARCHE (BFS, obstacles et occupants), d'une zone de
+ * tir native d'une arme ou puce offensive, même si la distance Manhattan augmente (minimum local derrière un mur).
+ * La sécurité reste prioritaire : seules les cases de danger ≤ celui de la case actuelle sont candidates (0 ici si
+ * je suis sûr) et la marche doit diminuer strictement. Sinon : maintien, motivé dans le journal et dans la raison.
+ * La route peut demander plusieurs tours : un déplacement de sortie qui ne bat pas le record de proximité ne remet
+ * pas le compteur à zéro (voir `StagnationTracker`) et la cible est recalculée chaque tour.
+ */
+function stagnationEscape(input: StagnationInput): TacticalPlan | null {
+	const { me, target, turns, weapons, attackChips, chipZones, entries, dangers, preparation, skipped, budget, visited } = input
+	const hold = (reason: string): null => {
+		skipped.noProgress = `stagnation: ${reason}`
+		log(() => `[Tactical] stagnation: ${turns} turns without shot or progress (threshold ${STAGNATION_TURNS}); ` +
+			`${reason}; holding, safety first`, LOG_CONTEXT.PLANNING)
+		return null
+	}
+	if (typeof Field === "undefined" || typeof Field.cellFromXY !== "function") return hold("walking route unavailable")
+	// Zone de tir : cases natives de toutes mes armes/puces offensives (listes déjà obtenues, sinon un appel).
+	const goals = new Map<number, Cell>()
+	const addZone = (raw: readonly Cell[]): void => {
+		if (raw.length > 613) throw new Unavailable("native cells bound")
+		for (const cell of raw) {
+			budget.tick()
+			if (!cell.obstacle && (cell.entity === null || cell.entity.id === me.id)) goals.set(key(cell), cell)
+		}
+	}
+	for (const weapon of weapons) {
+		if (!validCost(weapon.cost) || toCandidate(weapon, false, me.strength) === null) continue
+		let raw = preparation.weaponCells.get(target)?.get(weapon)
+		if (!raw) { budget.check(); raw = Fight.weaponCells(target, weapon); budget.check() }
+		addZone(raw)
+	}
+	for (const chip of attackChips) {
+		let raw = chipZones.get(chip)
+		if (!raw) { budget.check(); raw = me.chipCells(chip, target); budget.check() }
+		addZone(raw)
+	}
+	if (goals.size === 0) return hold("no firing zone known")
+	// BFS inverse depuis la zone de tir jusqu'à avoir étiqueté toutes mes cases atteignables.
+	const wanted = new Set(entries.map(({ cell }) => key(cell)))
+	const walk = new Map<number, number>()
+	const queue: Cell[] = []
+	const seen = new Set<number>(goals.keys())
+	let missing = wanted.size
+	for (const [id, cell] of goals) { walk.set(id, 0); queue.push(cell); if (wanted.has(id)) missing-- }
+	const startOps = typeof System === "undefined" ? 0 : System.operations
+	for (let head = 0; head < queue.length && missing > 0 && queue.length < STAGNATION_ROUTE_CELLS; head++) {
+		budget.tick()
+		if (typeof System !== "undefined" && Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
+			System.operations - startOps >= System.maxOperations * STAGNATION_ROUTE_FRACTION) {
+			return hold("walking route search stopped by its operations allowance")
+		}
+		const cell = queue[head]!
+		const next = walk.get(key(cell))! + 1
+		for (const [dx, dy] of MOVE_NEIGHBOR_OFFSETS) {
+			const x = cell.x + dx, y = cell.y + dy, id = x * 4096 + y
+			if (seen.has(id)) continue
+			seen.add(id)
+			const neighbor = Field.cellFromXY(x, y)
+			if (!neighbor || neighbor.obstacle || (neighbor.entity !== null && neighbor.entity.id !== me.id)) continue
+			walk.set(id, next)
+			queue.push(neighbor)
+			if (wanted.has(id)) missing--
+		}
+	}
+	const origin = walk.get(key(me.cell))
+	if (origin === undefined) return hold("no walking route to a firing zone")
+	const ceiling = dangers.get(key(me.cell))!
+	let best: { cell: Cell; cost: number; walk: number; danger: number } | null = null
+	for (const entry of entries) {
+		budget.tick()
+		const distance = walk.get(key(entry.cell))
+		const danger = dangers.get(key(entry.cell))!
+		if (distance === undefined || distance >= origin || danger > ceiling || visited(entry.cell)) continue
+		if (best === null || distance < best.walk ||
+			(distance === best.walk && (danger < best.danger || (danger === best.danger && entry.cost < best.cost)))) {
+			best = { cell: entry.cell, cost: entry.cost, walk: distance, danger }
+		}
+	}
+	if (best === null) {
+		return hold(`no cell with danger <= ${ceiling} closer by walking (walking distance ${origin})`)
+	}
+	const chosen = best
+	log(() => `[Tactical] stagnation: ${turns} turns without shot or progress (threshold ${STAGNATION_TURNS}); ` +
+		`escaping to (${chosen.cell.x},${chosen.cell.y}), walking distance ${origin} -> ${chosen.walk}, ` +
+		`danger ${chosen.danger} (origin ${ceiling}), ${chosen.cost} MP`, LOG_CONTEXT.PLANNING)
+	return {
+		target, shotCell: me.cell, destination: chosen.cell, beforeMp: 0, afterMp: chosen.cost, weapon: null,
+		weaponShots: 0, chips: [], protection: [], tpUsed: 0, usefulDamage: 0, danger: chosen.danger,
+		score: origin - chosen.walk, progress: origin - chosen.walk, progressModel: "stagnation walk route",
+		stagnation: { turns, walkBefore: origin, walkAfter: chosen.walk }
+	}
+}
+
 /**
  * Phase pure côté combat : aucun PT/PM dépensé. Une carte complète reste une estimation incomplète
  * des menaces (voir strategies.md), jamais une preuve de sécurité ou de meurtre.
@@ -361,11 +499,11 @@ export function evaluateTacticalPlans(
 		...plan, state: { turn: preparation.turn, enemies: preparation.enemies }
 	}
 	try {
-		const skipped = { unverified: 0, refused: 0 }
+		const skipped: Skipped = { unverified: 0, refused: 0, noProgress: null }
 		const plan = evaluate(me, profile, context, skipped, budget, preparation)
 		if (!currentState()) throw new Unavailable("state changed during search")
-		const reason = skipped.unverified > 0 ? "offensive chip legality unverified" :
-			skipped.refused > 0 ? "offensive chip refused at current cell" : "no actionable plan"
+		const reason = skipped.noProgress ?? (skipped.unverified > 0 ? "offensive chip legality unverified" :
+			skipped.refused > 0 ? "offensive chip refused at current cell" : "no actionable plan")
 		return { plan: stamp(plan), reason: plan ? "complete search" : reason, preparation }
 	} catch (error) {
 		if (error instanceof Unavailable) {
@@ -396,7 +534,7 @@ export function evaluateTacticalPlans(
 
 function evaluate(
 	me: Me, profile: LeekProfile, context: TacticalContext | undefined,
-	skipped: { unverified: number; refused: number }, budget: Budget, preparation: TacticalPreparation
+	skipped: Skipped, budget: Budget, preparation: TacticalPreparation
 ): TacticalPlan | null {
 	const reachable = context?.reachable
 	const threat = context?.threat
@@ -436,71 +574,89 @@ function evaluate(
 		profile.strategyName === "AGGRESSIVE" ? 0.75 : 1) * (1.5 - profile.aggression / 100)
 	const hasAffordableWeapon = weapons.some((weapon) => validCost(weapon.cost) &&
 		weapon.cost + (weapon === me.weapon ? 0 : 1) <= me.tp && toCandidate(weapon, false, me.strength))
+	// Zone atteignable en tableaux denses (ordre BFS) : danger et voisins lus par indice dans les boucles chaudes,
+	// au lieu d'une clé et d'une table par lecture. Tout préfixe d'un trajet total ≤ PM appartient à cette zone.
+	const entries = [...reachable.entries()]
+	const entryIndex = new Map<number, number>()
+	for (let i = 0; i < entries.length; i++) entryIndex.set(key(entries[i]!.cell), i)
+	const entryDanger = entries.map(({ cell }) => dangers.get(key(cell))!)
 	if (enemies.length && (hasAffordableWeapon || attackChips.length === 0)) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
 		const stay = -riskCost(me, weight, support[0]!, dangers.get(key(me.cell))!, false)
-		for (const protection of support) for (const entry of reachable.entries()) {
+		// Seules les cases à 0 ou 1 PM sont des candidates précoces : filtrées une fois, pas une fois par protection.
+		const near = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.cost <= 1)
+		const originDistance = distance(me.cell)
+		for (const protection of support) for (const { entry, index } of near) {
 			budget.tick()
-			if (entry.cost > 1) continue
-			const progress = distance(me.cell) - distance(entry.cell)
+			const progress = originDistance - distance(entry.cell)
 			if (!profile.allowHiding && entry.cost > 0 && progress <= 0) continue
-			const danger = dangers.get(key(entry.cell))!
+			const danger = entryDanger[index]!
 			const score = progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
 			if (score <= stay || (entry.cost === 0 && protection.chips.length === 0)) continue
-			const candidate: TacticalPlan = {
+			if (!beats(budget.incumbent, score, danger, protection.cost, target, undefined, undefined, entry.cost)) continue
+			budget.incumbent = {
 				target, shotCell: me.cell, destination: entry.cell, beforeMp: 0, afterMp: entry.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips,
 				tpUsed: protection.cost, usefulDamage: 0, danger, progress, score
 			}
-			if (better(candidate, budget.incumbent)) budget.incumbent = candidate
 		}
 	}
 
-	const entries = [...reachable.entries()]
-	// Tout préfixe d'un trajet total ≤ PM appartient à cette zone initiale.
-	const byKey = new Map(entries.map((entry) => [key(entry.cell), entry.cell]))
-	const neighbors = new Map<number, Cell[]>()
+	const adjacency: number[][] = []
 	for (const { cell } of entries) {
 		budget.tick()
-		const adjacent: Cell[] = []
+		const adjacent: number[] = []
 		for (const [dx, dy] of MOVE_NEIGHBOR_OFFSETS) {
-			const neighbor = byKey.get((cell.x + dx) * 4096 + cell.y + dy)
-			if (neighbor) adjacent.push(neighbor)
+			const neighbor = entryIndex.get((cell.x + dx) * 4096 + cell.y + dy)
+			if (neighbor !== undefined) adjacent.push(neighbor)
 		}
-		neighbors.set(key(cell), adjacent)
+		adjacency.push(adjacent)
 	}
-	const endingCache = new Map<number, { cell: Cell; cost: number }>()
-	let firingDistances: Map<number, number> | null = null
-	const endingFor = (shot: { cell: Cell; cost: number }): { cell: Cell; cost: number } => {
+	// Distance de tir courante par case (Infinity : inconnue), remplie par l'anticipation ci-dessous.
+	const firing: number[] = entries.map(() => Infinity)
+	// Danger minimal de la zone et plus petite distance de tir parmi les cases qui l'atteignent : quand la fin
+	// trouvée atteint déjà les deux, aucune case plus lointaine du parcours ne peut la remplacer (égalité stricte exigée).
+	let minDanger = Infinity
+	for (const value of entryDanger) minDanger = Math.min(minDanger, value)
+	let minFiring = Infinity
+	const endingCache = new Map<number, { cell: Cell; cost: number; danger: number }>()
+	const seenStamp: number[] = entries.map(() => 0)
+	let stamp = 0
+	const endingFor = (shot: { cell: Cell; cost: number }): { cell: Cell; cost: number; danger: number } => {
 		const cached = endingCache.get(key(shot.cell))
 		if (cached) return cached
-		const queue = [{ cell: shot.cell, cost: 0 }]
-		const visited = new Set([key(shot.cell)])
-		let best = queue[0]!
-		let danger = dangers.get(key(best.cell))!
+		const start = entryIndex.get(key(shot.cell))!
+		const queue = [start]
+		const costs = [0]
+		seenStamp[start] = ++stamp
+		let best = start, bestCost = 0
+		let danger = entryDanger[start]!
+		const limit = profile.allowHiding ? me.mp - shot.cost : 0
 		for (let head = 0; head < queue.length; head++) {
 			budget.tick()
-			const entry = queue[head]!
-			const value = dangers.get(key(entry.cell))!
-			if (value < danger || (value === danger && firingDistances &&
-				(firingDistances.get(key(entry.cell)) ?? Infinity) < (firingDistances.get(key(best.cell)) ?? Infinity))) {
-				best = entry; danger = value
+			const index = queue[head]!
+			const value = entryDanger[index]!
+			if (value < danger || (value === danger && firing[index]! < firing[best]!)) {
+				best = index; bestCost = costs[head]!; danger = value
 			}
-			if (!profile.allowHiding || entry.cost >= me.mp - shot.cost) continue
-			for (const cell of neighbors.get(key(entry.cell))!) {
-				if (visited.has(key(cell))) continue
-				visited.add(key(cell))
-				queue.push({ cell, cost: entry.cost + 1 })
+			if (danger === minDanger && firing[best]! <= minFiring) break
+			if (costs[head]! >= limit) continue
+			for (const next of adjacency[index]!) {
+				if (seenStamp[next] === stamp) continue
+				seenStamp[next] = stamp
+				queue.push(next)
+				costs.push(costs[head]! + 1)
 			}
 		}
-		endingCache.set(key(shot.cell), best)
-		return best
+		const ending = { cell: entries[best]!.cell, cost: bestCost, danger }
+		endingCache.set(key(shot.cell), ending)
+		return ending
 	}
 	const retainWeapon = (target: Entity, weapon: Weapon, item: ShotCandidate, shot: { cell: Cell; cost: number }): void => {
 		const equip = weapon === me.weapon ? 0 : 1
 		const ending = endingFor(shot)
-		const danger = dangers.get(key(ending.cell))!
+		const danger = ending.danger
 		const states = attacks(me.tp - equip, item, [], target, budget)
 		const choices = attackChoices(states, target, true, budget)
 		for (const protection of support) {
@@ -509,14 +665,16 @@ function evaluate(
 			if (!choice) continue
 			const { attack, cost } = choice
 			const usefulDamage = Math.min(target.life, attack.damage)
-			const candidate: TacticalPlan = {
+			const tpUsed = cost + equip + protection.cost
+			const score = usefulDamage -
+				riskCost(me, weight, protection, danger, killsLastEnemy(attack.damage, target, enemies.length)) +
+				weight * protection.heal
+			if (!beats(budget.incumbent, score, danger, tpUsed, target, undefined, undefined, shot.cost + ending.cost)) continue
+			budget.incumbent = {
 				target, shotCell: shot.cell, destination: ending.cell, beforeMp: shot.cost, afterMp: ending.cost,
 				weapon, weaponShots: attack.weaponShots, chips: [], protection: protection.chips,
-				tpUsed: cost + equip + protection.cost, usefulDamage, danger,
-				score: usefulDamage - riskCost(me, weight, protection, danger, killsLastEnemy(attack.damage, target, enemies.length)) +
-					weight * protection.heal
+				tpUsed, usefulDamage, danger, score
 			}
-			if (better(candidate, budget.incumbent)) budget.incumbent = candidate
 		}
 	}
 	// Option complète avant les fournisseurs ; améliorée dès que chaque arme est
@@ -548,14 +706,26 @@ function evaluate(
 		}
 		return cells
 	}
-	const mayReach = (target: Entity, range: number): boolean => !Number.isFinite(range) ||
-		Math.abs(me.cell.x - target.cell.x) + Math.abs(me.cell.y - target.cell.y) <= range + me.mp
+	// Un fournisseur natif (`getCellsToUseWeapon`/`getCellsToUseChip`, 25 834 ops l'appel d'après la documentation
+	// officielle LeekScript ; non vérifié pour l'API TypeScript) n'est utile que si une case de MA zone atteignable
+	// est à portée de Manhattan [min, max] de la cible : la liste native est un sous-ensemble de ces cases. Test sur la
+	// zone elle-même, plus serré que « distance de départ ≤ portée + PM » (obstacles et occupants exclus de la zone).
+	const mayReach = (target: Entity, item: Weapon | Chip): boolean => {
+		if (!Number.isFinite(item.maxRange)) return true
+		const minRange = Number.isFinite(item.minRange) ? item.minRange : 0
+		for (const { cell } of entries) {
+			const range = Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
+			if (range >= minRange && range <= item.maxRange) return true
+		}
+		return false
+	}
+	const chipZones = new Map<Chip, Cell[]>()
 	const prepared = enemies.map((target) => ({
 		target,
 		weapons: weapons.map((weapon) => {
 			const candidate = validCost(weapon.cost) ? toCandidate(weapon, false, me.strength) : null
 			if (!candidate || candidate.cost + (weapon === me.weapon ? 0 : 1) > me.tp ||
-				!mayReach(target, weapon.maxRange)) return { weapon, candidate: null, cells: new Set<number>() }
+				!mayReach(target, weapon)) return { weapon, candidate: null, cells: new Set<number>() }
 			const cells = nativeCells(() => {
 				const cells = Fight.weaponCells(target, weapon)
 				let byWeapon = preparation.weaponCells.get(target)
@@ -564,10 +734,14 @@ function evaluate(
 				return cells
 			})
 			let nearest: typeof entries[number] | null = null
-			for (const entry of entries) {
+			let nearestDanger = Infinity
+			for (let i = 0; i < entries.length; i++) {
 				budget.tick()
+				const entry = entries[i]!
 				if (cells.has(key(entry.cell)) && (nearest === null || entry.cost < nearest.cost ||
-					(entry.cost === nearest.cost && dangers.get(key(entry.cell))! < dangers.get(key(nearest.cell))!))) nearest = entry
+					(entry.cost === nearest.cost && entryDanger[i]! < nearestDanger))) {
+					nearest = entry; nearestDanger = entryDanger[i]!
+				}
 			}
 			if (nearest) retainWeapon(target, weapon, candidate, nearest)
 			return { weapon, candidate, cells }
@@ -576,8 +750,12 @@ function evaluate(
 		// la raison peut être la portée/LOS, mais aussi une restriction que nous ne savons pas isoler.
 		// Sans preuve indépendante, ne pas créditer cette puce sur les cases hypothétiques.
 		chips: attackChips.map((chip) => {
-			if (!mayReach(target, chip.maxRange)) { skipped.unverified++; return null }
-			const cells = nativeCells(() => me.chipCells(chip, target))
+			if (!mayReach(target, chip)) { skipped.unverified++; return null }
+			const cells = nativeCells(() => {
+				const raw = me.chipCells(chip, target)
+				chipZones.set(chip, raw) // Réutilisé par la sortie de stagnation, sans second appel natif.
+				return raw
+			})
 			budget.check()
 			const usable = me.canUseChip(chip, target)
 			budget.check()
@@ -593,27 +771,30 @@ function evaluate(
 	// natives déjà obtenues pour l'unique cible. Aucun nouveau fournisseur ni LOS.
 	// La position ennemie et les obstacles au prochain tour restent inconnus.
 	if (prepared.length === 1) {
-		const distances = new Map<number, number>()
-		const queue: Cell[] = []
+		const queue: number[] = []
 		for (const weapon of prepared[0]!.weapons) for (const id of weapon.cells) {
 			budget.tick()
-			const cell = byKey.get(id)
-			if (cell && !distances.has(id)) { distances.set(id, 0); queue.push(cell) }
+			const index = entryIndex.get(id)
+			if (index !== undefined && firing[index] === Infinity) { firing[index] = 0; queue.push(index) }
 		}
 		for (let head = 0; head < queue.length; head++) {
 			budget.tick()
-			const cell = queue[head]!
-			const nextDistance = distances.get(key(cell))! + 1
-			for (const neighbor of neighbors.get(key(cell))!) {
-				const id = key(neighbor)
-				if (!distances.has(id)) { distances.set(id, nextDistance); queue.push(neighbor) }
+			const index = queue[head]!
+			const nextDistance = firing[index]! + 1
+			for (const neighbor of adjacency[index]!) {
+				if (firing[neighbor] === Infinity) { firing[neighbor] = nextDistance; queue.push(neighbor) }
 			}
 		}
-		if (queue.length > 0) firingDistances = distances
+		for (let i = 0; i < entries.length; i++) {
+			if (entryDanger[i] === minDanger) minFiring = Math.min(minFiring, firing[i]!)
+		}
 		endingCache.clear()
 	}
-	const firingDistance = (target: Entity, cell: Cell): number | undefined =>
-		target === prepared[0]?.target ? firingDistances?.get(key(cell)) : undefined
+	const firingDistance = (target: Entity, cell: Cell): number | undefined => {
+		if (target !== prepared[0]?.target) return undefined
+		const distance = firing[entryIndex.get(key(cell))!]
+		return distance === Infinity ? undefined : distance
+	}
 	const hasOffense = prepared.some((enemy) =>
 		enemy.weapons.some((w) => w.candidate && netDamage(w.candidate, enemy.target) > 0 && w.cells.size > 0) ||
 		enemy.chips.some((c) => netDamage(c.candidate, enemy.target) > 0 && c.cells.size > 0))
@@ -628,30 +809,94 @@ function evaluate(
 	if (enemies.length && (hasAffordableWeapon || futureRoute || (!skipped.unverified && !skipped.refused))) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
-		for (const protection of support) for (const ending of entries) {
+		// Valeurs qui ne dépendent pas de la protection : une fois par case, pas une fois par (protection, case).
+		const originDistance = distance(me.cell)
+		const geometric = entries.map(({ cell }) => originDistance - distance(cell))
+		const originFuture = futureProgress ? futureProgress.get(key(me.cell))! : 0
+		const progressOf = futureProgress
+			? entries.map(({ cell }) => originFuture - futureProgress.get(key(cell))!) : geometric
+		const futureDistance = futureRoute ? entries.map(({ cell }) => futureRoute.get(key(cell))) : null
+		const firingOf = entries.map(({ cell }) => firingDistance(target, cell))
+		for (const protection of support) for (let i = 0; i < entries.length; i++) {
+			const ending = entries[i]!
 			budget.tick()
-			const geometricProgress = distance(me.cell) - distance(ending.cell)
-			const progress = futureProgress
-				? futureProgress.get(key(me.cell))! - futureProgress.get(key(ending.cell))! : geometricProgress
-			if (!profile.allowHiding && geometricProgress <= 0 && !same(ending.cell, me.cell)) continue
-			const danger = dangers.get(key(ending.cell))!
+			if (!profile.allowHiding && geometric[i]! <= 0 && !same(ending.cell, me.cell)) continue
+			const progress = progressOf[i]!
+			const danger = entryDanger[i]!
+			const score = progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
+			const futureRouteDistance = futureDistance?.[i]
+			if (!beats(progressPlan, score, danger, protection.cost, target, firingOf[i], futureRouteDistance, ending.cost)) continue
 			const candidate: TacticalPlan = {
 				target, shotCell: me.cell, destination: ending.cell, beforeMp: 0, afterMp: ending.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips,
 				tpUsed: protection.cost, usefulDamage: 0, danger, progress,
 				progressModel: futureProgress ? "future firing route" : undefined,
-				firingDistance: firingDistance(target, ending.cell),
-				futureRouteDistance: futureRoute?.get(key(ending.cell)),
-				score: progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
+				firingDistance: firingOf[i],
+				futureRouteDistance,
+				score
 			}
-			if (better(candidate, progressPlan)) {
-				progressPlan = candidate
-				if ((ending.cost > 0 || protection.heal > 0 || shieldCredit(protection, danger) > 0) &&
-					better(candidate, budget.incumbent)) budget.incumbent = candidate
-			}
+			progressPlan = candidate
+			if ((ending.cost > 0 || protection.heal > 0 || shieldCredit(protection, danger) > 0) &&
+				better(candidate, budget.incumbent)) budget.incumbent = candidate
 		}
 	}
-	if (!hasOffense) return progressPlan && (progressPlan.afterMp > 0 || progressPlan.protection.length > 0) ? progressPlan : null
+	// Règle de stagnation (voir `stagnationEscape` et `StagnationTracker`) appliquée au plan NORMAL, toujours calculé
+	// d'abord. Garantie : tant que le plan normal tire ou progresse, il est exécuté tel quel, donc la règle ne peut
+	// jamais retarder un tir par rapport à la règle désactivée (tant que la sortie n'a pas été engagée, la trajectoire
+	// est celle de la règle désactivée). Elle n'agit que si ce plan est bloqué (aucun tir, aucun déplacement) ou si une
+	// sortie est déjà engagée (sinon le progrès Manhattan ramènerait Kassbi dans son minimum local : 187 → 133 → 187).
+	const stagnation = context?.stagnation
+	const withStagnation = (planned: TacticalPlan | null): TacticalPlan | null => {
+		if (planned && (planned.weaponShots > 0 || planned.chips.length > 0)) {
+			stagnation?.noteOffense() // un tir RÉEL est prévu : le planificateur normal garde la main
+			return planned
+		}
+		// Anti-oscillation sur TOUT l'épisode : le plan normal ne retourne pas vers une case visitée par une sortie
+		// (départ, arrivée, case de stagnation d'origine), sauf record de proximité (jamais le cas d'une case déjà visitée
+		// avec des ennemis immobiles). Sont toujours acceptés : un tir prévu, un déplacement vers une case non visitée,
+		// un déplacement dont le danger final est STRICTEMENT inférieur à celui de la case courante (retraite de sécurité),
+		// et tout plan avec protection (déplacement + protection compris). Seul un déplacement de progression sans gain
+		// de sécurité vers une case visitée est refusé.
+		let normal = planned
+		const currentDanger = dangers.get(key(me.cell))!
+		if (stagnation && planned && planned.afterMp > 0 && planned.protection.length === 0 &&
+			planned.danger >= currentDanger && stagnation.visited(planned.destination)) {
+			const toEnemy = Math.min(...enemies.map((enemy) =>
+				Math.abs(planned.destination.x - enemy.cell.x) + Math.abs(planned.destination.y - enemy.cell.y)))
+			if (!stagnation.beatsRecord(toEnemy)) {
+				log(() => `[Tactical] stagnation: move back to visited cell (${planned.destination.x},` +
+					`${planned.destination.y}) refused`, LOG_CONTEXT.PLANNING)
+				normal = null
+			}
+		}
+		if (!stagnation?.active || !enemies.length) return normal
+		// Une retraite de sécurité (danger final strictement inférieur à celui de la case courante) n'est jamais remplacée
+		// par la sortie, dont le plafond de danger est celui de la case courante : elle serait plus exposée que la retraite.
+		if (normal && normal.afterMp > 0 && normal.danger < currentDanger) return normal
+		const blocked = normal === null || (normal.afterMp === 0 && normal.protection.length === 0)
+		if (!blocked && !stagnation.escaping) return normal
+		const escape = stagnationEscape({
+			me, target: enemies[0]!, turns: stagnation.turns, weapons, attackChips, chipZones,
+			entries, dangers, preparation, skipped, budget, visited: (cell) => stagnation.visited(cell)
+		})
+		if (escape) { stagnation.commit(me.cell, escape.destination); return escape }
+		if (!stagnation.escaping) return normal
+		// Sortie engagée sans case sûre plus proche par la marche (ennemi qui a fui, frontière de danger) : on LÈVE
+		// l'engagement et le plan normal s'exécute (un maintien éternel retardait le premier tir d'un ennemi qui fuit),
+		// sauf retour vers une case visitée (refusé ci-dessus, ce tour et les suivants) ; la sortie ne se ré-engage
+		// jamais vers une case visitée.
+		stagnation.release()
+		log(() => `[Tactical] stagnation: escape released (no safe cell closer by walking); the normal plan resumes`,
+			LOG_CONTEXT.PLANNING)
+		return normal
+	}
+	if (!hasOffense) {
+		const normal = progressPlan && (progressPlan.afterMp > 0 || progressPlan.protection.length > 0) ? progressPlan : null
+		const result = withStagnation(normal)
+		// Plan nul : la case actuelle est le meilleur progrès (souvent un minimum local de distance Manhattan).
+		if (result === null && progressPlan && skipped.noProgress === null) skipped.noProgress = "no improving progress"
+		return result
+	}
 	// Une table exacte par cible/arme/masque de puces utilisables, pas par case.
 	const attackCache = new Map<string, Array<AttackChoice | undefined>>()
 	let best: TacticalPlan | null = progressPlan
@@ -691,7 +936,7 @@ function evaluate(
 		if (!same(shot.cell, me.cell) && !offense.some((o) => (o.choices[o.choices.length - 1]?.attack.damage ?? 0) > 0)) continue
 		// D − crédit(D) est monotone : même destination minimale pour tous les supports.
 		const ending = endingFor(shot)
-		const finalDanger = dangers.get(key(ending.cell))!
+		const finalDanger = ending.danger
 		for (const protection of support) {
 			for (const option of offense) {
 				const available = me.tp - protection.cost - option.equipCost
@@ -703,24 +948,27 @@ function evaluate(
 				if (!profile.allowHiding && !(attack.damage > 0) && !same(shot.cell, me.cell)) continue
 				if (attack.damage > 0 || protection.heal > 0 || shieldCredit(protection, finalDanger) > 0) actionable = true
 				const usefulDamage = Math.min(option.target.life, attack.damage)
+				const tpUsed = cost + protection.cost + option.equipCost
+				const score = usefulDamage - riskCost(me, weight, protection, finalDanger,
+					killsLastEnemy(attack.damage, option.target, enemies.length)) + weight * protection.heal
+				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
+				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, undefined,
+					shot.cost + ending.cost)) continue
 				const candidate: TacticalPlan = {
 					target: option.target, shotCell: shot.cell, destination: ending.cell,
 					beforeMp: shot.cost, afterMp: ending.cost,
 					weapon: attack.weaponShots > 0 ? option.weapon : null,
 					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
-					tpUsed: cost + protection.cost + option.equipCost, usefulDamage, danger: finalDanger,
-					firingDistance: firingDistance(option.target, ending.cell),
-					score: usefulDamage - riskCost(me, weight, protection, finalDanger,
-						killsLastEnemy(attack.damage, option.target, enemies.length)) + weight * protection.heal
+					tpUsed, usefulDamage, danger: finalDanger,
+					firingDistance: firingDistanceAtEnd,
+					score
 				}
-				if (better(candidate, best)) {
-					best = candidate
-					if (actionable && better(candidate, budget.incumbent)) budget.incumbent = candidate
-				}
+				best = candidate
+				if (actionable && better(candidate, budget.incumbent)) budget.incumbent = candidate
 			}
 		}
 	}
-	return actionable ? best : null
+	return withStagnation(actionable ? best : null)
 }
 
 function interrupted(reason: string): void {
@@ -773,6 +1021,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 		usefulDamage: plan.usefulDamage, danger: currentState() ? plan.danger : null,
 		score: currentState() ? plan.score : null, stateCurrent: currentState(),
 		progress: plan.progress ?? 0, progressModel: plan.progressModel ?? "Manhattan",
+		stagnation: plan.stagnation ?? null,
 		searchStatus: plan.searchStatus ?? "complete search",
 		executionBudget: EXECUTION_BUDGET_POLICY,
 		estimates: "damage/score/danger modeled, not guaranteed outcome"
@@ -780,7 +1029,8 @@ function execute(me: Me, plan: TacticalPlan): void {
 	if (me.life <= 0 || !available()) return
 	if (!currentState()) { interrupted("enemy positions/turn changed; plan unavailable"); return }
 	if (!same(me.cell, plan.shotCell)) {
-		const current = computeReachableCells(me, me.mp, Fight.turn)
+		// Seules les cases à au plus `beforeMp` pas comptent (au-delà : « shot cell blocked », comme avec `me.mp`).
+		const current = computeReachableCells(me, Math.min(me.mp, plan.beforeMp), Fight.turn)
 		const cost = current.costTo(plan.shotCell)
 		if (!available()) return
 		if (cost === null || cost > plan.beforeMp) { interrupted("shot cell blocked"); return }
