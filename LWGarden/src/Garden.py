@@ -62,6 +62,26 @@ def record_publication(config, account, summary):
     return record
 
 
+MAX_PRINTED_LOG_FAILURES = 10
+
+
+def describe_log_failure(failure):
+    """One console line about a failed debug-logs download (no secret involved)."""
+    age = failure.get("age_seconds")
+    return ("Logs of fight {fight_id}: HTTP {status}, fight age {age}, auth {mode}, "
+            "re-authentication {reauth}{note}; server said: {error}").format(
+        fight_id=failure.get("fight_id"), status=failure.get("status"),
+        age="unknown" if age is None else "{0} s".format(age),
+        mode=failure.get("mode", "unknown"),
+        reauth=failure.get("reauthentication", "unknown"),
+        note=(" [logs not available yet]" if failure.get("not_ready")
+              else " [fight date is in the future: clock skew? not treated as recent]"
+              if failure.get("future_date")
+              else " [login refused: session lost]" if failure.get("relogin_refused")
+              else ""),
+        error=FightArchive.redact_secrets(failure.get("error") or "") or "(empty)")
+
+
 def archive_recent_fights(api, config, farmer):
     """Store recent fights and their debug logs locally."""
     print("\narchive_recent_fights()\n")
@@ -77,14 +97,25 @@ def archive_recent_fights(api, config, farmer):
           "{pending} not finished, {expired} outside the retention window, "
           "{errors} errors, {logs_missing} without debug logs."
           .format(**stats))
+    for failure in stats.get("log_failures", [])[:MAX_PRINTED_LOG_FAILURES]:
+        print(describe_log_failure(failure))
+    hidden = len(stats.get("log_failures", [])) - MAX_PRINTED_LOG_FAILURES
+    if hidden > 0:
+        print("... and {0} more (see logs_error in each meta.json).".format(hidden))
     if stats.get("interrupted"):
         print("Warning: archive interrupted after repeated HTTP 401 on debug logs "
               "(session or credentials rejected). The remaining fights were not "
               "processed; reconnect (restart Garden) and archive again.")
-    if stats["logs_missing"]:
-        print("Warning: {0} fight(s) archived without debug logs (see logs_status in "
-              "meta.json); they will be retried on the next archive."
-              .format(stats["logs_missing"]))
+    not_ready = stats.get("logs_not_ready", 0)
+    if not_ready:
+        print("Warning: {0} recent fight(s) (under {1} s old) have no debug logs yet "
+              "(HTTP 401/403/404; the server may publish them late: unconfirmed). "
+              "They will be retried: run the archive again in a few minutes."
+              .format(not_ready, FightArchive.LOGS_NOT_READY_SECONDS))
+    if stats["logs_missing"] - not_ready > 0:
+        print("Warning: {0} fight(s) archived without debug logs (see logs_status and "
+              "logs_error in meta.json); they will be retried on the next archive."
+              .format(stats["logs_missing"] - not_ready))
     pruned = stats["pruned"]
     if pruned["publications"] or pruned["fights"]:
         print("Retention: {0} old publications and {1} old fights removed."

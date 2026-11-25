@@ -408,6 +408,202 @@ class ArchiveLogsAfter401Tests(unittest.TestCase):
             self.assertEqual(stats["logs_missing"], 7)
 
 
+class RecentFightLogsTests(unittest.TestCase):
+    NOW = 10000
+    YOUNG, OLD = NOW - 100, 100
+
+    class Api(ArchiveFakeApi):
+        def __init__(self, fights, reply):
+            super().__init__(fights)
+            self.reply = reply
+            self.log_calls = 0
+
+        def get_fight_logs(self, fight_id):
+            self.log_calls += 1
+            return self.reply(fight_id)
+
+        def auth_diagnostics(self):
+            return {"mode": "api_key", "reauthentication": "blocked"}
+
+    def archive(self, data, dates, reply):
+        api = self.Api({i: make_fight(i, date) for i, date in dates.items()}, reply)
+        return api, FightArchive.archive_fights(api, data, 7, "me", now=self.NOW)
+
+    def test_recent_fights_without_logs_are_flagged_not_ready_and_never_interrupt(self):
+        with tempfile.TemporaryDirectory() as data:
+            dates = {i: self.YOUNG for i in range(1, 11)}
+            for status in (401, 403, 404):
+                api, stats = self.archive(os.path.join(data, str(status)), dates,
+                                          lambda _id, s=status: Reply(s))
+                self.assertFalse(stats["interrupted"])
+                self.assertEqual(api.log_calls, 10)
+                self.assertEqual((stats["logs_not_ready"], stats["logs_missing"]), (10, 10))
+            meta = FightArchive.list_archived_fights(os.path.join(data, "401"))[0]
+            self.assertEqual(meta["logs_status"], "http_401")  # compatibility kept
+            self.assertTrue(meta["logs_not_ready"])
+            self.assertEqual(meta["logs_age_seconds"], 100)
+
+    def test_not_ready_fights_are_retried_and_complete_once_logs_exist(self):
+        with tempfile.TemporaryDirectory() as data:
+            self.archive(data, {1: self.YOUNG}, lambda _id: Reply(401))
+            api, stats = self.archive(data, {1: self.YOUNG}, lambda _id: Reply(200, {"logs": {"1": ["x"]}}))
+            self.assertEqual(stats["archived"], 1)
+            meta = FightArchive.list_archived_fights(data)[0]
+            self.assertEqual(meta["logs_status"], "ok")
+            self.assertNotIn("logs_error", meta)
+            self.assertNotIn("logs_not_ready", meta)
+
+    def test_old_fights_and_other_statuses_keep_their_previous_meaning(self):
+        age = FightArchive.LOGS_NOT_READY_SECONDS
+        with tempfile.TemporaryDirectory() as data:
+            _, stats = self.archive(data, {1: self.NOW - age}, lambda _id: Reply(401))
+            self.assertEqual(stats["logs_not_ready"], 0)  # exactly at the threshold: not recent
+            _, stats = self.archive(os.path.join(data, "x"), {1: self.YOUNG}, lambda _id: Reply(500))
+            self.assertEqual((stats["logs_not_ready"], stats["logs_missing"]), (0, 1))
+            self.assertFalse(stats["log_failures"][0]["not_ready"])
+
+    def test_recent_fights_do_not_count_towards_the_session_interruption(self):
+        # ids are processed from the newest: young, old, old, young, old, old
+        dates = {6: self.YOUNG, 5: self.OLD, 4: self.OLD, 3: self.YOUNG, 2: self.OLD, 1: self.OLD}
+        with tempfile.TemporaryDirectory() as data:
+            api, stats = self.archive(data, dates, lambda _id: Reply(401))
+            self.assertTrue(stats["interrupted"])
+            self.assertEqual(api.log_calls, 5)  # stopped at the 3rd old 401, fight 1 untouched
+            self.assertEqual(stats["logs_not_ready"], 2)
+
+    def test_error_excerpt_is_truncated_and_headers_are_never_stored(self):
+        class Secretive(Reply):
+            headers = {"Authorization": "Bearer super-secret-token"}
+
+        long_error = {"error": "x" * 500}
+        with tempfile.TemporaryDirectory() as data:
+            self.archive(data, {1: self.OLD}, lambda _id: Secretive(401, long_error))
+            meta = FightArchive.list_archived_fights(data)[0]
+            self.assertLessEqual(len(meta["logs_error"]), FightArchive.MAX_ERROR_EXCERPT)
+            self.assertIn("xxxx", meta["logs_error"])
+            for root, _, files in os.walk(data):
+                for name in files:
+                    with open(os.path.join(root, name), encoding="utf-8") as handle:
+                        self.assertNotIn("super-secret-token", handle.read())
+
+    def test_failures_carry_age_error_and_authentication_diagnostics(self):
+        with tempfile.TemporaryDirectory() as data:
+            _, stats = self.archive(data, {1: self.OLD}, lambda _id: Reply(401, {"error": "nope"}))
+        failure = stats["log_failures"][0]
+        self.assertEqual((failure["fight_id"], failure["status"], failure["age_seconds"]),
+                         (1, 401, self.NOW - self.OLD))
+        self.assertEqual((failure["mode"], failure["reauthentication"]), ("api_key", "blocked"))
+        line = Garden.describe_log_failure(failure)
+        for expected in ("fight 1", "HTTP 401", "9900 s", "auth api_key",
+                         "re-authentication blocked", "nope"):
+            self.assertIn(expected, line)
+        self.assertNotIn("not available yet", line)
+        self.assertIn("not available yet",
+                      Garden.describe_log_failure(dict(failure, not_ready=True)))
+
+    def test_garden_tells_to_run_the_archive_again_for_recent_fights(self):
+        stats = {"listed": 3, "archived": 3, "skipped": 0, "pending": 0, "expired": 0,
+                 "logs_missing": 3, "logs_not_ready": 2, "errors": 0, "interrupted": False,
+                 "log_failures": [], "pruned": {"publications": 0, "fights": 0}}
+        with patch.object(FightArchive, "archive_fights", return_value=stats), \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            Garden.archive_recent_fights(None, {"data_folder": "data"}, {"id": 7, "login": "me"})
+        text = output.getvalue()
+        self.assertIn("2 recent fight(s)", text)
+        self.assertIn("run the archive again in a few minutes", text)
+        self.assertIn("1 fight(s) archived without debug logs", text)
+
+
+class AuthDiagnosticsTests(unittest.TestCase):
+    def test_secrets_are_masked_before_truncation(self):
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc_DEF-123"
+        samples = [
+            "Authorization: Bearer abc.def.ghi rejected",
+            "bad token " + jwt,
+            '{"password": "hunter2", "error": "no"}',
+            "api_key=k-12345&x=1",
+            "x" * 190 + " Bearer " + "s3cr3t" * 20,  # a token straddling the cut
+        ]
+        for text in samples:
+            masked = FightArchive.redact_secrets(text)
+            for leaked in ("abc.def.ghi", jwt, "hunter2", "k-12345", "s3cr3t"):
+                self.assertNotIn(leaked, masked)
+            self.assertNotIn("s3cr3t", FightArchive._error_excerpt(Reply(401, text)))
+        self.assertEqual(FightArchive.redact_secrets("invalid token, session expired"),
+                         "invalid token, session expired")
+
+    def test_relogin_refused_is_persistent_until_a_new_connection(self):
+        api, _ = make_api([login_ok("t1"), Reply(401), login_ok("t3")], [Reply(401), Reply(401)])
+        self.assertFalse(api.relogin_refused())
+        api.connect("me", "pw")
+        api.get_fight_logs(1)
+        self.assertTrue(api.relogin_refused())
+        api.get_fight_logs(2)  # blocked, but still told apart from a rejected endpoint
+        self.assertTrue(api.relogin_refused())
+        api.connect("me", "pw")
+        self.assertFalse(api.relogin_refused())
+
+    def test_future_dates_are_tolerated_only_within_the_clock_skew(self):
+        skew = FightArchive.LOGS_CLOCK_SKEW_SECONDS
+        for offset, expected_not_ready in ((skew, True), (skew + 1, False)):
+            with tempfile.TemporaryDirectory() as data:
+                api = RecentFightLogsTests.Api({1: make_fight(1, 10000 + offset)},
+                                               lambda _id: Reply(401))
+                stats = FightArchive.archive_fights(api, data, 7, "me", now=10000)
+            failure = stats["log_failures"][0]
+            self.assertEqual(failure["not_ready"], expected_not_ready)
+            self.assertEqual(failure["future_date"], not expected_not_ready)
+            self.assertEqual("clock skew" in Garden.describe_log_failure(failure),
+                             not expected_not_ready)
+
+    def setUp(self):
+        for target in ("LWApi.time.sleep", "builtins.print"):
+            patcher = patch(target)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_mode_is_reported_without_any_credential(self):
+        api, _ = make_api([login_ok("secret-token")], [])
+        self.assertEqual(api.auth_diagnostics()["mode"], "none")
+        api.connect("me", "secret-pw")
+        self.assertEqual(api.auth_diagnostics(), {"mode": "login", "reauthentication": "not_attempted"})
+        api, _ = make_api([], [Reply(200, {"farmer": {}})])
+        api.connect_with_api_key("secret-key")
+        self.assertEqual(api.auth_diagnostics()["mode"], "api_key")
+        self.assertNotIn("secret", str(api.auth_diagnostics()))
+
+    def test_reauthentication_outcomes_of_the_last_request(self):
+        clock = FakeClock()
+        api, _ = make_api([login_ok("t1"), login_ok("t2")], [Reply(401), Reply(200), Reply(200)], clock)
+        api.connect("me", "pw")
+        api.get_fight_logs(1)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "succeeded")
+        api.get_fight_logs(2)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "not_attempted")
+
+        api, _ = make_api([login_ok("t1"), Reply(401)], [Reply(401), Reply(401)], clock)
+        api.connect("me", "pw")
+        api.get_fight_logs(1)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "refused")
+        api.get_fight_logs(2)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "blocked")
+
+        api, _ = make_api([login_ok("t1"), requests.ConnectionError("x")], [Reply(401), Reply(401)], clock)
+        api.connect("me", "pw")
+        api.get_fight_logs(1)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "transient")
+        api.get_fight_logs(2)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "blocked")  # cooldown
+
+    def test_an_endpoint_rejected_after_a_good_relogin_is_reported_blocked(self):
+        api, _ = make_api([login_ok("t1"), login_ok("t2")], [Reply(401), Reply(401), Reply(401)])
+        api.connect("me", "pw")
+        api.get_fight_logs(1)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "succeeded")  # replay still 401
+        api.get_fight_logs(2)
+        self.assertEqual(api.auth_diagnostics()["reauthentication"], "blocked")
+
+
 class GardenSessionTests(unittest.TestCase):
     PRINCIPAL = {"username": "main", "password": "pw"}
 

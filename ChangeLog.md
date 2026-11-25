@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Diagnostic des logs de combat refusés (401)
+
+- L'archive garde l'âge, le message d'erreur et le mode d'authentification des logs refusés et traite les combats de moins de 10 min comme « logs pas encore disponibles » (hypothèse non confirmée).
+
 ## 2026-11-25 — Plafond global de recherche à 85 %
 
 - La recherche tactique et le plan B peuvent aller jusqu'à 850 000 opérations sur 1 000 000 (70 % avant), plafond unique partagé.

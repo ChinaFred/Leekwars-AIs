@@ -15,6 +15,7 @@ than the fight date. The publication holds the commit message of that version.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -27,6 +28,14 @@ FIGHTS_FOLDER = "fights"
 EXPORTS_FOLDER = "exports"
 MAX_DIRTY_FILES = 50
 MAX_CONSECUTIVE_LOGS_401 = 3
+# HYPOTHESIS, not established: the server may refuse the logs of a very recent fight.
+# Observed: 401 at ~138-160 s of age, 200 at 225 s and more. Hence a generous margin.
+LOGS_NOT_READY_SECONDS = 600
+# Fight dates slightly ahead of the local clock are tolerated (clock skew); further ahead
+# the age is not credible and the fight is not treated as "recent".
+LOGS_CLOCK_SKEW_SECONDS = 300
+LOGS_NOT_READY_STATUSES = (401, 403, 404)
+MAX_ERROR_EXCERPT = 200
 FINISHED_FIGHT_STATUS = 2
 UNKNOWN_VERSION = "unknown-version"
 SUMMARY_KEYS = (
@@ -279,20 +288,55 @@ def _is_complete(data_dir, fight_id, farmer_id, account):
     return isinstance(meta, dict) and meta.get("logs_status") == "ok"
 
 
+_SECRET_PATTERNS = (
+    (re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer [redacted]"),
+    (re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), "[redacted-jwt]"),
+    # key: value / key=value for credential-like keys (JSON or form style)
+    (re.compile(r"""(?ix)(["']?(?:password|passwd|pwd|token|api[_-]?key|secret|authorization)["']?\s*[:=]\s*)
+                    ("[^"]*"|'[^']*'|(?:(?:Bearer|Basic|Token)\s+)?[^\s,;&}\]]+)"""), r'\1"[redacted]"'),
+)
+
+
+def redact_secrets(text):
+    """Mask Bearer tokens, JWT and credential-like key/value pairs in a text."""
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+def _error_excerpt(response):
+    """Short server error text of a failed response (body only, never headers).
+
+    Credentials are masked before truncation, so a cut cannot leave a token half visible.
+    """
+    try:
+        payload = response.json()
+    except (ValueError, AttributeError):
+        payload = getattr(response, "text", "")
+    if payload is None or payload == "":
+        return ""
+    text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
+    return redact_secrets(text)[:MAX_ERROR_EXCERPT]
+
+
 def archive_fights(api, data_dir, farmer_id, account,
-                   max_new=DEFAULT_MAX_NEW_FIGHTS, retention=DEFAULT_RETENTION):
+                   max_new=DEFAULT_MAX_NEW_FIGHTS, retention=DEFAULT_RETENTION, now=None):
     """Download recent fights and their debug logs that are not archived yet.
 
     Fights whose logs could not be read are fetched again on the next run. The run
     stops after MAX_CONSECUTIVE_LOGS_401 consecutive HTTP 401 on the logs: the
     session is probably invalid, and the remaining fights stay for the next run.
+    A 401/403/404 on a fight younger than LOGS_NOT_READY_SECONDS is reported as
+    "logs not ready yet" instead and does not count towards that stop. `now` is
+    the current epoch time (injectable for tests).
     """
     history = api.get_farmer_history(farmer_id)
     if not history.ok:
         raise RuntimeError("Could not read the fight history (HTTP {0})."
                            .format(getattr(history, "status_code", "?")))
     stats = {"listed": 0, "archived": 0, "skipped": 0, "pending": 0,
-             "expired": 0, "logs_missing": 0, "errors": 0, "interrupted": False}
+             "expired": 0, "logs_missing": 0, "logs_not_ready": 0, "errors": 0,
+             "interrupted": False, "log_failures": []}
     unauthorized_logs = 0
     entries = extract_history_entries(history.json())
     cutoffs = _retention_cutoffs(load_publications(data_dir), max(1, int(retention)))
@@ -322,26 +366,50 @@ def archive_fights(api, data_dir, farmer_id, account,
             stats["expired"] += 1
             continue
         logs_response = api.get_fight_logs(fight_id)
-        if logs_response.ok:
-            logs_status = "ok"
-            logs = _unwrap(logs_response.json(), "logs")
-            unauthorized_logs = 0
-        else:
-            logs_status = "http_{0}".format(getattr(logs_response, "status_code", "error"))
-            logs = None
-            stats["logs_missing"] += 1
-            unauthorized_logs = unauthorized_logs + 1 if logs_status == "http_401" else 0
-        folder = _fight_folder(data_dir, fight_id, farmer_id, account)
-        _write_json(os.path.join(folder, "fight.json"), fight)
-        _write_json(os.path.join(folder, "logs.json"), logs)
-        _write_json(os.path.join(folder, "meta.json"), {
+        fetched_at = int(time.time() if now is None else now)
+        meta = {
             "fight_id": fight_id,
             "date": fight_date,
             "account": account,
             "farmer_id": _as_int(farmer_id),
-            "fetched_at": int(time.time()),
-            "logs_status": logs_status,
-        })
+            "fetched_at": fetched_at,
+        }
+        if logs_response.ok:
+            meta["logs_status"] = "ok"
+            logs = _unwrap(logs_response.json(), "logs")
+            unauthorized_logs = 0
+        else:
+            status = getattr(logs_response, "status_code", None)
+            age = fetched_at - fight_date if fight_date is not None else None
+            future_date = age is not None and age < -LOGS_CLOCK_SKEW_SECONDS
+            # A login refused after a 401 means the session is lost: never "not ready yet".
+            relogin_refused = bool(getattr(api, "relogin_refused", lambda: False)())
+            not_ready = (status in LOGS_NOT_READY_STATUSES and age is not None
+                         and not future_date and age < LOGS_NOT_READY_SECONDS
+                         and not relogin_refused)
+            error = _error_excerpt(logs_response)
+            meta["logs_status"] = "http_{0}".format(status if status is not None else "error")
+            meta["logs_error"] = error
+            meta["logs_age_seconds"] = age
+            if not_ready:
+                meta["logs_not_ready"] = True
+                stats["logs_not_ready"] += 1
+            elif status == 401:
+                unauthorized_logs += 1
+            else:
+                unauthorized_logs = 0
+            logs = None
+            stats["logs_missing"] += 1
+            diagnostics = getattr(api, "auth_diagnostics", None)
+            stats["log_failures"].append(dict(
+                diagnostics() if diagnostics else {},
+                fight_id=fight_id, status=status, age_seconds=age,
+                not_ready=not_ready, future_date=future_date,
+                relogin_refused=relogin_refused, error=error))
+        folder = _fight_folder(data_dir, fight_id, farmer_id, account)
+        _write_json(os.path.join(folder, "fight.json"), fight)
+        _write_json(os.path.join(folder, "logs.json"), logs)
+        _write_json(os.path.join(folder, "meta.json"), meta)
         stats["archived"] += 1
         if unauthorized_logs >= MAX_CONSECUTIVE_LOGS_401:
             stats["interrupted"] = True

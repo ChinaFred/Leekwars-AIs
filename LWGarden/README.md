@@ -94,7 +94,15 @@ modifiable par `data_folder` dans `config.json`, relatif à `LWGarden/src`).
   de session requis). Les combats dont les logs n'ont pas pu être lus sont
   retéléchargés au passage suivant (Garden affiche un avertissement) ; l'archivage
   s'interrompt après 3 refus HTTP 401 consécutifs sur les logs (session invalide), les
-  combats restants étant traités au passage suivant ; archivez régulièrement, le serveur ne
+  combats restants étant traités au passage suivant. Pour chaque échec de logs, la console
+  indique l'âge du combat, le mode d'authentification (login ou clé API), l'issue de la
+  ré-authentification et le message d'erreur du serveur (tronqué) ; `meta.json` garde
+  `logs_error` et `logs_age_seconds`. Un 401/403/404 sur un combat de moins de 10 minutes
+  (`LOGS_NOT_READY_SECONDS`, **hypothèse non confirmée**) est marqué `logs_not_ready`, ne
+  compte pas pour l'interruption (sauf si une ré-authentification a été refusée, ou si la
+  date du combat dépasse de plus de 5 minutes l'horloge locale) : relancez l'archivage quelques minutes plus tard. Les jetons et mots de passe
+  éventuellement renvoyés dans un corps d'erreur sont masqués avant stockage et affichage ;
+  archivez régulièrement, le serveur ne
   conserve pas forcément les logs indéfiniment.
 - **Version d'un combat** : dernière publication du même compte dont la date est
   antérieure ou égale à celle du combat. Avant la première publication

@@ -31,6 +31,8 @@ class LWApi:
         self.__reauth_retry_at = None
         self.__rejected_endpoints = set()
         self.__login_transient = False
+        self.__auth_mode = "none"
+        self.__last_reauth = "not_attempted"
 
     def connect(self, login, password):
         """Authenticate and store the API bearer token."""
@@ -54,7 +56,7 @@ class LWApi:
             return False
         self.__token = token
         self.__set_authentication(token)
-        self.__connection_succeeded(lambda: self.connect(login, password))
+        self.__connection_succeeded(lambda: self.connect(login, password), "login")
         return True
 
     def connect_with_api_key(self, api_key):
@@ -74,11 +76,12 @@ class LWApi:
                                       else not isinstance(farmer_response, dict))
             self.__clear_authentication()
             return False
-        self.__connection_succeeded(lambda: self.connect_with_api_key(api_key))
+        self.__connection_succeeded(lambda: self.connect_with_api_key(api_key), "api_key")
         return True
 
-    def __connection_succeeded(self, reconnect):
+    def __connection_succeeded(self, reconnect, mode):
         self.__reconnect = reconnect
+        self.__auth_mode = mode
         self.__reauth_failed = False
         self.__reauth_retry_at = None
         self.__rejected_endpoints.clear()
@@ -109,12 +112,16 @@ class LWApi:
             self.__set_authentication(previous_token)
             self.__reconnect = previous_reconnect
             if self.__login_transient:
+                self.__last_reauth = "transient"
                 self.__reauth_retry_at = self.__clock() + self.REAUTH_COOLDOWN_SECONDS
                 print("API re-authentication failed (temporary error); "
                       "retrying later, not before {0} s.".format(self.REAUTH_COOLDOWN_SECONDS))
             else:
+                self.__last_reauth = "refused"
                 self.__reauth_failed = True
                 print("API re-authentication failed; not retrying.")
+        else:
+            self.__last_reauth = "succeeded"
         return renewed
 
     def get_farmer_self(self):
@@ -142,16 +149,19 @@ class LWApi:
         response = self.__send(request, url, **kwargs)
         if not reauthenticate:
             return response
+        self.__last_reauth = "not_attempted"
         endpoint = urlsplit(url).path.rstrip("0123456789")
         if response.ok:
             self.__rejected_endpoints.discard(endpoint)
         elif (self.__status(response) == 401
                 and "Authorization" in self.__session.headers
-                and self.__reconnect is not None
-                and not self.__reauth_failed
-                and (self.__reauth_retry_at is None
-                     or self.__clock() >= self.__reauth_retry_at)
-                and endpoint not in self.__rejected_endpoints):
+                and self.__reconnect is not None):
+            if (self.__reauth_failed
+                    or (self.__reauth_retry_at is not None
+                        and self.__clock() < self.__reauth_retry_at)
+                    or endpoint in self.__rejected_endpoints):
+                self.__last_reauth = "blocked"  # circuit breaker or cooldown
+                return response
             print("API session rejected (HTTP 401); authenticating again.")
             if self.__reauthenticate():
                 data = kwargs.get("data")
@@ -161,6 +171,19 @@ class LWApi:
                 if self.__status(response) == 401:
                     self.__rejected_endpoints.add(endpoint)
         return response
+
+    def relogin_refused(self):
+        """True once a re-login was explicitly refused, until the next successful connection."""
+        return self.__reauth_failed
+
+    def auth_diagnostics(self):
+        """How the session authenticates and what the last request's 401 handling did.
+
+        mode: login, api_key or none (never the credential itself).
+        reauthentication: not_attempted, succeeded, refused, transient or blocked.
+        """
+        mode = self.__auth_mode if "Authorization" in self.__session.headers else "none"
+        return {"mode": mode, "reauthentication": self.__last_reauth}
 
     @staticmethod
     def __is_transient(response):
