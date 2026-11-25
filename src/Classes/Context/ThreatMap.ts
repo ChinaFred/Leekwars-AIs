@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { isCellInLaunchPattern } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
@@ -10,7 +10,8 @@ import {
 	ShotPlan,
 	sortByRatio,
 	strengthBoostOf,
-	toCandidate
+	toCandidate,
+	tpBoostOf
 } from "./ShotPlan.js"
 
 /**
@@ -108,12 +109,13 @@ export interface ThreatEnemy {
 	/** Puces connues et PRÊTES (cooldown déjà filtré par l'appelant) ; seules celles avec dégâts comptent. */
 	readonly chips: readonly Chip[]
 	/**
-	 * Puces de boost de force PRÊTES (cooldown déjà filtré) : l'ennemi peut en lancer sur lui avant de tirer,
-	 * chacune au plus une fois, en payant son coût en PT ; la force gagnée s'ajoute à `strength` (voir
-	 * `strengthBoostOf`). Au plus `MAX_THREAT_BOOSTS` sont combinées. Absent = aucune.
+	 * Puces de boost de force ou de PT PRÊTES (cooldown déjà filtré) : l'ennemi peut en lancer sur lui avant de
+	 * tirer, chacune au plus une fois, en payant son coût en PT ; la force gagnée s'ajoute à `strength` (voir
+	 * `strengthBoostOf`) et les PT gagnés à son budget (`tpBoostOf`, immédiats). Au plus `MAX_THREAT_BOOSTS` sont
+	 * combinées. Absent = aucune.
 	 */
 	readonly boosts?: readonly Chip[]
-	/** Science de l'ennemi (amplifie `BUFF_STRENGTH`) ; absente = 0. */
+	/** Science de l'ennemi (amplifie `BUFF_STRENGTH` et `BUFF_TP`) ; absente = 0. */
 	readonly science?: number
 	/** Cases atteignables par l'ennemi EN IGNORANT mon entité comme obstacle. */
 	readonly reachable: ReachableCells
@@ -146,6 +148,8 @@ export interface EnemyThreat {
 	readonly boostTp: number
 	/** Force gagnée par ces boosts (0 : aucun boost). */
 	readonly strengthGain: number
+	/** PT gagnés par ces boosts (0 : aucun boost de PT). */
+	readonly tpGain: number
 }
 
 /** Une case que je peux atteindre, avec son danger. */
@@ -295,7 +299,8 @@ interface PreparedChip {
 interface PreparedVariant {
 	readonly boostTp: number
 	readonly strengthGain: number
-	/** PT restants après les boosts (avant tout changement d'arme). */
+	readonly tpGain: number
+	/** PT restants après les boosts (coût payé, PT gagnés ajoutés ; avant tout changement d'arme). */
 	readonly tpLeft: number
 	readonly weapons: readonly PreparedWeapon[]
 	/** Puces triées par dégâts/PT décroissant. */
@@ -339,42 +344,46 @@ function dominates(a: PreparedWeapon, b: PreparedWeapon, tp: number): boolean {
 		weaponOnlyDamage(a, tp) >= weaponOnlyDamage(b, tp)
 }
 
-/** Configurations de force : aucun boost, puis combinaisons de puces de boost (≤ `MAX_THREAT_BOOSTS`), non dominées. */
-function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; gain: number }> {
-	const boosts: Array<{ cost: number; gain: number }> = []
+/** Configurations de force et de PT : aucun boost, puis combinaisons de puces de boost (≤ `MAX_THREAT_BOOSTS`), non dominées. */
+function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; gain: number; tpGain: number }> {
+	const boosts: Array<{ cost: number; gain: number; tpGain: number }> = []
 	for (const chip of enemy.boosts ?? []) {
 		if (boosts.length >= MAX_THREAT_BOOSTS) {
 			break
 		}
 		const gain = strengthBoostOf(chip, enemy.science ?? 0)
-		if (gain > 0 && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost < tp) {
-			boosts.push({ cost: chip.cost, gain })
+		const tpGain = tpBoostOf(chip, enemy.science ?? 0)
+		if ((gain > 0 || tpGain > 0) && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= tp &&
+			chip.cost - tpGain < tp) {
+			boosts.push({ cost: chip.cost, gain, tpGain })
 		}
 	}
-	const all: Array<{ cost: number; gain: number }> = []
+	const all: Array<{ cost: number; gain: number; tpGain: number }> = []
 	for (let mask = 0; mask < (1 << boosts.length); mask++) {
 		let cost = 0
 		let gain = 0
+		let tpGain = 0
 		for (let i = 0; i < boosts.length; i++) {
 			if ((mask & (1 << i)) !== 0) {
 				cost += boosts[i]!.cost
 				gain += boosts[i]!.gain
+				tpGain += boosts[i]!.tpGain
 			}
 		}
-		if (cost < tp) {
-			all.push({ cost, gain })
+		if (cost <= tp && cost - tpGain < tp) {
+			all.push({ cost, gain, tpGain })
 		}
 	}
-	// Une configuration qui coûte plus de PT pour moins de force qu'une autre est inutile.
+	// Une configuration qui coûte plus de PT pour moins de force et de PT qu'une autre est inutile.
 	return all.filter((variant, index) => !all.some((rival, other) =>
-		other !== index && rival.gain >= variant.gain && rival.cost <= variant.cost &&
-		(rival.gain > variant.gain || rival.cost < variant.cost || other < index)))
+		other !== index && rival.gain >= variant.gain && rival.tpGain >= variant.tpGain && rival.cost <= variant.cost &&
+		(rival.gain > variant.gain || rival.tpGain > variant.tpGain || rival.cost < variant.cost || other < index)))
 }
 
 function prepareVariant(
-	enemy: ThreatEnemy, cost: number, gain: number, tp: number, indexOf: (item: ShotItem) => number
+	enemy: ThreatEnemy, cost: number, gain: number, tpGain: number, tp: number, indexOf: (item: ShotItem) => number
 ): PreparedVariant | null {
-	const tpLeft = tp - cost
+	const tpLeft = Math.floor(tp - cost + tpGain)
 	const strength = enemy.strength + gain
 	const found: PreparedWeapon[] = []
 	if (enemy.weapon !== null) {
@@ -414,6 +423,7 @@ function prepareVariant(
 	return {
 		boostTp: cost,
 		strengthGain: gain,
+		tpGain,
 		tpLeft,
 		weapons,
 		chips: sortByRatio(chips).slice(0, MAX_MASK_CHIPS).map((candidate) => ({ candidate, index: indexOf(candidate.item) }))
@@ -432,8 +442,8 @@ function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 		return items.length - 1
 	}
 	const variants: PreparedVariant[] = []
-	for (const { cost, gain } of boostVariants(enemy, tp)) {
-		const variant = prepareVariant(enemy, cost, gain, tp, indexOf)
+	for (const { cost, gain, tpGain } of boostVariants(enemy, tp)) {
+		const variant = prepareVariant(enemy, cost, gain, tpGain, tp, indexOf)
 		if (variant !== null) {
 			variants.push(variant)
 		}
@@ -570,7 +580,8 @@ function bestThreat(
 		chips: best.chips,
 		swapTp: best.weapon === null ? 0 : bestSwap,
 		boostTp: variants[bestVariant]!.boostTp,
-		strengthGain: variants[bestVariant]!.strengthGain
+		strengthGain: variants[bestVariant]!.strengthGain,
+		tpGain: variants[bestVariant]!.tpGain
 	}
 }
 

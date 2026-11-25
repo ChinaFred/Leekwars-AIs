@@ -9,7 +9,9 @@ globalThis.Fight = { turn: 1 }
 
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { LAUNCH_TYPE, isCellInLaunchPattern } = await import("../dist/Classes/Context/LaunchPattern.js")
-const { meanDamage, planShots, toCandidate, sortByRatio, strengthBoostOf } = await import("../dist/Classes/Context/ShotPlan.js")
+const {
+	isStrengthBoostType, isTpBoostType, meanDamage, planShots, toCandidate, sortByRatio, strengthBoostOf, tpBoostOf, tpBoostTurns
+} = await import("../dist/Classes/Context/ShotPlan.js")
 const { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS, MAX_THREAT_WEAPONS } = await import("../dist/Classes/Context/ThreatMap.js")
 const { EnemyMemory } = await import("../dist/Classes/Context/EnemyMemory.js")
 
@@ -612,6 +614,163 @@ test("base damage is cached per item instance: the same id with other features i
 	assert.equal(meanDamage(b, 0), 30)
 	assert.equal(meanDamage(a, 50), 15)
 	assert.equal(meanDamage(a, Number.NaN), 10)
+})
+
+test("an enemy TP boost raises its shot budget: cost paid, TP gained, only when it pays", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 77, cost: 3, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
+	const tpChip = (cost, gain) => chip({ id: 400 + cost * 10 + gain, name: `tp${gain}`, cost, features: [{ type: 32, minValue: gain, maxValue: gain }] })
+	assert.equal(buildThreatMap(me, myReach, [input], 1).dangerAt(me.cell), 20) // 7 PT : 2 tirs
+	const boosted = buildThreatMap(me, myReach, [{ ...input, boosts: [tpChip(2, 4)] }], 1)
+	assert.equal(boosted.dangerAt(me.cell), 30) // 7 − 2 + 4 = 9 PT : 3 tirs
+	const threat = boosted.breakdownAt(me.cell)[0]
+	assert.equal(threat.boostTp, 2)
+	assert.equal(threat.tpGain, 4)
+	assert.equal(threat.strengthGain, 0)
+	const useless = buildThreatMap(me, myReach, [{ ...input, boosts: [tpChip(2, 1)] }], 1)
+	assert.equal(useless.dangerAt(me.cell), 20) // 6 PT : 2 tirs, pas mieux : aucun boost retenu
+	assert.equal(useless.breakdownAt(me.cell)[0].boostTp, 0)
+})
+
+/** `Effect.BUFF_TP` n'existe pas dans les mocks de ce fichier : on le déclare le temps d'un test. */
+function withBuffTp(body) {
+	globalThis.Effect.BUFF_TP = 8
+	try {
+		body()
+	} finally {
+		delete globalThis.Effect.BUFF_TP
+	}
+}
+
+const tpBoostChip = (cost, gain, extra = {}) =>
+	chip({ id: 500 + cost * 10 + gain, name: `tpboost${gain}`, cost, features: [{ type: 32, minValue: gain, maxValue: gain, turns: 3 }], ...extra })
+
+test("tpBoostOf / tpBoostTurns / isTpBoostType: BUFF_TP is amplified by science, RAW_BUFF_TP (32) is not, no confusion with force", () => {
+	const raw = chip({ id: 90, features: [{ type: 32, minValue: 3, maxValue: 5, turns: 3 }] })
+	assert.equal(tpBoostOf(raw, 100), 4)
+	assert.equal(tpBoostOf(raw, 0), 4)
+	assert.equal(tpBoostTurns(raw), 3)
+	assert.equal(isTpBoostType(32), true)
+	assert.equal(isTpBoostType(38), false)
+	assert.equal(isTpBoostType(6), false)
+	assert.equal(isStrengthBoostType(32), false)
+	assert.equal(isTpBoostType(1), false)
+	assert.equal(strengthBoostOf(raw, 100), 0) // une puce de PT n'est pas un boost de force
+	const damage = chip({ id: 91 })
+	assert.equal(tpBoostOf(damage, 100), 0)
+	assert.equal(tpBoostTurns(damage), 0)
+	assert.equal(tpBoostOf({ ...damage, features: undefined }, 100), 0)
+	withBuffTp(() => {
+		const buff = chip({ id: 92, features: [{ type: 8, minValue: 3, maxValue: 5, turns: 2 }, { type: 32, minValue: 1, maxValue: 1, turns: 4 }] })
+		assert.equal(tpBoostOf(buff, 100), 9) // 4 × 2 amplifié + 1 brut
+		assert.equal(tpBoostOf(buff, 0), 5)
+		assert.equal(tpBoostOf(buff, Number.NaN), 5)
+		assert.equal(tpBoostOf(buff, -50), 5)
+		assert.equal(tpBoostTurns(buff), 4) // la plus longue
+		assert.equal(isTpBoostType(8), true)
+		assert.equal(tpBoostTurns(chip({ id: 93, features: [{ type: 8, minValue: 1, maxValue: 1, turns: Number.NaN }] })), 0)
+	})
+})
+
+test("enemy TP boost payoff threshold (whole shots): the extra TP must buy a shot, one TP fewer does not", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 78, cost: 4, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
+	const danger = (boost) => buildThreatMap(me, myReach, [{ ...input, boosts: [boost] }], 1)
+	assert.equal(buildThreatMap(me, myReach, [input], 1).dangerAt(me.cell), 10) // 7 PT : 1 tir de 4 PT
+	const tie = danger(tpBoostChip(2, 2)) // 7 − 2 + 2 = 7 PT : toujours 1 tir
+	assert.equal(tie.dangerAt(me.cell), 10)
+	assert.equal(tie.breakdownAt(me.cell)[0].boostTp, 0)
+	assert.equal(tie.breakdownAt(me.cell)[0].tpGain, 0)
+	const pays = danger(tpBoostChip(2, 3)) // 8 PT : 2 tirs
+	assert.equal(pays.dangerAt(me.cell), 20)
+	assert.equal(pays.breakdownAt(me.cell)[0].boostTp, 2)
+	assert.equal(pays.breakdownAt(me.cell)[0].tpGain, 3)
+	assert.equal(pays.breakdownAt(me.cell)[0].strengthGain, 0)
+	assert.equal(pays.breakdownAt(me.cell)[0].weaponShots, 2)
+})
+
+test("enemy TP boost affordability: cost = TP is castable when it gives TP back, cost > TP never is", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 79, cost: 4, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
+	const at = buildThreatMap(me, myReach, [{ ...input, boosts: [tpBoostChip(7, 8)] }], 1) // 7 − 7 + 8 = 8 PT
+	assert.equal(at.dangerAt(me.cell), 20)
+	assert.equal(at.breakdownAt(me.cell)[0].boostTp, 7)
+	const over = buildThreatMap(me, myReach, [{ ...input, boosts: [tpBoostChip(8, 12)] }], 1) // il manque 1 PT pour le lancer
+	assert.equal(over.dangerAt(me.cell), 10)
+	assert.equal(over.breakdownAt(me.cell)[0].boostTp, 0)
+	// Une puce de PT qui ne rapporte rien (gain < coût, tir déjà impossible) ne rend pas l'ennemi dangereux.
+	const noWeaponShot = addEnemy(grid, me, 3, [6, 10], { weaponItem: weapon({ id: 85, cost: 9, min: 10, max: 10 }), tp: 7 }).input
+	const none = buildThreatMap(me, myReach, [{ ...noWeaponShot, boosts: [tpBoostChip(3, 1)] }], 1) // 5 PT < 9
+	assert.equal(none.dangerAt(me.cell), 0)
+	const some = buildThreatMap(me, myReach, [{ ...noWeaponShot, boosts: [tpBoostChip(3, 6)] }], 1) // 10 PT ≥ 9
+	assert.equal(some.dangerAt(me.cell), 10)
+})
+
+test("enemy TP boost: science amplifies BUFF_TP (floor of the TP after the cast) but not the raw boost", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 86, cost: 4, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
+	const make = (type, science) => buildThreatMap(me, myReach, [{
+		...input, science, boosts: [chip({ id: 87, cost: 2, features: [{ type, minValue: 2, maxValue: 3 }] })] // moyenne 2,5
+	}], 1).breakdownAt(me.cell)[0]
+	withBuffTp(() => {
+		assert.equal(make(8, 0).boostTp, 0) // 2,5 PT : floor(7,5) = 7 → 1 tir
+		const amplified = make(8, 30) // 2,5 × 1,3 = 3,25 : floor(8,25) = 8 → 2 tirs
+		assert.equal(amplified.boostTp, 2)
+		assert.equal(amplified.damage, 20)
+		assert.ok(Math.abs(amplified.tpGain - 3.25) < 1e-9)
+		assert.equal(make(8, 100).boostTp, 2)
+		assert.equal(make(32, 100).boostTp, 0) // brut : 2,5 seulement
+		assert.equal(make(32, 0).boostTp, 0)
+	})
+})
+
+test("enemy TP boost and strength boost combine: TP bought by one pays for the other", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 88, cost: 2, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 8 })
+	const danger = (boosts) => buildThreatMap(me, myReach, [{ ...input, boosts }], 1)
+	assert.equal(danger([]).dangerAt(me.cell), 40) // 4 tirs
+	assert.equal(danger([boostChip(2, 100)]).dangerAt(me.cell), 60) // 6 PT : 3 tirs × 20
+	assert.equal(danger([tpBoostChip(1, 4)]).dangerAt(me.cell), 50) // 11 PT : 5 tirs
+	const both = danger([boostChip(2, 100), tpBoostChip(1, 4)]) // 9 PT : 4 tirs × 20
+	assert.equal(both.dangerAt(me.cell), 80)
+	const threat = both.breakdownAt(me.cell)[0]
+	assert.equal(threat.boostTp, 3)
+	assert.equal(threat.strengthGain, 100)
+	assert.equal(threat.tpGain, 4)
+})
+
+test("enemy boosts that cannot be cast do not take one of the MAX_THREAT_BOOSTS slots", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 89, cost: 1, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
+	// 3 puces de PT à 8 PT (> 7 PT de l'ennemi : jamais lançables), puis une puce de force abordable.
+	const unaffordable = [1, 2, 3].map((i) => tpBoostChip(8, 12, { id: 700 + i }))
+	const result = buildThreatMap(me, myReach, [{ ...input, boosts: [...unaffordable, boostChip(2, 100)] }], 1)
+	assert.equal(result.dangerAt(me.cell), 100) // la protéine : 5 PT → 5 tirs × 20 > 7 tirs × 10
+	assert.equal(result.breakdownAt(me.cell)[0].boostTp, 2)
+})
+
+test("EnemyMemory.updateThreatMap: a ready TP boost chip raises the danger, one in cooldown does not", () => {
+	const gun = weapon({ id: 94, cost: 4, min: 10, max: 10 })
+	const motivation = tpBoostChip(2, 4, { cooldown: 5 })
+	const scenario = memoryScenario({ enemyWeapon: gun, enemyChips: [motivation] })
+	run(scenario)
+	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 30) // 10 − 2 + 4 = 12 PT : 3 tirs (2 sans)
+	scenario.memory.getProfile(2).startCooldown(motivation)
+	scenario.memory.updateReachable(scenario.me, [], [scenario.enemy], 2)
+	scenario.memory.updateThreatMap(scenario.me, [scenario.enemy], 2)
+	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 20)
 })
 
 test("truncated reachable inputs are flagged", () => {

@@ -1,9 +1,9 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
-import { hasDamage, strengthBoostOf } from "./ShotPlan.js"
+import { hasDamage, strengthBoostOf, tpBoostOf } from "./ShotPlan.js"
 import { buildThreatMap, GeometricShotCells, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
 
 /** Multiplicateur de coup critique : constante officielle CRITICAL_FACTOR = 1.3. */
@@ -241,7 +241,7 @@ export class EnemyMemory {
 			const chips = profile.knownChips.filter((chip) => hasDamage(chip) && profile.isChipReady(chip))
 			const science = enemy.science ?? 0
 			const boosts = profile.knownChips.filter((chip) =>
-				strengthBoostOf(chip, science) > 0 && profile.isChipReady(chip))
+				(strengthBoostOf(chip, science) > 0 || tpBoostOf(chip, science) > 0) && profile.isChipReady(chip))
 			if ((weapon === null || !hasDamage(weapon)) && otherWeapons.length === 0 && chips.length === 0) {
 				continue
 			}

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
@@ -61,6 +61,45 @@ export function strengthBoostOf(chip: Chip, science: number): number {
 /** La feature est-elle un boost de force (`BUFF_STRENGTH` ou `RAW_BUFF_STRENGTH`) ? */
 export function isStrengthBoostType(type: number): boolean {
 	return type === Effect.BUFF_STRENGTH || type === (Effect.RAW_BUFF_STRENGTH ?? RAW_BUFF_STRENGTH_ID)
+}
+
+/** Identifiant officiel de l'effet « PT bruts » (EFFECT_RAW_BUFF_TP = 32) si l'API ne le nomme pas. */
+const RAW_BUFF_TP_ID = 32
+
+/** La feature est-elle un boost de PT (`BUFF_TP`, amplifié par la science, ou `RAW_BUFF_TP`, non amplifiable) ? */
+export function isTpBoostType(type: number): boolean {
+	return type === Effect.BUFF_TP || type === (Effect.RAW_BUFF_TP ?? RAW_BUFF_TP_ID)
+}
+
+/**
+ * PT supplémentaires qu'apporte une puce de boost de PT lancée sur soi (par tour d'effet) : moyenne des features
+ * `BUFF_TP` (× (1 + science / 100)) et `RAW_BUFF_TP`. 0 si la puce ne donne pas de PT. Hypothèse non vérifiée :
+ * les PT s'ajoutent immédiatement au lancer, puis à chaque tour où l'effet reste actif.
+ */
+export function tpBoostOf(chip: Chip, science: number): number {
+	const raw = Effect.RAW_BUFF_TP ?? RAW_BUFF_TP_ID
+	const amplifier = 1 + (Number.isFinite(science) && science > 0 ? science : 0) / 100
+	let gain = 0
+	for (const feature of chip.features ?? []) {
+		const mean = (feature.minValue + feature.maxValue) / 2
+		if (feature.type === Effect.BUFF_TP) {
+			gain += mean * amplifier
+		} else if (feature.type === raw) {
+			gain += mean
+		}
+	}
+	return gain > 0 ? gain : 0
+}
+
+/** Durée en tours (la plus longue) des features de boost de PT d'une puce ; 0 si elle n'en a pas. */
+export function tpBoostTurns(chip: Chip): number {
+	let turns = 0
+	for (const feature of chip.features ?? []) {
+		if (isTpBoostType(feature.type)) {
+			turns = Math.max(turns, Number.isFinite(feature.turns) ? feature.turns : 0)
+		}
+	}
+	return turns
 }
 
 /** Durée en tours (la plus longue) des features de boost de force d'une puce ; 0 si elle n'en a pas. */

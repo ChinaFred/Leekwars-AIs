@@ -189,4 +189,6 @@ declare const Effect: {
 	readonly BUFF_AGILITY: number
 	readonly BUFF_MP: number
 	readonly BUFF_TP: number
+	/** Nom non confirmé dans la doc TypeScript (EFFECT_RAW_BUFF_TP = 32 en LeekScript) : optionnel. */
+	readonly RAW_BUFF_TP?: number
 }

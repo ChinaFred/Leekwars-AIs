@@ -1,11 +1,14 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import {
 	baseMeanDamage,
 	isStrengthBoostType,
+	isTpBoostType,
 	maxUsesOf,
 	strengthBoostOf,
-	strengthBoostTurns
+	strengthBoostTurns,
+	tpBoostOf,
+	tpBoostTurns
 } from "../Classes/Context/ShotPlan.js"
 import { reportError } from "../Toolbox/Debug.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
@@ -58,6 +61,54 @@ export function pickBoost(me: Me, tp: number): BoostOption | null {
 	return best
 }
 
+/** Un boost de PT est-il déjà actif sur moi (effet de PT non expiré) ? */
+export function hasActiveTpBoost(me: Me): boolean {
+	return (me.effects ?? []).some((effect) => isTpBoostType(effect.type) && effect.turns > 0)
+}
+
+/** Boosts de PT prêts : `gain` = PT ajoutés par tour d'effet ; abordables avec `tp` PT ; vide si un est actif. */
+export function readyTpBoosts(me: Me, tp: number): BoostOption[] {
+	const found: BoostOption[] = []
+	if (hasActiveTpBoost(me)) {
+		return found
+	}
+	for (const chip of me.chips ?? []) {
+		const gain = tpBoostOf(chip, me.science ?? 0)
+		if (!(gain > 0) || !Number.isInteger(chip.cost) || chip.cost <= 0 || chip.cost > tp ||
+			chip.currentCooldown !== 0) {
+			continue
+		}
+		found.push({ chip, gain, turns: tpBoostTurns(chip) })
+	}
+	return found
+}
+
+/**
+ * Dégâts nets d'un boost de PT (`option.gain` PT immédiatement, puis à chaque tour couvert) pour `weapon` :
+ * ce tour (si je tire : `inContactNow`), PT − coût + gain contre PT ; puis `FUTURE_TURN_WEIGHT` × (durée − 1)
+ * tours à `fullTp` + gain contre `fullTp`. Les dégâts sont plafonnés par les PV de l'ennemi. Les PT sont
+ * convertis en tirs entiers (`floor(PT / coût)`), donc un gain de PT inférieur au coût de l'arme peut ne rien
+ * valoir. Estimation à une arme, pas une simulation du plan.
+ */
+export function tpBoostNetDamage(
+	me: Me, weapon: Weapon, option: BoostOption, tp: number, fullTp: number, inContactNow: boolean,
+	enemyLife = Number.POSITIVE_INFINITY
+): number {
+	const base = baseMeanDamage(weapon)
+	if (!(base > 0) || !(weapon.cost > 0)) {
+		return 0
+	}
+	const limit = maxUsesOf(weapon)
+	const strength = Number.isFinite(me.strength) ? me.strength : 0
+	const life = Number.isFinite(enemyLife) && enemyLife > 0 ? enemyLife : Number.POSITIVE_INFINITY
+	const damage = (budget: number): number =>
+		Math.min(life, Math.max(0, Math.min(Math.floor(budget / weapon.cost), limit)) * base * (1 + strength / 100))
+	const now = inContactNow ? damage(tp - option.chip.cost + option.gain) - damage(tp) : 0
+	const futureTurns = Math.max(0, option.turns - 1)
+	const future = futureTurns * (damage(fullTp + option.gain) - damage(fullTp)) * FUTURE_TURN_WEIGHT
+	return now + future
+}
+
 /**
  * Dégâts supplémentaires (nets du PT dépensé) d'un boost lancé maintenant avec `tp` PT, pour `weapon` : tirs de
  * ce tour avec et sans boost, plus `FUTURE_TURN_WEIGHT` × les tirs d'un tour plein pour chaque tour futur
@@ -94,7 +145,7 @@ function maxWeaponRange(me: Me): number {
 	return range
 }
 
-function cast(me: Me, option: BoostOption, reason: string): boolean {
+function cast(me: Me, option: BoostOption, reason: string, unit: "STR" | "TP" = "STR"): boolean {
 	const { chip } = option
 	if (!me.canUseChip(chip, me)) {
 		log(() => `[Boost] ${chip.name}: not usable now (${reason})`, LOG_CONTEXT.CHIP)
@@ -104,7 +155,7 @@ function cast(me: Me, option: BoostOption, reason: string): boolean {
 	const tpBefore = me.tp
 	const result = me.useChip(chip, me)
 	log(
-		() => `[Boost] cast ${chip.name} (${reason}): +${option.gain.toFixed(0)} STR for ${option.turns} turns, ` +
+		() => `[Boost] cast ${chip.name} (${reason}): +${option.gain.toFixed(0)} ${unit} for ${option.turns} turns, ` +
 			`TP ${tpBefore} → ${me.tp}, STR ${strengthBefore} → ${me.strength}, result ${String(result)}`,
 		LOG_CONTEXT.CHIP
 	)
@@ -128,6 +179,23 @@ export function castBoostInContact(me: Me, enemy: Entity | null): void {
 			me.life / me.maxLife < MIN_LIFE_RATIO_FOR_BOOST) {
 			return
 		}
+		const fullTp = me.tp
+		// Les PT d'abord : un boost de PT change le budget que le boost de force et le plan verront.
+		let bestTp: { option: BoostOption; net: number } | null = null
+		for (const option of readyTpBoosts(me, me.tp)) {
+			const net = tpBoostNetDamage(me, weapon, option, me.tp, fullTp, true, enemy.life)
+			if (bestTp === null || net > bestTp.net) {
+				bestTp = { option, net }
+			}
+		}
+		if (bestTp !== null) {
+			const chosenTp = bestTp
+			if (chosenTp.net > 0) {
+				cast(me, chosenTp.option, `in contact, net ${chosenTp.net.toFixed(1)} dmg`, "TP")
+			} else {
+				log(() => `[Boost] ${chosenTp.option.chip.name}: skipped in contact, net ${chosenTp.net.toFixed(1)} dmg`, LOG_CONTEXT.CHIP)
+			}
+		}
 		let best: { option: BoostOption; net: number } | null = null
 		for (const option of readyBoosts(me, me.tp)) {
 			const net = boostNetDamage(me, weapon, option, me.tp, enemy.life)
@@ -150,19 +218,40 @@ export function castBoostInContact(me: Me, enemy: Entity | null): void {
 }
 
 /**
- * Après le plan : lance un boost de force avec les PT que le plan n'a pas dépensés (donc sans coût), à condition
- * qu'il couvre le tour suivant (durée ≥ 2) et que l'ennemi puisse être à portée de tir d'ici là (portée + deux
- * tours de mes PM + ses PM). `mpAtStart` : mes PM au début du tour.
+ * Après le plan : lance un boost (PT puis force) avec les PT que le plan n'a pas dépensés (donc sans coût), à
+ * condition qu'il couvre le tour suivant (durée ≥ 2) et que l'ennemi puisse être à portée de tir d'ici là
+ * (portée + deux tours de mes PM + ses PM). Un boost de PT n'est lancé que si les PT gagnés les tours suivants
+ * valent des dégâts (tirs entiers). `mpAtStart` : mes PM au début du tour ; `tpAtStart` : mes PT au début du
+ * tour (base du calcul des tours suivants).
  */
-export function castBoostWithSpareTp(me: Me, enemy: Entity | null, mpAtStart: number): void {
+export function castBoostWithSpareTp(me: Me, enemy: Entity | null, mpAtStart: number, tpAtStart = me.tp): void {
 	try {
-		const option = pickBoost(me, me.tp)
-		if (option === null || enemy === null || me.life <= 0 || option.turns < 2 || (me.weapons ?? []).length === 0) {
+		if (enemy === null || me.life <= 0 || (me.weapons ?? []).length === 0) {
 			return
 		}
 		const reach = maxWeaponRange(me) + 2 * mpAtStart + (enemy.mp ?? 0)
 		const distance = me.distance(enemy)
 		if (!Number.isFinite(distance) || !Number.isFinite(reach) || distance > reach) {
+			return
+		}
+		const weapon = me.weapon ?? pickOpeningWeapon(me)
+		if (weapon !== null) {
+			let bestTp: { option: BoostOption; net: number } | null = null
+			for (const option of readyTpBoosts(me, me.tp)) {
+				if (option.turns < 2) {
+					continue
+				}
+				const net = tpBoostNetDamage(me, weapon, option, me.tp, tpAtStart, false, enemy.life)
+				if (bestTp === null || net > bestTp.net) {
+					bestTp = { option, net }
+				}
+			}
+			if (bestTp !== null && bestTp.net > 0) {
+				cast(me, bestTp.option, `spare TP, enemy within ${reach} cells, net ${bestTp.net.toFixed(1)} dmg`, "TP")
+			}
+		}
+		const option = pickBoost(me, me.tp)
+		if (option === null || option.turns < 2) {
 			return
 		}
 		cast(me, option, `spare TP, enemy within ${reach} cells`)

@@ -7,8 +7,8 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4
 globalThis.Fight = { turn: 2 }
 
 const {
-	boostNetDamage, castBoostInContact, castBoostWithSpareTp, hasActiveStrengthBoost, logChipInventory, pickBoost,
-	FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST
+	boostNetDamage, castBoostInContact, castBoostWithSpareTp, hasActiveStrengthBoost, hasActiveTpBoost, logChipInventory,
+	pickBoost, readyTpBoosts, tpBoostNetDamage, FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST
 } = await import("../dist/Brain/StrengthBoost.js")
 const { strengthBoostTurns } = await import("../dist/Classes/Context/ShotPlan.js")
 const { initLeekLogging, LogConfig } = await import("../dist/Toolbox/Logger.js")
@@ -127,6 +127,165 @@ test("invalid distances or life never trigger a cast", () => {
 	const noMp = makeMe({ distance: 10 })
 	castBoostWithSpareTp(noMp.me, noMp.enemy, undefined)
 	for (const w of [nan, noMax, noMp]) assert.deepEqual(w.casts, [])
+})
+
+const tpChip = (gain, extra = {}) => ({
+	id: 30, name: "motivation", cost: 4, cooldown: 5, currentCooldown: 0, minRange: 0, maxRange: 0, needsLos: false,
+	features: [{ type: 32, minValue: gain, maxValue: gain, turns: 3 }], ...extra
+})
+
+test("TP boost in contact: cast when the extra TP buy whole shots over the covered turns", () => {
+	const w = makeMe({ chips: [tpChip(4)] }) // 10 PT : 2 tirs ; 14 PT les 2 tours suivants : 3 tirs
+	castBoostInContact(w.me, w.enemy)
+	assert.deepEqual(w.casts, ["motivation"])
+	assert.equal(w.me.tp, 6) // coût 4 ; les PT gagnés dépendent du moteur, le mock n'en ajoute pas
+})
+
+test("TP boost: a gain too small to buy another shot is not worth its cost (floor of whole shots)", () => {
+	const small = makeMe({ chips: [tpChip(1)] }) // 11 PT : toujours 2 tirs
+	castBoostInContact(small.me, small.enemy)
+	const alreadyActive = makeMe({ chips: [tpChip(4)], effects: [{ type: 32, turns: 2 }] })
+	castBoostInContact(alreadyActive.me, alreadyActive.enemy)
+	const killable = makeMe({ chips: [tpChip(4)] })
+	killable.enemy.life = 40 // les dégâts sont plafonnés : plus de tirs ne tuent pas davantage
+	castBoostInContact(killable.me, killable.enemy)
+	for (const w of [small, alreadyActive, killable]) assert.deepEqual(w.casts, [])
+})
+
+test("TP boost: the next turns are valued from the turn-start TP, cast with spare TP only if they pay", () => {
+	const spare = makeMe({ chips: [tpChip(4)], tp: 6, distance: 12 })
+	castBoostWithSpareTp(spare.me, spare.enemy, 4, 10) // PT de départ 10 : 14 PT → 3 tirs
+	assert.deepEqual(spare.casts, ["motivation"])
+	const noGain = makeMe({ chips: [tpChip(1)], tp: 6, distance: 12 })
+	castBoostWithSpareTp(noGain.me, noGain.enemy, 4, 10)
+	const brief = makeMe({ chips: [tpChip(4, { features: [{ type: 32, minValue: 4, maxValue: 4, turns: 1 }] })], tp: 6, distance: 12 })
+	castBoostWithSpareTp(brief.me, brief.enemy, 4, 10)
+	const far = makeMe({ chips: [tpChip(4)], tp: 6, distance: 40 })
+	castBoostWithSpareTp(far.me, far.enemy, 4, 10)
+	for (const w of [noGain, brief, far]) assert.deepEqual(w.casts, [])
+})
+
+test("with a TP and a strength boost, the TP boost is cast first so the strength decision sees the real TP", () => {
+	const w = makeMe({ chips: [protein(), tpChip(4)] })
+	castBoostInContact(w.me, w.enemy)
+	assert.deepEqual(w.casts[0], "motivation")
+})
+
+test("TP boost then strength boost, whatever the order of the chip list, and each only once per turn", () => {
+	// Comme le moteur : le boost de PT ajoute ses PT au lancer (le mock de base ne le fait pas).
+	const gaining = (w) => {
+		const useChip = w.me.useChip
+		w.me.useChip = (chip, target) => {
+			const result = useChip(chip, target)
+			if (chip.name === "motivation") w.me.tp += 4
+			return result
+		}
+		return w
+	}
+	for (const chips of [[protein(), tpChip(4)], [tpChip(4), protein()]]) {
+		const w = gaining(makeMe({ chips }))
+		castBoostInContact(w.me, w.enemy)
+		assert.deepEqual(w.casts, ["motivation", "protein"])
+		assert.equal(w.me.tp, 7) // 10 − 4 + 4 − 3
+		castBoostInContact(w.me, w.enemy) // cooldowns en cours : rien de plus
+		castBoostWithSpareTp(w.me, w.enemy, 4, 10)
+		assert.deepEqual(w.casts, ["motivation", "protein"])
+	}
+	const spare = gaining(makeMe({ chips: [protein(), tpChip(4)], tp: 8, distance: 12 }))
+	castBoostWithSpareTp(spare.me, spare.enemy, 4, 10)
+	assert.deepEqual(spare.casts, ["motivation", "protein"])
+})
+
+test("hasActiveTpBoost / readyTpBoosts: expired, foreign or force effects do not block; cooldown, cost and an active boost do", () => {
+	assert.equal(hasActiveTpBoost({ effects: [{ type: 32, turns: 2 }] }), true)
+	assert.equal(hasActiveTpBoost({ effects: [{ type: 32, turns: 0 }] }), false)
+	assert.equal(hasActiveTpBoost({ effects: [{ type: 38, turns: 3 }] }), false) // force brute : autre effet
+	assert.equal(hasActiveTpBoost({ effects: [{ type: 2, turns: 3 }] }), false)
+	assert.equal(hasActiveTpBoost({}), false)
+	const names = (me, tp) => readyTpBoosts(me, tp).map((option) => option.chip.name)
+	assert.deepEqual(names(makeMe({ chips: [tpChip(4)] }).me, 10), ["motivation"])
+	assert.deepEqual(names(makeMe({ chips: [tpChip(4)] }).me, 4), ["motivation"]) // coût = PT : lançable
+	assert.deepEqual(names(makeMe({ chips: [tpChip(4)] }).me, 3), []) // coût > PT
+	assert.deepEqual(names(makeMe({ chips: [tpChip(4, { currentCooldown: 1 })] }).me, 10), [])
+	assert.deepEqual(names(makeMe({ chips: [tpChip(4)], effects: [{ type: 32, turns: 1 }] }).me, 10), [])
+	assert.deepEqual(names(makeMe({ chips: [protein(), machineGun, tpChip(0)] }).me, 10), []) // ni force, ni arme, ni coût nul
+	const option = readyTpBoosts(makeMe({ chips: [tpChip(4)] }).me, 10)[0]
+	assert.equal(option.gain, 4)
+	assert.equal(option.turns, 3)
+})
+
+test("tpBoostNetDamage: whole shots only, capped by the enemy life, a boost gives the extra turns weight", () => {
+	const { me } = makeMe()
+	const shot = 22.5 * 1.1 // machine_gun (coût 4) à force 10
+	const option = (gain, turns = 3) => ({ chip: tpChip(4), gain, turns })
+	const net = (gain, tp, fullTp, now, life, weapon = machineGun, turns = 3) =>
+		tpBoostNetDamage(me, weapon, option(gain, turns), tp, fullTp, now, life)
+	// ce tour : 10 − 4 + 4 = 10 PT, comme avant (2 tirs) ; ensuite 2 tours à 14 PT (3 tirs) au lieu de 10 (2 tirs)
+	assert.ok(Math.abs(net(4, 10, 10, true) - 2 * shot * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.ok(Math.abs(net(4, 10, 10, false) - 2 * shot * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.ok(Math.abs(net(4, 10, 10, false, undefined, machineGun, 2) - shot * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.equal(net(4, 10, 10, false, undefined, machineGun, 1), 0) // un seul tour : rien de futur
+	// gain inférieur au coût de l'arme : 11 PT achètent toujours 2 tirs, et le lancer coûte un tir ce tour-ci
+	assert.equal(net(1, 10, 10, false), 0)
+	assert.ok(Math.abs(net(1, 10, 10, true) + shot) < 1e-9) // 7 PT : 1 tir de moins
+	// seuil de gain : 10 PT de départ + 2 = 12 achètent le 3e tir, + 1 non
+	assert.ok(net(2, 10, 10, false) > 0)
+	// les PT de début de tour (pas les PT restants) servent de base aux tours suivants
+	assert.equal(net(2, 6, 8, false), 0) // 8 → 10 PT : 2 tirs dans les deux cas
+	assert.ok(net(2, 6, 10, false) > 0) // 10 → 12 PT : un tir de plus
+	// plafond par PV ennemis : 3 tirs = 74,25 ; 2 tirs = 49,5
+	assert.equal(net(4, 10, 10, false, 49.5), 0)
+	assert.ok(Math.abs(net(4, 10, 10, false, 49.6) - 2 * 0.1 * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.ok(Math.abs(net(4, 10, 10, false, 74.25) - 2 * shot * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.ok(Math.abs(net(4, 10, 10, false, 1000) - 2 * shot * FUTURE_TURN_WEIGHT) < 1e-9)
+	for (const invalidLife of [0, -5, Number.NaN]) {
+		assert.ok(Math.abs(net(4, 10, 10, false, invalidLife) - 2 * shot * FUTURE_TURN_WEIGHT) < 1e-9, `${invalidLife}`) // ignoré
+	}
+	// usages maximum de l'arme : 2 tirs max, donc aucun gain de PT ne vaut quoi que ce soit
+	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, maxUses: 2 }), 0)
+	// arme sans dégâts ou sans coût
+	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, features: [] }), 0)
+	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, cost: 0 }), 0)
+})
+
+test("BUFF_TP boost: amplified by my science, so the same chip crosses the payoff threshold with more science", () => {
+	globalThis.Effect.BUFF_TP = 8
+	try {
+		const buff = () => tpChip(4, { features: [{ type: 8, minValue: 1, maxValue: 1, turns: 3 }] })
+		const plain = makeMe({ chips: [buff()] }) // +1 PT : 11 PT, toujours 2 tirs
+		castBoostInContact(plain.me, plain.enemy)
+		assert.deepEqual(plain.casts, [])
+		const learned = makeMe({ chips: [buff()] })
+		learned.me.science = 100 // +2 PT : 12 PT, un 3e tir
+		castBoostInContact(learned.me, learned.enemy)
+		assert.deepEqual(learned.casts, ["motivation"])
+		const active = makeMe({ chips: [buff()], effects: [{ type: 8, turns: 2 }] })
+		active.me.science = 100
+		castBoostInContact(active.me, active.enemy)
+		assert.deepEqual(active.casts, [])
+	} finally {
+		delete globalThis.Effect.BUFF_TP
+	}
+})
+
+test("TP boost with spare TP: valued from the turn-start TP, capped by the enemy life", () => {
+	const gain2 = () => tpChip(4, { features: [{ type: 32, minValue: 2, maxValue: 2, turns: 3 }] })
+	const fromTen = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
+	castBoostWithSpareTp(fromTen.me, fromTen.enemy, 4, 10) // 10 → 12 PT : un 3e tir
+	assert.deepEqual(fromTen.casts, ["motivation"])
+	const fromEight = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
+	castBoostWithSpareTp(fromEight.me, fromEight.enemy, 4, 8) // 8 → 10 PT : 2 tirs dans les deux cas
+	assert.deepEqual(fromEight.casts, [])
+	const sparePtOnly = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
+	castBoostWithSpareTp(sparePtOnly.me, sparePtOnly.enemy, 4) // PT de départ omis = PT restants (6 → 8 : un tir de plus)
+	assert.deepEqual(sparePtOnly.casts, ["motivation"])
+	const killable = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
+	killable.enemy.life = 40 // 2 tirs suffisent déjà
+	castBoostWithSpareTp(killable.me, killable.enemy, 4, 10)
+	assert.deepEqual(killable.casts, [])
+	const active = makeMe({ chips: [gain2()], tp: 6, distance: 12, effects: [{ type: 32, turns: 2 }] })
+	castBoostWithSpareTp(active.me, active.enemy, 4, 10)
+	assert.deepEqual(active.casts, [])
 })
 
 test("a refused cast (canUseChip false) spends nothing", () => {

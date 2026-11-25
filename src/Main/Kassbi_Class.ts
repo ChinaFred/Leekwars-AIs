@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 13
+// file version: 14
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { castBoostInContact, castBoostWithSpareTp, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -240,6 +240,7 @@ export function turn(): void {
 		displayDangerZone()
 
 		const mpAtStart = me.mp
+		const tpAtStart = me.tp
 		// Avant le plan : en contact, un boost de force rentable change la force et les PT que le plan verra.
 		castBoostInContact(me, target)
 
@@ -250,7 +251,7 @@ export function turn(): void {
 
 		// Après le plan : l'équipement du tour 1 et le boost de force n'utilisent que des PT non dépensés par le plan.
 		equipOpeningWeapon(me)
-		castBoostWithSpareTp(me, target, mpAtStart)
+		castBoostWithSpareTp(me, target, mpAtStart, tpAtStart)
 		recordMyTurnEnd(me)
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)

@@ -8,7 +8,7 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4
 globalThis.Fight = { turn: 1 }
 
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
-const { planShots, toCandidate, sortByRatio, strengthBoostOf } = await import("../dist/Classes/Context/ShotPlan.js")
+const { planShots, toCandidate, sortByRatio, strengthBoostOf, tpBoostOf } = await import("../dist/Classes/Context/ShotPlan.js")
 const {
 	buildThreatMap, GeometricShotCells, MAX_SIGHT_CACHE, MAX_THREAT_BOOSTS, MAX_THREAT_WEAPONS
 } = await import("../dist/Classes/Context/ThreatMap.js")
@@ -100,26 +100,32 @@ const reach = (ent, mp, ignore) => computeReachableCells(ent, mp, 1, { ignoreEnt
 // DOCUMENTÉS de la carte (jamais exacts à 100 %, voir docs/strategies.md) : au plus MAX_THREAT_WEAPONS armes,
 // une arme dominée écartée, une configuration de boosts dominée (plus de PT pour moins de force) écartée.
 
-function naiveBest(enemy, target, provider, counter) {
+// `prune: false` : aucune configuration écartée par dominance (énumération complète des sous-ensembles de boosts,
+// force et PT) — le MAX doit être identique, la dominance n'étant qu'un élagage.
+function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
 	const boosts = []
 	for (const chip of enemy.boosts ?? []) {
 		if (boosts.length >= MAX_THREAT_BOOSTS) break
 		const gain = strengthBoostOf(chip, enemy.science ?? 0)
-		if (gain > 0 && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost < tp) boosts.push({ cost: chip.cost, gain })
+		const tpGain = tpBoostOf(chip, enemy.science ?? 0)
+		// Un boost sans PT gagnés doit rester abordable (coût < PT) ; un boost de PT peut valoir son coût.
+		if ((gain > 0 || tpGain > 0) && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= tp &&
+			chip.cost - tpGain < tp) boosts.push({ cost: chip.cost, gain, tpGain })
 	}
 	const combos = []
 	for (let mask = 0; mask < 1 << boosts.length; mask++) {
 		let cost = 0
 		let gain = 0
-		boosts.forEach((boost, i) => { if (mask & (1 << i)) { cost += boost.cost; gain += boost.gain } })
-		if (cost < tp) combos.push({ cost, gain })
+		let tpGain = 0
+		boosts.forEach((boost, i) => { if (mask & (1 << i)) { cost += boost.cost; gain += boost.gain; tpGain += boost.tpGain } })
+		if (cost <= tp && cost - tpGain < tp) combos.push({ cost, gain, tpGain })
 	}
-	const configs = combos.filter((v, i) => !combos.some((o, j) => j !== i && o.gain >= v.gain && o.cost <= v.cost &&
-		(o.gain > v.gain || o.cost < v.cost || j < i)))
+	const configs = !prune ? combos : combos.filter((v, i) => !combos.some((o, j) => j !== i && o.gain >= v.gain &&
+		o.tpGain >= v.tpGain && o.cost <= v.cost && (o.gain > v.gain || o.tpGain > v.tpGain || o.cost < v.cost || j < i)))
 	let best = 0
-	for (const { cost, gain } of configs) {
-		const tpLeft = tp - cost
+	for (const { cost, gain, tpGain } of configs) {
+		const tpLeft = Math.floor(tp - cost + tpGain)
 		const strength = enemy.strength + gain
 		const found = []
 		if (enemy.weapon) {
@@ -478,6 +484,61 @@ test("science amplifies BUFF_STRENGTH boosts but not the raw boost, at the thres
 	assert.equal(make(6, 0), 0) // 51: 5 x 15.1 = 75.5 < 100
 	assert.equal(make(38, 100), 0) // raw: 51 only
 	assert.equal(make(38, 0), 0)
+})
+
+// --- boosts de PT : équivalence avec l'énumération complète ----------------------------------------------
+
+test("randomised equivalence with TP boosts (fixed seeds): the map equals the naive max over ALL boost subsets", () => {
+	globalThis.Effect.BUFF_TP = 8 // BUFF_TP (amplifié par la science) en plus du brut (32)
+	try {
+		let cells = 0
+		let tpBoosted = 0
+		let mixed = 0
+		let positive = 0
+		for (let seed = 4000; seed < 4200; seed++) {
+			const sc = randomScenario(seed)
+			const r = seeded(seed ^ 0x7a11)
+			const int = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1))
+			const inputs = sc.enemies.map((e) => {
+				const tpBoosts = Array.from({ length: int(1, 2) }, () => boostOf(int(1, 7), int(1, 9), r() < 0.5 ? 8 : 32))
+				return { ...e.input, boosts: [...tpBoosts, ...(e.input.boosts ?? [])], reachable: reach(e.ent, e.mp, sc.me.id) }
+			})
+			const myReach = reach(sc.me, sc.myMp)
+			const map = buildThreatMap(sc.me, myReach, inputs, 1)
+			assert.equal(map.truncated, false, `seed ${seed}`)
+			const naive = new GeometricShotCells()
+			for (const mine of myReach.entries()) {
+				cells++
+				let sum = 0
+				let sumUnpruned = 0
+				const perEnemy = new Map()
+				for (const input of inputs) {
+					const pruned = naiveBest(input, mine.cell, naive, { n: 0 })
+					const full = naiveBest(input, mine.cell, naive, { n: 0 }, { prune: false })
+					assert.ok(Math.abs(pruned - full) < 1e-6, `seed ${seed}: dominance changed the maximum`)
+					if (full > 0) perEnemy.set(input.id, full)
+					sum += pruned
+					sumUnpruned += full
+				}
+				const where = `seed ${seed} cell ${mine.cell.x},${mine.cell.y}`
+				assert.ok(Math.abs(map.dangerAt(mine.cell) - sumUnpruned) < 1e-6, `${where}: ${map.dangerAt(mine.cell)} vs ${sumUnpruned}`)
+				for (const threat of map.breakdownAt(mine.cell)) {
+					assert.ok(Math.abs(threat.damage - perEnemy.get(threat.enemyId)) < 1e-6, where)
+					assert.equal(threat.boostTp > 0, threat.strengthGain > 0 || threat.tpGain > 0, where)
+					assert.ok(threat.boostTp <= inputs.find((i) => i.id === threat.enemyId).tp, `${where}: boost paid beyond the TP`)
+					if (threat.tpGain > 0) tpBoosted++
+					if (threat.tpGain > 0 && threat.strengthGain > 0) mixed++
+				}
+				if (sum > 0) positive++
+			}
+		}
+		assert.ok(cells > 800, `cells ${cells}`)
+		assert.ok(positive > 400, `positive ${positive}`)
+		assert.ok(tpBoosted > 30, `tpBoosted ${tpBoosted}`)
+		assert.ok(mixed > 5, `mixed ${mixed}`)
+	} finally {
+		delete globalThis.Effect.BUFF_TP
+	}
 })
 
 // --- EnemyMemory : ennemi « armé » ou non ---------------------------------------------------------
