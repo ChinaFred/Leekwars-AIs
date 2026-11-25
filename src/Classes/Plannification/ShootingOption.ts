@@ -1,8 +1,9 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { Coordinates } from "../Context/Coordinates.js"
 import { ItemModel } from "../Items/Item.js"
 import { WeaponModel } from "../Items/Weapon.js"
+import { isLogEnabled, log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { Action } from "./Action.js"
 
 export class ShootingOption {
@@ -58,9 +59,12 @@ export class ShootingOption {
 	}
 
 	debugUsedItems(): void {
-		Debug.log("used items in shooting option")
+		if (!isLogEnabled(LOG_CONTEXT.SHOOTING)) {
+			return
+		}
+		log("used items in shooting option", LOG_CONTEXT.SHOOTING)
 		for (const item of this.usedItems) {
-			Debug.log(item.name)
+			log(item.name, LOG_CONTEXT.SHOOTING)
 		}
 	}
 }

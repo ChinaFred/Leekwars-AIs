@@ -2,6 +2,33 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — FEAT: erreurs en rouge, zone accessible et zone de danger affichées sur le terrain
+
+- `Toolbox/Logger.ts` (v2) : le contexte `ERROR` sort en rouge via `Debug.log(texte, Color.rgb(255, 0, 0))` (texte inchangé ; repli sans couleur si l'appel à 2 arguments lève). Aucun équivalent TypeScript de `debugE` n'est documenté, la forme `Debug.log(valeur, couleur)` n'est pas confirmée en TS. Nouveaux contextes `ACCESSIBLE_ZONE` et `DANGER_ZONE` (18 contextes, actifs par défaut).
+- `Toolbox/Marker.ts` (v1, nouveau) : seul module appelant `Debug.mark` / `markText` / `clearMarks` / `pause` / `show` ; `showAccessibleZones` (par poireau : clearMarks, log du nom, mark, markText, pause ; moi, alliés, ennemis ; clearMarks final) et `showDangerZone` (paliers vert → rouge, dégâts arrondis par case, plafond de 120 appels `markText`, pause modifiable). Appelés par `Kassbi_Class.ts` (v10) après `observeReachableCells` et `observeThreatMap`, sous try/catch + `reportError` ; aucun effet sur `planAct`.
+- `Debug.ts` (v5) et `Coordinates.ts` (v2) : leurs `Debug.pause` / `Debug.mark` passent par `Marker.ts` ; les drapeaux `DEBUGS.*` (faux par défaut) restent requis, en plus du contexte actif. `types/leekwars.d.ts` : `markText`, `show`, `clearMarks` ajoutés (documentés dans la table TS ; `color` de `markText` optionnel).
+- Tests : `tests/marker.test.mjs` (nouveau) ; `tests/logging-policy.test.mjs` étendu (visuel confiné à `Marker.ts`). Ajustements de `tests/logging.test.mjs` dus au changement voulu : ERROR passe par `Debug.log` en rouge (2 assertions), 2 nouveaux contextes dans la table des lignes de `turn()`, normalisation du nom d'allié dans les lignes comparées entre mondes (le nom figure maintenant dans le log).
+
+## 2026-11-25 — FEAT: journalisation par contexte (`log(texte, contexte)`)
+
+- `Toolbox/Logger.ts` (v1) : fonction unique `log(texte, contexte, options?)` (texte ou fonction paresseuse, jamais d'exception), `LOG_CONTEXT` (16 contextes fermés), `LogConfig` (un drapeau par contexte, tous actifs par défaut), `initLeekLogging`, `resetLeekLogging`, `isLogEnabled`. Désormais seul fichier appelant `console.log` / `Debug.log`.
+- Tous les `console.log`, `Debug.log` et `Plannification.debug` convertis, textes inchangés (sans préfixe) : Debug.ts (v4, `reportError` sous `ERROR`, canal `Debug.log` conservé), Kassbi_Class.ts (v9, `leekLogConfig` installée à l'import), Kassbi_test.ts (v3), Plannification.ts (v9, `debug(message, contexte)`, drapeau `debugEnabled` toujours vrai supprimé), ShootingOption(s).ts (v2), CombatLogger.ts (v2), simpleActionSequence.ts (v2), Tests/testWorld.ts (v2). Les sorties visuelles `Debug.mark`/`pause` ne changent pas.
+- Tests : `tests/logging.test.mjs`, `tests/logging-policy.test.mjs` (échoue si un appel direct apparaît hors Logger). Doc : `docs/strategies.md` (« Journalisation par contexte »).
+
+## 2026-11-25 — FEAT: carte de danger de mon poireau (collecte seule)
+
+- `Context/ThreatMap.ts` (v1, `buildThreatMap`, `ThreatMap`, fournisseur géométrique `ShotCellsProvider`/`GeometricShotCells`, garde-fou `MAX_THREAT_PAIRS` = 8 000), `Context/ShotPlan.ts` (v1, dégâts moyens, plan arme/puces sous contrainte de PT) et `Context/LaunchPattern.ts` (v1, `isCellInLaunchPattern`, masque de lancer supposé) : pour chaque case que je peux atteindre, dégâts potentiels maximaux des ennemis (arme équipée + puces prêtes, MAX sur leurs cases de tir, somme entre ennemis, détail par ennemi). `ReachableCells.ts` (v2) : option `ignoreEntityId`. `EnemyMemory` (v4) : `updateThreatMap`, `getThreatMap`. `types/leekwars.d.ts` : `launchType`, `area`, `maxUses` optionnels sur `Weapon`/`Chip`.
+- Branché dans `turn()` (Kassbi_Class.ts v8) après les cases atteignables et avant `planAct` (try/catch + `reportError`, un log `[Threat]` par tour), sans aucun effet tactique. Tests : `tests/threat-map.test.mjs`. Doc et hypothèses non vérifiées : `docs/strategies.md` (« Carte de danger »).
+
+## 2026-11-25 — FEAT: log des opérations en fin de tour
+
+- `turn()` (Kassbi_Class.ts v7) journalise `Operations: 1234567/20000000 (6.2%)` après `=== KASSBI TURN END ===` ; `System.operations` est déjà relatif au tour (doc officielle), le total inclut tout sauf ce log. Helpers purs `operationsPercentage`, `formatOperationsLine` et `logTurnOperations` (ne lève jamais, System absent/max 0 → 0.0 %) dans Debug.ts (v3), `Operations.debugOperations` réutilise `operationsPercentage` (log inchangé). Tests : `tests/toolbox.test.mjs`, `tests/reachable-cells.test.mjs`.
+
+## 2026-11-25 — FEAT: cases atteignables de chaque entité (collecte seule)
+
+- `Context/ReachableCells.ts` (v1) : `computeReachableCells(entity, mp)`, parcours en largeur borné par les PM (4-connexité isolée dans `MOVE_NEIGHBOR_OFFSETS`, obstacles/entités/bords bloquants, plafond `MAX_REACHABLE_CELLS` = 500). `Context/EntityProfile.ts` (v1) : base de `EnemyProfile` (v2), avec `reachable`, `reachableMp`, `reachableTurn`, `maxMpSeen`. `EnemyMemory` (v3) : `updateReachable(me, alliés, ennemis, tour)`, `getReachable(id)`, `getEntityProfile(id)` ; PM des autres = maximum observé.
+- Branché dans `turn()` (Kassbi_Class.ts v6) avant `planAct`, try/catch + `reportError`, sans effet sur la tactique. `Kassbi_test.ts` non branché. Tests : `tests/reachable-cells.test.mjs`. Doc : `docs/strategies.md`.
+
 ## 2026-11-25 — FEAT: mémoire de l'adversaire (collecte seule)
 
 - `EnemyMemory`/`EnemyProfile` (Context, v1) : identification de l'ennemi, armes/puces observées via arme équipée et effets, cooldowns de ses puces, journal borné des coups (attribution heuristique) ; branchés dans `turn()` (Kassbi_Class.ts v5) avant `planAct`, sans effet sur la tactique. Types `Effect`, `Entity.tp/wisdom/effects/launchedEffects`, `Chip.cooldown` ajoutés. Tests : `tests/enemy-memory.test.mjs`.

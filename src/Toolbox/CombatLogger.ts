@@ -1,5 +1,7 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+import { isLogEnabled, log, LOG_CONTEXT } from "./Logger.js"
+
 export interface CombatDecision {
 	turn: number
 	phase: string
@@ -57,10 +59,13 @@ export class CombatLogger {
 	}
 
 	printDecisions(): void {
-		console.log("\n=== KASSBI COMBAT DECISIONS LOG ===")
+		if (!isLogEnabled(LOG_CONTEXT.COMBAT)) {
+			return
+		}
+		log("\n=== KASSBI COMBAT DECISIONS LOG ===", LOG_CONTEXT.COMBAT)
 		for (const decision of this.decisions) {
-			console.log(
-				`\n[Tour ${decision.turn}] ${decision.phase}\n` +
+			log(
+				() => `\n[Tour ${decision.turn}] ${decision.phase}\n` +
 					`  Decision: ${decision.decision}\n` +
 					`  Reason: ${decision.reason}\n` +
 					`  TP: ${decision.tpBefore} → ${decision.tpAfter} (used: ${decision.tpBefore - decision.tpAfter})\n` +
@@ -68,10 +73,11 @@ export class CombatLogger {
 					`  Distance: ${decision.distance}\n` +
 					`  My HP: ${decision.myLife}/${decision.myMaxLife} (${Math.round((decision.myLife / decision.myMaxLife) * 100)}%)\n` +
 					`  Enemy HP: ${decision.enemyLife}/${decision.enemyMaxLife} (${Math.round((decision.enemyLife / decision.enemyMaxLife) * 100)}%)\n` +
-					(decision.behavior ? `  Behavior: ${decision.behavior}\n` : "")
+					(decision.behavior ? `  Behavior: ${decision.behavior}\n` : ""),
+				LOG_CONTEXT.COMBAT
 			)
 		}
-		console.log("\n=== END LOG ===\n")
+		log("\n=== END LOG ===\n", LOG_CONTEXT.COMBAT)
 	}
 
 	exportJson(): string {

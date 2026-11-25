@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { Leek } from "../Leek.js"
 import { ItemModel } from "../Items/Item.js"
 import { ChipModel } from "../Items/Chip.js"
 import { WeaponModel } from "../Items/Weapon.js"
+import { isLogEnabled, log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ShootingOption } from "./ShootingOption.js"
 
 export class ShootingOptions {
@@ -171,20 +172,26 @@ export class ShootingOptions {
 	}
 
 	static debugDamagingItems(items: ItemModel[], text = "damaging items"): void {
-		Debug.log(`------------------------------${text}`)
-		for (const item of items) {
-			Debug.log(`damaging item ${item.name} - mean damage: ${item.meanDamage}`)
+		if (!isLogEnabled(LOG_CONTEXT.SHOOTING)) {
+			return
 		}
-		Debug.log(`--------------------------FIN-${text}`)
+		log(`------------------------------${text}`, LOG_CONTEXT.SHOOTING)
+		for (const item of items) {
+			log(`damaging item ${item.name} - mean damage: ${item.meanDamage}`, LOG_CONTEXT.SHOOTING)
+		}
+		log(`--------------------------FIN-${text}`, LOG_CONTEXT.SHOOTING)
 	}
 
 	debugShootingOptions(): void {
+		if (!isLogEnabled(LOG_CONTEXT.SHOOTING)) {
+			return
+		}
 		for (const option of this.options) {
-			Debug.log("debut actions ----")
+			log("debut actions ----", LOG_CONTEXT.SHOOTING)
 			for (const action of option.actions) {
-				Debug.log(` action ${action.desc}`)
+				log(` action ${action.desc}`, LOG_CONTEXT.SHOOTING)
 			}
-			Debug.log("fin actions ----")
+			log("fin actions ----", LOG_CONTEXT.SHOOTING)
 		}
 	}
 }

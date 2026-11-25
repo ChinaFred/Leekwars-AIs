@@ -59,6 +59,12 @@ interface Weapon {
 	readonly maxRange: number
 	readonly features: Feature[]
 	readonly needsLos: boolean
+	/** Type de lancer (LAUNCH_TYPE_*, `Item.LaunchType.*`) : documenté mais optionnel ici (absent des mocks). */
+	readonly launchType?: number
+	/** Type de zone d'effet (AREA_*, `Item.Area.*`). */
+	readonly area?: number
+	/** Utilisations maximales par tour, -1 = illimité (doc getWeaponMaxUses). */
+	readonly maxUses?: number
 }
 
 interface Feature {
@@ -80,6 +86,9 @@ interface Chip {
 	readonly maxRange: number
 	readonly features: Feature[]
 	readonly needsLos: boolean
+	readonly launchType?: number
+	readonly area?: number
+	readonly maxUses?: number
 }
 
 interface Me extends Entity {
@@ -118,9 +127,19 @@ interface FieldApi {
 	lineOfSight(from: Cell, to: Cell): boolean
 }
 
+/**
+ * Doc officielle (https://leekwars.com/encyclopedia/en/JavaScript_and_TypeScript, singleton `Debug`) :
+ * `mark(cells, color)`, `markText(cells, text)`, `show(cell)`, `clearMarks()`, `pause()`.
+ * NON confirmé pour TypeScript : `log(value, color)` à 2 arguments (la page `debug` ne montre que `Debug.log(x)` ;
+ * `debugC` n'existe qu'en LeekScript) et l'argument `color` de `markText` (documenté en LeekScript seulement).
+ * Aucun équivalent TypeScript de `debugE`/`debugW` n'est documenté : non déclaré.
+ */
 interface DebugApi {
 	log(value: unknown, color?: number): void
 	mark(cells: Cell | Cell[], color: number): boolean
+	markText(cells: Cell | Cell[], text: string, color?: number): boolean
+	show(cell: Cell): void
+	clearMarks(): void
 	pause(): void
 }
 

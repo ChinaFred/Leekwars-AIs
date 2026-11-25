@@ -1,5 +1,7 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
+
 export function simpleActionSequence(me: Me): void {
 	const enemy = Fight.getNearestEnemy()
 	if (enemy === null) {
@@ -12,7 +14,7 @@ export function simpleActionSequence(me: Me): void {
 
 	const weapon = me.weapon
 	if (weapon === null) {
-		console.log("No equipped weapon is available")
+		log("No equipped weapon is available", LOG_CONTEXT.WEAPON)
 		return
 	}
 

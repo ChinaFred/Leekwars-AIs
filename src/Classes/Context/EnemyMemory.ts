@@ -1,6 +1,10 @@
 // @version:5.8
-// file version: 2
+// file version: 5
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
+import { EntityProfile } from "./EntityProfile.js"
+import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
+import { hasDamage } from "./ShotPlan.js"
+import { buildThreatMap, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
 
 /** Multiplicateur de coup critique : constante officielle CRITICAL_FACTOR = 1.3. */
 export const CRITICAL_FACTOR = 1.3
@@ -17,6 +21,39 @@ export interface EnemyUpdate {
 	hit: EnemyHit | null
 }
 
+export type EntitySide = "me" | "ally" | "enemy"
+
+/** Résumé d'un calcul de cases atteignables (pour le journal). */
+export interface ReachableUpdate {
+	entityId: number
+	name: string
+	side: EntitySide
+	/** PM utilisés pour le calcul. */
+	mp: number
+	/** Nombre de cases atteignables (case de départ incluse). */
+	size: number
+	truncated: boolean
+	/** false si le résultat du même tour (même case, mêmes PM) a été réutilisé. */
+	recomputed: boolean
+}
+
+/** Résumé du calcul de la carte de danger (pour le journal). */
+export interface ThreatUpdate {
+	/** Cases évaluées. */
+	size: number
+	/** Cases que je pouvais atteindre. */
+	candidateCells: number
+	maxDanger: number
+	minDanger: number
+	/** Case la plus sûre (la moins coûteuse en PM parmi les plus sûres) ; null si la carte est vide. */
+	safestCell: Cell | null
+	/** Ennemis avec au moins un item offensif exploitable. */
+	enemies: number
+	truncated: boolean
+	pairsEvaluated: number
+	lineOfSightCalls: number
+}
+
 /**
  * Mémoire de l'adversaire : collecte de données uniquement, aucune décision tactique.
  * Les dégâts instantanés (arme, caillou, foudre) n'apparaissent pas dans les effets : l'attribution
@@ -24,8 +61,12 @@ export interface EnemyUpdate {
  */
 export class EnemyMemory {
 	private readonly profiles = new Map<number, EnemyProfile>()
+	/** Profils de moi et de mes alliés vivants (une entrée par entité, retirée à la mort). */
+	private readonly friendlyProfiles = new Map<number, EntityProfile>()
 	private lastLife: number | null = null
 	private lastLifeTurn = 0
+	/** Carte de danger de mon poireau pour le tour courant (remplacée à chaque tour). */
+	private threatMap: ThreatMap | null = null
 
 	has(enemyId: number): boolean {
 		return this.profiles.has(enemyId)
@@ -91,6 +132,167 @@ export class EnemyMemory {
 
 	getProfile(enemyId: number): EnemyProfile | null {
 		return this.profiles.get(enemyId) ?? null
+	}
+
+	/** Profil d'une entité connue : ennemi, moi ou allié vivant (null sinon). */
+	getEntityProfile(entityId: number): EntityProfile | null {
+		return this.profiles.get(entityId) ?? this.friendlyProfiles.get(entityId) ?? null
+	}
+
+	/** Cases atteignables calculées à mon dernier tour (null : entité inconnue, morte ou jamais calculée). */
+	getReachable(entityId: number): ReachableCells | null {
+		return this.getEntityProfile(entityId)?.reachable ?? null
+	}
+
+	/**
+	 * À appeler au début de MON tour, après `identify`/`update` des ennemis : calcule les cases atteignables
+	 * de moi, de mes alliés vivants et des ennemis vivants, et les range dans leurs profils (remplacées à chaque tour).
+	 * PM utilisés : `me.mp` pour moi ; pour les autres, le plus grand `entity.mp` vu pendant mon tour
+	 * (hypothèse : leurs PM du prochain tour, `entity.mp` pouvant valoir les PM restants de leur dernier tour).
+	 * Entités mortes : profil allié retiré, `reachable` d'un ennemi effacé (son profil est conservé).
+	 * Les cases ne sont pas recalculées si le tour, la case de départ et les PM sont identiques.
+	 */
+	updateReachable(
+		me: Me,
+		allies: readonly Entity[],
+		enemies: readonly Entity[],
+		turn: number
+	): ReachableUpdate[] {
+		const updates: ReachableUpdate[] = []
+		const liveFriendly = new Set<number>([me.id])
+		const liveEnemies = new Set<number>()
+
+		const myProfile = this.friendlyProfileOf(me, turn)
+		myProfile.observeMp(me.mp)
+		updates.push(this.refreshReachable(myProfile, me, "me", me.mp, turn))
+
+		for (const ally of allies) {
+			if (liveFriendly.has(ally.id) || !(ally.life > 0)) {
+				continue
+			}
+			liveFriendly.add(ally.id)
+			const profile = this.friendlyProfileOf(ally, turn)
+			profile.observeMp(ally.mp)
+			updates.push(this.refreshReachable(profile, ally, "ally", profile.maxMpSeen, turn))
+		}
+
+		for (const enemy of enemies) {
+			if (liveEnemies.has(enemy.id) || !(enemy.life > 0)) {
+				continue
+			}
+			liveEnemies.add(enemy.id)
+			const profile = this.identify(enemy, turn)
+			profile.observeMp(enemy.mp)
+			updates.push(this.refreshReachable(profile, enemy, "enemy", profile.maxMpSeen, turn))
+		}
+
+		for (const id of [...this.friendlyProfiles.keys()]) {
+			if (!liveFriendly.has(id)) {
+				this.friendlyProfiles.delete(id)
+			}
+		}
+		for (const [id, profile] of this.profiles) {
+			if (!liveEnemies.has(id)) {
+				profile.clearReachable()
+			}
+		}
+		return updates
+	}
+
+	/** Carte de danger calculée à mon dernier tour (null : jamais calculée ou calcul impossible). */
+	getThreatMap(): ThreatMap | null {
+		return this.threatMap
+	}
+
+	/**
+	 * À appeler au début de MON tour, après `updateReachable` : calcule la carte de danger de `me` (voir
+	 * `ThreatMap.ts`) et remplace la précédente. Collecte seule, aucun effet tactique. Retourne null (et
+	 * efface la carte) si mes cases atteignables du tour sont absentes ou périmées.
+	 *
+	 * Par ennemi vivant : force = `entity.strength` actuelle (hypothèse non vérifiée : elle inclut déjà les
+	 * buffs en cours) ; PT = max(`maxTpSeen`, `entity.tp`) (hypothèse : `entity.tp` pendant mon tour peut être
+	 * ses PT restants, le maximum observé estime ses PT au prochain tour) ; arme = arme ÉQUIPÉE seulement ;
+	 * puces = connues, offensives et prêtes (`isChipReady`) ; cases de tir = cases atteignables avec ses PM
+	 * (`maxMpSeen`) EN IGNORANT mon entité, recalculées ici (un parcours en largeur de plus par ennemi
+	 * offensif, ≤ ~4 × 500 appels à `Field.cellFromXY`, non stocké). Un ennemi sans item offensif
+	 * n'est pas parcouru du tout.
+	 */
+	updateThreatMap(me: Me, enemies: readonly Entity[], turn: number): ThreatUpdate | null {
+		// Une exception plus bas ne doit pas laisser la carte du tour précédent passer pour celle du tour courant.
+		this.threatMap = null
+		const mine = this.getReachable(me.id)
+		if (mine === null || mine.turn !== turn) {
+			return null
+		}
+		const inputs: ThreatEnemy[] = []
+		const seen = new Set<number>()
+		for (const enemy of enemies) {
+			if (seen.has(enemy.id) || !(enemy.life > 0)) {
+				continue
+			}
+			seen.add(enemy.id)
+			const profile = this.identify(enemy, turn)
+			const weapon = enemy.weapon ?? null
+			const chips = profile.knownChips.filter((chip) => hasDamage(chip) && profile.isChipReady(chip))
+			if ((weapon === null || !hasDamage(weapon)) && chips.length === 0) {
+				continue
+			}
+			inputs.push({
+				id: enemy.id,
+				name: enemy.name,
+				strength: enemy.strength ?? 0,
+				tp: Math.max(profile.maxTpSeen, enemy.tp ?? 0),
+				weapon,
+				chips,
+				reachable: computeReachableCells(enemy, profile.maxMpSeen, turn, { ignoreEntityId: me.id })
+			})
+		}
+		const map = buildThreatMap(me, mine, inputs, turn)
+		this.threatMap = map
+		return {
+			size: map.size,
+			candidateCells: map.candidateCells,
+			maxDanger: map.maxDanger,
+			minDanger: map.minDanger,
+			safestCell: map.safestCells()[0] ?? null,
+			enemies: inputs.length,
+			truncated: map.truncated,
+			pairsEvaluated: map.pairsEvaluated,
+			lineOfSightCalls: map.lineOfSightCalls
+		}
+	}
+
+	private friendlyProfileOf(entity: Entity, turn: number): EntityProfile {
+		let profile = this.friendlyProfiles.get(entity.id)
+		if (profile === undefined) {
+			profile = new EntityProfile(entity, turn)
+			this.friendlyProfiles.set(entity.id, profile)
+		}
+		return profile
+	}
+
+	private refreshReachable(
+		profile: EntityProfile,
+		entity: Entity,
+		side: EntitySide,
+		mp: number,
+		turn: number
+	): ReachableUpdate {
+		const current = profile.reachable
+		const recomputed = current === null || !current.isUpToDate(entity.id, entity.cell, mp, turn)
+		const reachable = recomputed ? computeReachableCells(entity, mp, turn) : current
+		if (recomputed) {
+			profile.setReachable(reachable)
+		}
+		return {
+			entityId: entity.id,
+			name: entity.name,
+			side,
+			mp: reachable.mp,
+			size: reachable.size,
+			truncated: reachable.truncated,
+			recomputed
+		}
 	}
 
 	/** Armes connues (liste initiale + observées). */

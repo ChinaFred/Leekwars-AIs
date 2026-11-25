@@ -1,5 +1,8 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+import { LOG_CONTEXT } from "../../Toolbox/Logger.js"
+import { markCells } from "../../Toolbox/Marker.js"
+
 export class Coordinates {
 	readonly x: number
 	readonly y: number
@@ -32,8 +35,9 @@ export class Coordinates {
 		return Field.pathLength(this.requireCell(), other.requireCell())
 	}
 
+	/** Marque la case (contexte DEBUG : sans effet s'il est désactivé). Lève toujours `RangeError` si la case n'existe pas. */
 	mark(color: number): void {
-		Debug.mark(this.requireCell(), color)
+		markCells(this.requireCell(), color, LOG_CONTEXT.DEBUG)
 	}
 
 	static getDistanceToCells(
@@ -86,7 +90,7 @@ export class Coordinates {
 	}
 
 	static markArray(coordinates: Iterable<Coordinates>, color: number): void {
-		Debug.mark([...coordinates].map((coordinate) => coordinate.requireCell()), color)
+		markCells([...coordinates].map((coordinate) => coordinate.requireCell()), color, LOG_CONTEXT.DEBUG)
 	}
 
 	private requireCell(): Cell {

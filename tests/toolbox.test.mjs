@@ -62,6 +62,46 @@ test("debug helpers report operation use and preserve debug color constants", ()
 	assert.equal(logs.length - beforeTurn, 7)
 })
 
+test("operations line: format and percentage (0, partial, 100 %, max 0 or missing)", () => {
+	assert.equal(debug.formatOperationsLine(1234567, 20000000), "Operations: 1234567/20000000 (6.2%)")
+	assert.equal(debug.formatOperationsLine(0, 20000000), "Operations: 0/20000000 (0.0%)")
+	assert.equal(debug.formatOperationsLine(10000000, 20000000), "Operations: 10000000/20000000 (50.0%)")
+	assert.equal(debug.formatOperationsLine(20000000, 20000000), "Operations: 20000000/20000000 (100.0%)")
+	assert.equal(debug.formatOperationsLine(500, 0), "Operations: 500/0 (0.0%)")
+	assert.equal(debug.formatOperationsLine(undefined, undefined), "Operations: 0/0 (0.0%)")
+	assert.equal(debug.formatOperationsLine(Number.NaN, Number.POSITIVE_INFINITY), "Operations: 0/0 (0.0%)")
+
+	assert.equal(debug.operationsPercentage(0, 100), 0)
+	assert.equal(debug.operationsPercentage(40, 100), 40)
+	assert.equal(debug.operationsPercentage(100, 100), 100)
+	assert.equal(debug.operationsPercentage(5, 0), 0)
+	assert.equal(debug.operationsPercentage(5, -1), 0)
+	assert.equal(debug.operationsPercentage(undefined, 100), 0)
+})
+
+test("logTurnOperations logs the System counters and never throws when System is missing or incomplete", () => {
+	const original = globalThis.System
+	const lines = []
+	const originalLog = console.log
+	console.log = (...args) => lines.push(args.join(" "))
+	try {
+		globalThis.System = { operations: 1234567, maxOperations: 20000000 }
+		debug.logTurnOperations()
+		globalThis.System = { operations: 7 }
+		debug.logTurnOperations()
+		delete globalThis.System
+		assert.doesNotThrow(() => debug.logTurnOperations())
+	} finally {
+		console.log = originalLog
+		globalThis.System = original
+	}
+	assert.deepEqual(lines, [
+		"Operations: 1234567/20000000 (6.2%)",
+		"Operations: 7/0 (0.0%)",
+		"Operations: 0/0 (0.0%)"
+	])
+})
+
 test("error reporting logs structured context and rethrows the original error", () => {
 	const failure = new TypeError("broken target")
 	assert.throws(

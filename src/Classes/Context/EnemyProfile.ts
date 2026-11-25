@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+import { EntityProfile } from "./EntityProfile.js"
 
 /** Nombre maximal de coups conservés par ennemi (mémoire bornée). */
 export const MAX_HIT_LOG = 20
@@ -43,13 +44,9 @@ export interface ObservedItem<T extends Weapon | Chip> {
 }
 
 /** Ce que l'on sait d'un ennemi : instantané à l'identification, enrichi par EnemyMemory.update. */
-export class EnemyProfile {
-	readonly id: number
-	readonly name: string
-	readonly level: number
+export class EnemyProfile extends EntityProfile {
 	readonly maxLife: number
 	readonly stats: EnemyStats
-	readonly identifiedTurn: number
 	readonly knownWeapons: Weapon[]
 	readonly knownChips: Chip[]
 	equippedWeapon: Weapon | null
@@ -65,9 +62,7 @@ export class EnemyProfile {
 	private readonly cooldowns = new Map<number, number>()
 
 	constructor(entity: Entity, turn: number) {
-		this.id = entity.id
-		this.name = entity.name
-		this.level = entity.level
+		super(entity, turn)
 		this.maxLife = entity.maxLife
 		this.stats = {
 			strength: entity.strength,
@@ -77,7 +72,6 @@ export class EnemyProfile {
 			science: entity.science,
 			magic: entity.magic
 		}
-		this.identifiedTurn = turn
 		this.lastTurn = turn
 		this.knownWeapons = [...(entity.weapons ?? [])]
 		this.knownChips = [...(entity.chips ?? [])]
