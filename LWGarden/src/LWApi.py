@@ -1,4 +1,5 @@
 import time
+from urllib.parse import urlsplit
 
 import requests
 import Uri
@@ -8,28 +9,52 @@ class LWApi:
     """Client for the Leek Wars API."""
 
     RATE_LIMIT_RETRIES = 3
+    TRANSIENT_RETRIES = 2
+    TRANSIENT_BACKOFF_SECONDS = 0.5
+    REAUTH_COOLDOWN_SECONDS = 30
     MIN_REQUEST_INTERVAL_SECONDS = 0.21
 
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
         self.__root_url = Uri.root
         self.__token = ""
         self.__session = requests.Session()
         self.__last_request_at = None
+        self.__clock = clock
+        # How to log in again after a 401: set by the last successful connection.
+        self.__reconnect = None
+        # Limits on re-logins, all reset by a successful connection:
+        # - a login explicitly refused stops all re-logins;
+        # - a temporary login failure (network error, 5xx, 429) pauses them for a cooldown;
+        # - endpoints still answering 401 after a successful re-login (e.g. get-logs)
+        #   stop triggering new ones until they succeed.
+        self.__reauth_failed = False
+        self.__reauth_retry_at = None
+        self.__rejected_endpoints = set()
+        self.__login_transient = False
 
     def connect(self, login, password):
         """Authenticate and store the API bearer token."""
         self.__clear_authentication()
+        self.__login_transient = False
         response = self.__request_with_rate_limit_retry(
             self.__session.post,
             self.__root_url + Uri.login,
+            reauthenticate=False,
             json={"login": login, "password": password}
         )
         if not response.ok:
+            self.__login_transient = self.__is_transient(response)
             return False
-        self.__token = response.json().get("token", "")
-        if not self.__token:
+        payload = response.json()
+        if not isinstance(payload, dict):
+            self.__login_transient = True  # malformed answer: says nothing about the credentials
             return False
-        self.__set_authentication(self.__token)
+        token = payload.get("token")
+        if not isinstance(token, str) or not token:
+            return False
+        self.__token = token
+        self.__set_authentication(token)
+        self.__connection_succeeded(lambda: self.connect(login, password))
         return True
 
     def connect_with_api_key(self, api_key):
@@ -38,15 +63,25 @@ class LWApi:
         if not api_key:
             return False
         self.__clear_authentication()
+        self.__login_transient = False
         self.__set_authentication(api_key)
         response = self.__request_with_rate_limit_retry(
-            self.__session.get, self.__root_url + Uri.get_self
+            self.__session.get, self.__root_url + Uri.get_self, reauthenticate=False
         )
         farmer_response = response.json() if response.ok else {}
         if not isinstance(farmer_response, dict) or "farmer" not in farmer_response:
+            self.__login_transient = (self.__is_transient(response) if not response.ok
+                                      else not isinstance(farmer_response, dict))
             self.__clear_authentication()
             return False
+        self.__connection_succeeded(lambda: self.connect_with_api_key(api_key))
         return True
+
+    def __connection_succeeded(self, reconnect):
+        self.__reconnect = reconnect
+        self.__reauth_failed = False
+        self.__reauth_retry_at = None
+        self.__rejected_endpoints.clear()
 
     def __set_authentication(self, token):
         self.__token = token
@@ -54,7 +89,33 @@ class LWApi:
 
     def __clear_authentication(self):
         self.__token = ""
+        self.__reconnect = None
         self.__session.headers.pop("Authorization", None)
+
+    def __reauthenticate(self):
+        """Log in again with the last successful credentials.
+
+        On failure the previous (rejected) state is restored. A refused login stops
+        re-logins until a connection succeeds; a temporary failure only pauses them.
+        """
+        previous_token, previous_reconnect = self.__token, self.__reconnect
+        try:
+            renewed = self.__reconnect()
+        except (requests.RequestException, ValueError, AttributeError, TypeError):
+            renewed = False
+            self.__login_transient = True
+        if not renewed:
+            self.__clear_authentication()
+            self.__set_authentication(previous_token)
+            self.__reconnect = previous_reconnect
+            if self.__login_transient:
+                self.__reauth_retry_at = self.__clock() + self.REAUTH_COOLDOWN_SECONDS
+                print("API re-authentication failed (temporary error); "
+                      "retrying later, not before {0} s.".format(self.REAUTH_COOLDOWN_SECONDS))
+            else:
+                self.__reauth_failed = True
+                print("API re-authentication failed; not retrying.")
+        return renewed
 
     def get_farmer_self(self):
         """Get the connected farmer."""
@@ -76,11 +137,61 @@ class LWApi:
                 time.sleep(wait)
         self.__last_request_at = time.monotonic()
 
-    def __request_with_rate_limit_retry(self, request, url, **kwargs):
+    def __request_with_rate_limit_retry(self, request, url, reauthenticate=True, **kwargs):
+        """Send a request; on a 401 of an authenticated call, log in again once and replay it."""
+        response = self.__send(request, url, **kwargs)
+        if not reauthenticate:
+            return response
+        endpoint = urlsplit(url).path.rstrip("0123456789")
+        if response.ok:
+            self.__rejected_endpoints.discard(endpoint)
+        elif (self.__status(response) == 401
+                and "Authorization" in self.__session.headers
+                and self.__reconnect is not None
+                and not self.__reauth_failed
+                and (self.__reauth_retry_at is None
+                     or self.__clock() >= self.__reauth_retry_at)
+                and endpoint not in self.__rejected_endpoints):
+            print("API session rejected (HTTP 401); authenticating again.")
+            if self.__reauthenticate():
+                data = kwargs.get("data")
+                if isinstance(data, dict) and "token" in data:
+                    kwargs["data"] = dict(data, token=self.__token)
+                response = self.__send(request, url, **kwargs)
+                if self.__status(response) == 401:
+                    self.__rejected_endpoints.add(endpoint)
+        return response
+
+    @staticmethod
+    def __is_transient(response):
+        """A login answer that says nothing about the credentials: 5xx or rate limit."""
+        status = LWApi.__status(response)
+        return status >= 500 or status == 429
+
+    @staticmethod
+    def __status(response):
+        status = getattr(response, "status_code", None)
+        return status if isinstance(status, int) else 0
+
+    def __send(self, request, url, **kwargs):
+        # Only GETs are replayed after network errors or 5xx: they are idempotent.
+        idempotent = getattr(request, "__name__", "") == "get"
         retries = 0
+        transient_retries = 0
         while True:
             self.__wait_for_request_slot()
-            response = request(url, **kwargs)
+            try:
+                response = request(url, **kwargs)
+            except requests.RequestException:
+                if not idempotent or transient_retries >= self.TRANSIENT_RETRIES:
+                    raise
+                response = None
+            if response is None or (idempotent and self.__status(response) >= 500):
+                if transient_retries >= self.TRANSIENT_RETRIES:
+                    return response
+                time.sleep(self.TRANSIENT_BACKOFF_SECONDS * 2 ** transient_retries)
+                transient_retries += 1
+                continue
             if response.ok or retries >= self.RATE_LIMIT_RETRIES:
                 return response
             try:

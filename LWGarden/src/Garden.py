@@ -1,4 +1,4 @@
-import os, json, hashlib
+import os, json, hashlib, sys
 import FightArchive
 from LWApi import LWApi
 from shutil import rmtree
@@ -77,6 +77,14 @@ def archive_recent_fights(api, config, farmer):
           "{pending} not finished, {expired} outside the retention window, "
           "{errors} errors, {logs_missing} without debug logs."
           .format(**stats))
+    if stats.get("interrupted"):
+        print("Warning: archive interrupted after repeated HTTP 401 on debug logs "
+              "(session or credentials rejected). The remaining fights were not "
+              "processed; reconnect (restart Garden) and archive again.")
+    if stats["logs_missing"]:
+        print("Warning: {0} fight(s) archived without debug logs (see logs_status in "
+              "meta.json); they will be retried on the next archive."
+              .format(stats["logs_missing"]))
     pruned = stats["pruned"]
     if pruned["publications"] or pruned["fights"]:
         print("Retention: {0} old publications and {1} old fights removed."
@@ -217,13 +225,11 @@ def main():
             confirmation = input(
                 "PUSH local .leek/.ts source files to secondary accounts? [y/N]: ")
             if is_yes_confirmation(confirmation):
-                push_all_ais(
-                    api, secondaries, config["AIs_folder"], confirm_remote_deletions,
+                push_secondaries_then_reconnect(
+                    api, principal, api_key, secondaries, config["AIs_folder"],
+                    confirm_remote_deletions,
                     on_published=lambda login, summary: record_publication(config, login, summary)
                 )
-                # reconnect to the main
-                if not connect_primary(api, principal, api_key):
-                    raise RuntimeError("Could not reconnect to the primary account.")
             else:
                 print("PUSH cancelled.")
         elif selection == '7':
@@ -286,6 +292,27 @@ def get_all_ais(api, root_folder: str):
         code = api.read_ai(path)["code"]
         with open(destination, "w", encoding="utf-8") as outfile:
             outfile.write(code)
+
+
+def push_secondaries_then_reconnect(api, principal, api_key, secondaries, root_folder,
+                                    confirm_delete=None, on_published=None):
+    """PUSH to the secondary accounts, then always log back in as the primary.
+
+    If that reconnection fails too, its error names and chains the original failure.
+    """
+    failure = None
+    try:
+        push_all_ais(api, secondaries, root_folder, confirm_delete, on_published)
+    except RuntimeError as error:
+        failure = error
+        print("PUSH to secondary accounts failed: {0}".format(error))
+    finally:
+        if not connect_primary(api, principal, api_key):
+            cause = failure or sys.exc_info()[1]
+            message = "Could not reconnect to the primary account."
+            if cause is not None:
+                message += " Earlier failure: {0!r}".format(cause)
+            raise RuntimeError(message) from cause
 
 
 def push_all_ais(api, secondaries, root_folder, confirm_delete=None, on_published=None):

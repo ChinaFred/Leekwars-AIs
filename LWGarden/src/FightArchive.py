@@ -26,6 +26,7 @@ PUBLICATIONS_FILE = "publications.json"
 FIGHTS_FOLDER = "fights"
 EXPORTS_FOLDER = "exports"
 MAX_DIRTY_FILES = 50
+MAX_CONSECUTIVE_LOGS_401 = 3
 FINISHED_FIGHT_STATUS = 2
 UNKNOWN_VERSION = "unknown-version"
 SUMMARY_KEYS = (
@@ -282,14 +283,17 @@ def archive_fights(api, data_dir, farmer_id, account,
                    max_new=DEFAULT_MAX_NEW_FIGHTS, retention=DEFAULT_RETENTION):
     """Download recent fights and their debug logs that are not archived yet.
 
-    Fights whose logs could not be read are fetched again on the next run.
+    Fights whose logs could not be read are fetched again on the next run. The run
+    stops after MAX_CONSECUTIVE_LOGS_401 consecutive HTTP 401 on the logs: the
+    session is probably invalid, and the remaining fights stay for the next run.
     """
     history = api.get_farmer_history(farmer_id)
     if not history.ok:
         raise RuntimeError("Could not read the fight history (HTTP {0})."
                            .format(getattr(history, "status_code", "?")))
     stats = {"listed": 0, "archived": 0, "skipped": 0, "pending": 0,
-             "expired": 0, "logs_missing": 0, "errors": 0}
+             "expired": 0, "logs_missing": 0, "errors": 0, "interrupted": False}
+    unauthorized_logs = 0
     entries = extract_history_entries(history.json())
     cutoffs = _retention_cutoffs(load_publications(data_dir), max(1, int(retention)))
     cutoff = cutoffs.get(account)
@@ -321,10 +325,12 @@ def archive_fights(api, data_dir, farmer_id, account,
         if logs_response.ok:
             logs_status = "ok"
             logs = _unwrap(logs_response.json(), "logs")
+            unauthorized_logs = 0
         else:
             logs_status = "http_{0}".format(getattr(logs_response, "status_code", "error"))
             logs = None
             stats["logs_missing"] += 1
+            unauthorized_logs = unauthorized_logs + 1 if logs_status == "http_401" else 0
         folder = _fight_folder(data_dir, fight_id, farmer_id, account)
         _write_json(os.path.join(folder, "fight.json"), fight)
         _write_json(os.path.join(folder, "logs.json"), logs)
@@ -337,6 +343,9 @@ def archive_fights(api, data_dir, farmer_id, account,
             "logs_status": logs_status,
         })
         stats["archived"] += 1
+        if unauthorized_logs >= MAX_CONSECUTIVE_LOGS_401:
+            stats["interrupted"] = True
+            break
     stats["pruned"] = prune(data_dir, retention)
     return stats
 

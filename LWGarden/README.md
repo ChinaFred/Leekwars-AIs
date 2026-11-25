@@ -31,8 +31,17 @@ Garden spaces all API requests by at least 0.21 seconds (under five requests
 per second). If the API rate-limits a request anyway, it waits for the
 server-provided retry delay and retries it up to three times before reporting
 the error.
+Garden remembers how the last connection was made (login/password or API key,
+in memory only). If an authenticated request gets HTTP 401, it authenticates
+again once and replays that request; if that fails, the original response is
+returned. After a refused re-login (HTTP 401/403, no token, rejected API key),
+Garden stops re-logging in until the next successful connection; after a temporary
+failure (network error, 5xx, 429) it waits 30 seconds before trying again. An endpoint that still answers 401 after a successful
+re-login does not trigger another one until it succeeds. GET requests are also retried up to twice, with a short backoff, after
+a network error or a 5xx response.
 An error after earlier successful requests may leave the remote garden only
 partially deployed; rerun the PUSH after resolving a persistent error.
+After option `6`, even on failure, Garden logs back in to the primary account.
 
 Garden uses the current path-based API (`ai/get-farmer-tree`, `ai-folder/create`,
 `ai/create`, `ai/read` and `ai/write`) with Bearer-token authentication.
@@ -83,7 +92,9 @@ modifiable par `data_folder` dans `config.json`, relatif à `LWGarden/src`).
   puis pour chaque combat terminé non archivé télécharge le combat
   (`fight/get`) et les logs de debug de vos poireaux (`fight/get-logs`, identifiant
   de session requis). Les combats dont les logs n'ont pas pu être lus sont
-  retéléchargés au passage suivant ; archivez régulièrement, le serveur ne
+  retéléchargés au passage suivant (Garden affiche un avertissement) ; l'archivage
+  s'interrompt après 3 refus HTTP 401 consécutifs sur les logs (session invalide), les
+  combats restants étant traités au passage suivant ; archivez régulièrement, le serveur ne
   conserve pas forcément les logs indéfiniment.
 - **Version d'un combat** : dernière publication du même compte dont la date est
   antérieure ou égale à celle du combat. Avant la première publication
