@@ -115,14 +115,25 @@ test("allowHiding=false forbids the post-shot retreat, not minimal approach", ()
 	assert.equal(w.me.mp, 3)
 })
 
-for (const invalid of ["absent", "stale", "truncated", "partial", "wrong-position"]) {
+// Every way the danger map can be unusable must give an explicit geometric retreat, never a modeled-safety claim.
+const invalidMapMutations = {
+	"stale": w => { w.context.threat.turn-- },
+	"truncated": w => { w.context.threat.inputsTruncated = true },
+	"partial": w => { w.context.threat.byKey.delete(4096) },
+	"wrong-position": w => { w.context.reachable.startCell = w.cell(0, 1) },
+	"reachable-id": w => { w.context.reachable.entityId = 99 },
+	"threat-id": w => { w.context.threat.entityId = 99 },
+	"reachable-truncated": w => { w.context.reachable.truncated = true },
+	"threat-truncated": w => { w.context.threat.truncated = true },
+	"enemy-count": w => { w.context.threat.enemyCount = 99 },
+	"negative-danger": w => { w.context.threat.byKey.get(4096).danger = -1 },
+	"nonfinite-danger": w => { w.context.threat.byKey.get(4096).danger = NaN }
+}
+for (const invalid of ["absent", ...Object.keys(invalidMapMutations)]) {
 	test(`unknown map (${invalid}): explicit geometric retreat, never credited as safe`, () => {
 		const w = world()
 		w.steady()
-		if (invalid === "stale") w.context.threat.turn--
-		if (invalid === "truncated") w.context.threat.inputsTruncated = true
-		if (invalid === "partial") w.context.threat.byKey.delete(4096)
-		if (invalid === "wrong-position") w.context.reachable.startCell = w.cell(0, 1)
+		invalidMapMutations[invalid]?.(w)
 		const messages = [], original = console.log
 		try {
 			console.log = message => messages.push(message)
@@ -240,24 +251,6 @@ test("zero affordable shots: progress without equipment or fictitious attack PT"
 	assert.deepEqual(w.events, [["move", 4, 0, 4]])
 	assert.equal(w.me.tp, 0)
 })
-
-for (const invalid of ["reachable-id", "threat-id", "reachable-truncated", "threat-truncated",
-	"enemy-count", "negative-danger", "nonfinite-danger"]) {
-	test(`invalid context ${invalid} cannot claim a modeled safe retreat`, () => {
-		const w = world(); w.steady()
-		if (invalid === "reachable-id") w.context.reachable.entityId = 99
-		if (invalid === "threat-id") w.context.threat.entityId = 99
-		if (invalid === "reachable-truncated") w.context.reachable.truncated = true
-		if (invalid === "threat-truncated") w.context.threat.truncated = true
-		if (invalid === "enemy-count") w.context.threat.enemyCount = 99
-		if (invalid === "negative-danger") w.context.threat.byKey.get(4096).danger = -1
-		if (invalid === "nonfinite-danger") w.context.threat.byKey.get(4096).danger = NaN
-		const messages = [], original = console.log
-		try { console.log = m => messages.push(m); w.run() } finally { console.log = original }
-		assert.deepEqual(w.events.at(-1), ["unknown-retreat", 2, 3])
-		assert.ok(messages.some(m => m.includes("danger unknown; geometric only, no safety claim")))
-	})
-}
 
 test("unknown danger permits explicit progress but does not claim modeled cover", () => {
 	const w = world({ range: 1 }); w.steady()

@@ -674,43 +674,33 @@ test("tpBoostOf / tpBoostTurns / isTpBoostType: BUFF_TP is amplified by science,
 	})
 })
 
-test("enemy TP boost payoff threshold (whole shots): the extra TP must buy a shot, one TP fewer does not", () => {
-	const grid = makeGrid(21, 21)
-	const { me, myReach } = setupMe(grid, [10, 10])
-	const gun = weapon({ id: 78, cost: 4, min: 10, max: 10 })
-	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
-	const danger = (boost) => buildThreatMap(me, myReach, [{ ...input, boosts: [boost] }], 1)
-	assert.equal(buildThreatMap(me, myReach, [input], 1).dangerAt(me.cell), 10) // 7 PT : 1 tir de 4 PT
-	const tie = danger(tpBoostChip(2, 2)) // 7 − 2 + 2 = 7 PT : toujours 1 tir
-	assert.equal(tie.dangerAt(me.cell), 10)
-	assert.equal(tie.breakdownAt(me.cell)[0].boostTp, 0)
-	assert.equal(tie.breakdownAt(me.cell)[0].tpGain, 0)
-	const pays = danger(tpBoostChip(2, 3)) // 8 PT : 2 tirs
-	assert.equal(pays.dangerAt(me.cell), 20)
-	assert.equal(pays.breakdownAt(me.cell)[0].boostTp, 2)
-	assert.equal(pays.breakdownAt(me.cell)[0].tpGain, 3)
-	assert.equal(pays.breakdownAt(me.cell)[0].strengthGain, 0)
-	assert.equal(pays.breakdownAt(me.cell)[0].weaponShots, 2)
-})
+// Enemy TP boost payoff (whole shots) and affordability. Enemy at [7, 10] (or [6, 10]), me at [10, 10], 7 TP.
+// [label, weaponCost, enemyAt, boost cost/gain (null = no boost), expected danger, expected breakdown fields]
+const tpBoostThresholdCases = [
+	["no boost: 7 TP buy 1 shot of 4 TP", 4, [7, 10], null, 10, { boostTp: 0 }],
+	["tie: 7 - 2 + 2 = 7 TP still 1 shot, not cast", 4, [7, 10], [2, 2], 10, { boostTp: 0, tpGain: 0 }],
+	["pays: 8 TP buy 2 shots", 4, [7, 10], [2, 3], 20, { boostTp: 2, tpGain: 3, strengthGain: 0, weaponShots: 2 }],
+	["cost = TP is castable when it gives TP back (7 - 7 + 8 = 8 TP)", 4, [7, 10], [7, 8], 20, { boostTp: 7 }],
+	["cost > TP is never castable (1 TP short)", 4, [7, 10], [8, 12], 10, { boostTp: 0 }],
+	["a TP chip that does not reach the weapon cost (5 TP < 9) stays harmless", 9, [6, 10], [3, 1], 0, {}],
+	["a TP chip that reaches the weapon cost (10 TP >= 9) makes the enemy dangerous", 9, [6, 10], [3, 6], 10, {}]
+]
 
-test("enemy TP boost affordability: cost = TP is castable when it gives TP back, cost > TP never is", () => {
-	const grid = makeGrid(21, 21)
-	const { me, myReach } = setupMe(grid, [10, 10])
-	const gun = weapon({ id: 79, cost: 4, min: 10, max: 10 })
-	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun, tp: 7 })
-	const at = buildThreatMap(me, myReach, [{ ...input, boosts: [tpBoostChip(7, 8)] }], 1) // 7 − 7 + 8 = 8 PT
-	assert.equal(at.dangerAt(me.cell), 20)
-	assert.equal(at.breakdownAt(me.cell)[0].boostTp, 7)
-	const over = buildThreatMap(me, myReach, [{ ...input, boosts: [tpBoostChip(8, 12)] }], 1) // il manque 1 PT pour le lancer
-	assert.equal(over.dangerAt(me.cell), 10)
-	assert.equal(over.breakdownAt(me.cell)[0].boostTp, 0)
-	// Une puce de PT qui ne rapporte rien (gain < coût, tir déjà impossible) ne rend pas l'ennemi dangereux.
-	const noWeaponShot = addEnemy(grid, me, 3, [6, 10], { weaponItem: weapon({ id: 85, cost: 9, min: 10, max: 10 }), tp: 7 }).input
-	const none = buildThreatMap(me, myReach, [{ ...noWeaponShot, boosts: [tpBoostChip(3, 1)] }], 1) // 5 PT < 9
-	assert.equal(none.dangerAt(me.cell), 0)
-	const some = buildThreatMap(me, myReach, [{ ...noWeaponShot, boosts: [tpBoostChip(3, 6)] }], 1) // 10 PT ≥ 9
-	assert.equal(some.dangerAt(me.cell), 10)
-})
+for (const [label, weaponCost, enemyAt, boost, danger, fields] of tpBoostThresholdCases) {
+	test(`enemy TP boost thresholds: ${label}`, () => {
+		const grid = makeGrid(21, 21)
+		const { me, myReach } = setupMe(grid, [10, 10])
+		const gun = weapon({ id: 78, cost: weaponCost, min: 10, max: 10 })
+		const { input } = addEnemy(grid, me, 2, enemyAt, { weaponItem: gun, tp: 7 })
+		const boosts = boost === null ? undefined : [tpBoostChip(...boost)]
+		const map = buildThreatMap(me, myReach, [{ ...input, boosts }], 1)
+		assert.equal(map.dangerAt(me.cell), danger)
+		if (danger > 0) {
+			const threat = map.breakdownAt(me.cell)[0]
+			for (const [field, value] of Object.entries(fields)) assert.equal(threat[field], value, field)
+		}
+	})
+}
 
 test("enemy TP boost: science amplifies BUFF_TP (floor of the TP after the cast) but not the raw boost", () => {
 	const grid = makeGrid(21, 21)

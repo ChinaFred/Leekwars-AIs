@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Agents allégés et tests consolidés
+
+- Agents Copilot simplifiés, tests de stratégie et de menace regroupés en tableaux de cas.
+
 ## 2026-11-25 — Anticipation tactique et carte de menace
 
 - Préparation des futurs tirs et replis, estimation des boucliers et des boosts adverses.

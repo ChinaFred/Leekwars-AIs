@@ -483,40 +483,32 @@ function boostScenario({ tp, boosts, weaponCost = 1, weaponDamage = 10 }) {
 	return { threat: map.breakdownAt(me.cell)[0], danger: map.dangerAt(me.cell) }
 }
 
-test("boost cost threshold: cost = TP - 1 is castable, cost = TP is not", () => {
-	const below = boostScenario({ tp: 10, boosts: [boostOf(9, 1000)] })
-	assert.equal(below.danger, 110) // 1 PT left: 1 shot of 10 x (1 + 1000/100)
-	assert.equal(below.threat.boostTp, 9)
-	const at = boostScenario({ tp: 10, boosts: [boostOf(10, 1000)] })
-	assert.equal(at.danger, 100)
-	assert.equal(at.threat.boostTp, 0)
-})
+const fourBoosts = [1, 2, 3, 4].map((i) => boostOf(1, 100, 6, 8800 + i))
 
-test("boost payoff threshold: a boost that only ties the unboosted plan is not cast, one more point of strength is", () => {
-	const tie = boostScenario({ tp: 10, boosts: [boostOf(5, 100)] }) // 5 shots x 20 = 100 = 10 shots x 10
-	assert.equal(tie.danger, 100)
-	assert.equal(tie.threat.boostTp, 0)
-	assert.equal(tie.threat.strengthGain, 0)
-	const above = boostScenario({ tp: 10, boosts: [boostOf(5, 101)] })
-	assert.ok(Math.abs(above.danger - 100.5) < 1e-9, `${above.danger}`)
-	assert.equal(above.threat.boostTp, 5)
-	const under = boostScenario({ tp: 10, boosts: [boostOf(5, 99)] })
-	assert.equal(under.danger, 100)
-	assert.equal(under.threat.boostTp, 0)
-})
+// [label, tp, boosts, expected danger, expected boostTp, expected strengthGain (undefined = not checked)]
+const boostThresholdCases = [
+	["cost = TP - 1 is castable (1 PT left: 1 shot of 10 x (1 + 1000/100))", 10, [boostOf(9, 1000)], 110, 9],
+	["cost = TP is not castable", 10, [boostOf(10, 1000)], 100, 0],
+	["payoff tie (5 shots x 20 = 10 shots x 10): not cast", 10, [boostOf(5, 100)], 100, 0, 0],
+	["payoff: one more point of strength is cast", 10, [boostOf(5, 101)], 100.5, 5],
+	["payoff: one point of strength fewer is not cast", 10, [boostOf(5, 99)], 100, 0],
+	["MAX_THREAT_BOOSTS: the fourth of 4 boosts is ignored (17 shots x 4, not 16 x 5)", 20, fourBoosts, 680, 3, 300],
+	["MAX_THREAT_BOOSTS: exactly 3 boosts", 20, fourBoosts.slice(0, 3), 680, 3],
+	["MAX_THREAT_BOOSTS: 2 boosts", 20, fourBoosts.slice(0, 2), 540, 2]
+]
 
-test("at most MAX_THREAT_BOOSTS boost chips are combined: the fourth is ignored", () => {
+test("MAX_THREAT_BOOSTS is 3", () => {
 	assert.equal(MAX_THREAT_BOOSTS, 3)
-	const four = [1, 2, 3, 4].map((i) => boostOf(1, 100, 6, 8800 + i))
-	const result = boostScenario({ tp: 20, boosts: four })
-	assert.equal(result.danger, 680) // 3 boosts: 17 shots of 10 x 4 (4 boosts would give 16 x 10 x 5 = 800)
-	assert.equal(result.threat.boostTp, 3)
-	assert.equal(result.threat.strengthGain, 300)
-	const three = boostScenario({ tp: 20, boosts: four.slice(0, 3) })
-	assert.equal(three.danger, 680)
-	const two = boostScenario({ tp: 20, boosts: four.slice(0, 2) })
-	assert.equal(two.danger, 540)
 })
+
+for (const [label, tp, boosts, danger, boostTp, strengthGain] of boostThresholdCases) {
+	test(`boost thresholds: ${label}`, () => {
+		const result = boostScenario({ tp, boosts })
+		assert.ok(Math.abs(result.danger - danger) < 1e-9, `danger ${result.danger} != ${danger}`)
+		assert.equal(result.threat.boostTp, boostTp)
+		if (strengthGain !== undefined) assert.equal(result.threat.strengthGain, strengthGain)
+	})
+}
 
 test("science amplifies BUFF_STRENGTH boosts but not the raw boost, at the threshold of the payoff", () => {
 	const grid = makeGrid(21, 21)

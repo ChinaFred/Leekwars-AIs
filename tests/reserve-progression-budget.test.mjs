@@ -233,33 +233,21 @@ test("movement crossing the old relative limit can be followed by support while 
 	} finally { delete globalThis.System }
 })
 
-test("near firing range with exhausted search margin: never spend all PM on a blind approach", () => {
-	const w = combat()
-	w.enemies[0].cell.entity = null
-	w.enemies[0].cell = w.cell(7); w.enemies[0].cell.entity = w.enemies[0]
-	try {
-		const t = w.turn({ reserve: true })
-		assert.ok(t.relative >= 30000 && t.relative < 50000)
-		const moves = t.trace.filter(e => e.kind === "action")
-		assert.ok(moves.length <= 1)
-		assert.ok(moves.every(e => e.name === "move" && e.limit <= 1))
-		assert.ok(t.mp >= 3)
-	} finally { delete globalThis.System }
-})
-
-test("near firing range with interrupted danger validation: do not spend all PM blindly", () => {
-	const w = combat({ dangerReadCost: 1600 })
-	w.enemies[0].cell.entity = null
-	w.enemies[0].cell = w.cell(7); w.enemies[0].cell.entity = w.enemies[0]
-	try {
-		const t = w.turn({ reserve: true })
-		assert.ok(t.relative >= 30000 && t.relative < 50000)
-		const moves = t.trace.filter(e => e.kind === "action")
-		assert.ok(moves.length <= 1)
-		assert.ok(moves.every(e => e.name === "move" && e.limit <= 1))
-		assert.ok(t.mp >= 3)
-	} finally { delete globalThis.System }
-})
+for (const [label, costs] of [["exhausted search margin", {}], ["interrupted danger validation", { dangerReadCost: 1600 }]]) {
+	test(`near firing range with ${label}: never spend all PM on a blind approach`, () => {
+		const w = combat(costs)
+		w.enemies[0].cell.entity = null
+		w.enemies[0].cell = w.cell(7); w.enemies[0].cell.entity = w.enemies[0]
+		try {
+			const t = w.turn({ reserve: true })
+			assert.ok(t.relative >= 30000 && t.relative < 50000)
+			const moves = t.trace.filter(e => e.kind === "action")
+			assert.ok(moves.length <= 1)
+			assert.ok(moves.every(e => e.name === "move" && e.limit <= 1))
+			assert.ok(t.mp >= 3)
+		} finally { delete globalThis.System }
+	})
+}
 
 test("engine budget exhausted: no native provider or action starts", () => {
 	const w = combat()
