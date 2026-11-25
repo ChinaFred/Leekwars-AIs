@@ -25,8 +25,10 @@ start_leek_fight = "garden/start-solo-fight/leek_id/target_id"
 get_team_opponents = "garden/get-composition-opponents/composition_id"
 start_team_fight = "garden/start-team-fight/composition_id/target_id"
 
-# Fight
+# Fight (the fight id is appended to the path)
 get_fullmoon = "fight/fullmoon"
+get_fight = "fight/get/"
+get_fight_logs = "fight/get-logs/"  # debug logs of the connected farmer's leeks
 
 # Leek
 register_tournament_leek = "leek/register-tournament/leek_id"
@@ -46,4 +48,4 @@ get_doc_functions = "function/doc/locale"
 get_farmer_trophies = "trophy/get-farmer-trophies" # farmer_id, lang
 
 # History
-get_farmer_history = "history/get-farmer-history" # farmer_id
+get_farmer_history = "history/get-farmer-history/"  # farmer_id appended; needs a session token

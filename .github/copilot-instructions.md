@@ -19,3 +19,11 @@
 - Tout `.ts` commence par `// @version:5.8` (version du langage, ne pas la modifier pour marquer une révision) puis `// file version: N`. Incrémente `file version` dans chaque fichier touché.
 - Référence des stratégies : `docs/strategies.md`. Tout changement de seuil, de condition ou d'ordre de planification met ce fichier à jour et ajoute ou ajuste un test de régression.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API du jeu, pas une source exhaustive.
+
+## Messages de commit
+
+Garden enregistre le message du commit publié comme « version de la stratégie » et l'associe aux combats archivés pour l'analyse. Format (voir `.gitmessage`) :
+
+- Sujet `type(portée): description` (≤ 72 caractères), types `feat|fix|perf|refactor|docs|test|chore|build|ci|style`, puis une ligne vide.
+- Si `src/**/*.ts` change (feat, fix, perf, refactor) : une ligne `Stratégie:` (effet attendu en combat, seuils, conditions ou ordre modifiés avec valeurs avant/après, ou « aucun changement de comportement ») et une ligne `Tests:`.
+- Un commit ne mélange pas plusieurs changements de stratégie : un message par version analysable. Publie (PUSH Garden) depuis un arbre propre.

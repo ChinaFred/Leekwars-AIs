@@ -67,6 +67,45 @@ For each account, remote-only AIs and folders are listed before any deletion;
 type `DELETE` to move them to the server trash, or enter anything else to keep
 them.
 
+## Archive des combats et versions
+
+Les options `7` et `8` constituent une base locale pour analyser les combats
+avec une IA. Tout est écrit sous `LWGarden/Data/` (ignoré par Git ; dossier
+modifiable par `data_folder` dans `config.json`, relatif à `LWGarden/src`).
+
+- **Publication** : à chaque PUSH (options `5` et `6`) qui modifie le compte,
+  Garden enregistre la date, le commit de `HEAD` (hash, sujet, message complet) et
+  si les sources diffèrent de ce commit (`dirty`, auquel cas la version est
+  `<hash>-dirty-<empreinte>` et Garden avertit que le message ne décrit pas
+  exactement le code). Un PUSH identique à la version précédente du compte n'est
+  pas enregistré. Garden avertit si le message n'a pas de ligne `Stratégie:`.
+- **Option `7`** : lit l'historique du compte principal (`history/get-farmer-history`),
+  puis pour chaque combat terminé non archivé télécharge le combat
+  (`fight/get`) et les logs de debug de vos poireaux (`fight/get-logs`, identifiant
+  de session requis). Les combats dont les logs n'ont pas pu être lus sont
+  retéléchargés au passage suivant ; archivez régulièrement, le serveur ne
+  conserve pas forcément les logs indéfiniment.
+- **Version d'un combat** : dernière publication du même compte dont la date est
+  antérieure ou égale à celle du combat. Avant la première publication
+  enregistrée, la version est `unknown-version`.
+- **Option `8`** : écrit `Data/exports/<version>.json` par version (publication avec
+  message du commit, puis pour chaque combat : résultat `win/loss/draw`, résumé,
+  rapport et `debug_logs`). Chaque entrée indique son compte et sa publication ;
+  si plusieurs publications partagent une version, `publications` les liste et
+  `version` vaut `null`. Les actions détaillées restent dans
+  `Data/fights/<id>/fight.json` ; les autres comptes d'un même combat sont
+  enregistrés dans des dossiers distincts.
+- **Rétention** : les 10 dernières publications par compte (`retention_versions`
+  dans `config.json`) ; les combats antérieurs à la plus ancienne conservée sont
+  supprimés. Un retour à une version antérieure compte comme une nouvelle publication.
+
+Pour que le message de commit serve à l'analyse, suivez le format du fichier
+`.gitmessage` à la racine (`npm run hooks:install` active le modèle et le contrôle) :
+sujet `type(portée): description`, puis `Stratégie:` (effet attendu en combat,
+seuils changés) et `Tests:` quand `src/*.ts` change. Publiez depuis un arbre propre.
+
+Tests : `python -m unittest discover -s LWGarden/tests -p "test*.py"`.
+
 ## Source language versions
 
 Every `.leek` source file must start with `// @version:4`. TypeScript `.ts`

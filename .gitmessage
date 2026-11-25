@@ -1,0 +1,10 @@
+type(portée): résumé court de la version, 72 caractères maximum
+
+Pourquoi : problème observé en combat ou limite de la version précédente.
+Stratégie: effet attendu en combat, seuils/conditions/ordre changés (ou « aucun changement de comportement »).
+Tests: tests ajoutés ou exécutés (npm test, npm run typecheck, tests ciblés).
+
+# Ce message est enregistré par Garden comme version de la stratégie lors du PUSH,
+# puis associé aux combats archivés pour l'analyse. Soyez précis et chiffré.
+# types : feat, fix, perf, refactor (Stratégie: et Tests: requis si src/*.ts est modifié),
+#         docs, test, chore, build, ci, style.

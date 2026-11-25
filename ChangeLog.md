@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Archives Garden et messages de commit
+
+- Archivage des combats et des versions publiées ; modèle et contrôle des messages de commit.
+
 ## 2026-11-25 — Plans tactiques et replis fiables
 
 - Plan complet affiché avant exécution, déplacements en plusieurs phases et budgets de recherche et d'exécution distincts ; tests de régression.

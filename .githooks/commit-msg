@@ -1,0 +1,3 @@
+#!/bin/sh
+# Vérifie le format du message de commit (voir scripts/check-commit-message.mjs).
+exec node "$(dirname "$0")/../scripts/check-commit-message.mjs" "$1"

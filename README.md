@@ -30,6 +30,16 @@ Les tests de l'outil se lancent depuis la racine :
 python -m unittest discover -s LWGarden/tests -p "test*.py"
 ```
 
+Garden archive aussi les combats et leurs logs de debug pour l'analyse par IA, en
+les rattachant à la version publiée (message du commit) : voir
+[LWGarden/README.md](LWGarden/README.md#archive-des-combats-et-versions). Pour que les
+messages de commit portent l'intention tactique, activez une fois le modèle et le
+contrôle de message (`Stratégie:` et `Tests:` requis quand `src/*.ts` change) :
+
+```powershell
+npm run hooks:install
+```
+
 Le compilateur TypeScript local est épinglé à la version 5.8 :
 
 ```powershell

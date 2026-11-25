@@ -174,6 +174,27 @@ class LWApi:
             data={"token": self.__token}
         ).json()
 
+    def get_farmer_history(self, farmer_id):
+        """Return the raw response listing a farmer's recent fights."""
+        return self.__request_with_rate_limit_retry(
+            self.__session.get,
+            self.__root_url + Uri.get_farmer_history + str(int(farmer_id))
+        )
+
+    def get_fight(self, fight_id):
+        """Return the raw response holding a whole fight (report and actions)."""
+        return self.__request_with_rate_limit_retry(
+            self.__session.get,
+            self.__root_url + Uri.get_fight + str(int(fight_id))
+        )
+
+    def get_fight_logs(self, fight_id):
+        """Return the raw response holding the debug logs of the farmer's leeks."""
+        return self.__request_with_rate_limit_retry(
+            self.__session.get,
+            self.__root_url + Uri.get_fight_logs + str(int(fight_id))
+        )
+
     def get_doc_functions(self, langue):
         uri = Uri.get_doc_functions.replace("locale", langue)
         return self.__request_with_rate_limit_retry(

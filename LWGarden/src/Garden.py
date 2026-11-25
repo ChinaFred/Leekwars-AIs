@@ -1,4 +1,5 @@
 import os, json, hashlib
+import FightArchive
 from LWApi import LWApi
 from shutil import rmtree
 
@@ -21,7 +22,81 @@ def load_config():
     config["AIs_folder"] = os.path.abspath(
         os.path.join(garden_directory, config["AIs_folder"])
     )
+    config["data_folder"] = os.path.abspath(
+        os.path.join(garden_directory, config.get("data_folder", "../Data"))
+    )
     return config
+
+
+def retention_versions(config):
+    return config.get("retention_versions", FightArchive.DEFAULT_RETENTION)
+
+
+def record_publication(config, account, summary):
+    """Remember which commit was published, and when, for fight analysis."""
+    if not summary or not (summary["created"] or summary["updated"]
+                           or summary["deleted_files"] or summary["deleted_folders"]):
+        print("Publication not recorded: nothing changed on {0}.".format(account))
+        return None
+    git_state = FightArchive.read_git_state(config["AIs_folder"])
+    if git_state["dirty"]:
+        print("Warning: sources differ from the last commit (or git is unavailable); "
+              "the recorded commit message may not describe this version.")
+    elif not FightArchive.message_has_strategy_section(git_state["message"]):
+        print("Warning: the commit message has no 'Stratégie:' line; "
+              "fight analysis will lack the intent of this version.")
+    try:
+        record = FightArchive.record_publication(
+            config["data_folder"], account, git_state, summary["source_hash"],
+            {key: summary[key] for key in
+             ("created", "updated", "deleted_files", "deleted_folders")},
+            retention=retention_versions(config)
+        )
+    except (OSError, ValueError, KeyError) as error:
+        print("Warning: publication could not be recorded: {0}".format(error))
+        return None
+    if record:
+        print("Publication recorded: version {0} ({1})".format(record["id"], record["subject"]))
+    else:
+        print("Publication already recorded for this version.")
+    return record
+
+
+def archive_recent_fights(api, config, farmer):
+    """Store recent fights and their debug logs locally."""
+    print("\narchive_recent_fights()\n")
+    try:
+        stats = FightArchive.archive_fights(
+            api, config["data_folder"], farmer["id"], farmer["login"],
+            retention=retention_versions(config)
+        )
+    except (RuntimeError, OSError, ValueError) as error:
+        print("Archive failed: {0}".format(error))
+        return None
+    print("{listed} fights listed: {archived} archived, {skipped} already archived, "
+          "{pending} not finished, {expired} outside the retention window, "
+          "{errors} errors, {logs_missing} without debug logs."
+          .format(**stats))
+    pruned = stats["pruned"]
+    if pruned["publications"] or pruned["fights"]:
+        print("Retention: {0} old publications and {1} old fights removed."
+              .format(pruned["publications"], pruned["fights"]))
+    print("Stored under " + config["data_folder"])
+    return stats
+
+
+def export_archived_fights(config, version_id=None):
+    """Write one analysis file per version."""
+    try:
+        exported = FightArchive.export_for_analysis(config["data_folder"], version_id)
+    except (OSError, ValueError, KeyError) as error:
+        print("Export failed: {0}".format(error))
+        return {}
+    if not exported:
+        print("No archived fight to export.")
+    for version, (path, count) in sorted(exported.items()):
+        print("{0}: {1} fights -> {2}".format(version, count, path))
+    return exported
 
 
 def confirm_remote_deletions(remote_files, remote_folders):
@@ -97,7 +172,9 @@ def main():
         '4': "Get Farmer's Throphies",
         '5': "PUSH local .leek/.ts sources to primary account; optionally delete remote-only items.",
         '6': "PUSH local .leek/.ts sources to secondary accounts; optionally delete remote-only items.",
-        '7': "Exit"
+        '7': "ARCHIVE recent fights and their debug logs (local, for analysis).",
+        '8': "EXPORT archived fights per published version (for AI analysis).",
+        '9': "Exit"
     }
     while True:
         options = sorted(menu.keys())
@@ -125,7 +202,8 @@ def main():
             confirmation = input(
                 "PUSH local .leek/.ts source files to primary account {0}? [y/N]: ".format(farmer["login"]))
             if is_yes_confirmation(confirmation):
-                deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
+                summary = deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
+                record_publication(config, farmer["login"], summary)
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
@@ -133,7 +211,8 @@ def main():
                 "PUSH local .leek/.ts source files to secondary accounts? [y/N]: ")
             if is_yes_confirmation(confirmation):
                 push_all_ais(
-                    api, secondaries, config["AIs_folder"], confirm_remote_deletions
+                    api, secondaries, config["AIs_folder"], confirm_remote_deletions,
+                    on_published=lambda login, summary: record_publication(config, login, summary)
                 )
                 # reconnect to the main
                 if not connect_primary(api, principal, api_key):
@@ -141,6 +220,11 @@ def main():
             else:
                 print("PUSH cancelled.")
         elif selection == '7':
+            archive_recent_fights(api, config, farmer)
+        elif selection == '8':
+            version_id = input("Version id (empty = all retained versions): ").strip()
+            export_archived_fights(config, version_id or None)
+        elif selection == '9':
             break
         else:
             print("Unknown Option Selected!")
@@ -184,7 +268,7 @@ def get_all_ais(api, root_folder: str):
             outfile.write(code)
 
 
-def push_all_ais(api, secondaries, root_folder, confirm_delete=None):
+def push_all_ais(api, secondaries, root_folder, confirm_delete=None, on_published=None):
     """Deploy local AI files to each secondary account."""
     print("\npush_all_ais()\n")
     for secondary in secondaries:
@@ -192,11 +276,16 @@ def push_all_ais(api, secondaries, root_folder, confirm_delete=None):
             raise RuntimeError("Could not connect to a secondary account.")
         farmer2 = api.get_farmer_self()["farmer"]
         print("\nDeploy to the account {farmer_name}\n".format(farmer_name=farmer2["login"]))
-        deploy_local_ais(api, root_folder, confirm_delete)
+        summary = deploy_local_ais(api, root_folder, confirm_delete)
+        if on_published:
+            on_published(farmer2["login"], summary)
 
 
 def deploy_local_ais(api, root_folder, confirm_delete=None):
-    """Create or update local LeekScript and TypeScript files on the account."""
+    """Create or update local LeekScript and TypeScript files on the account.
+
+    Returns the counts of changes and a hash of the deployed sources.
+    """
     local_entries = get_local_ais(root_folder)
     local_folders = [entry for entry in local_entries if entry.type == "folder"]
     local_files = [entry for entry in local_entries if entry.type == "file"]
@@ -300,6 +389,15 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
     print("\nDeployment complete: {0} created, {1} updated, {2} unchanged, "
           "{3} remote AIs and {4} folders moved to trash."
           .format(created, updated, unchanged, deleted_files, deleted_folders))
+    return {
+        "created": created,
+        "updated": updated,
+        "deleted_files": deleted_files,
+        "deleted_folders": deleted_folders,
+        "source_hash": FightArchive.hash_sources(
+            (path, local_file.hash) for path, local_file in local_file_paths
+        ),
+    }
 
 
 def Fight(api, config):
