@@ -1,7 +1,8 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
+import { castBoostInContact, castBoostWithSpareTp, logChipInventory } from "../Brain/StrengthBoost.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
@@ -216,6 +217,7 @@ export function turn(): void {
 			const greeting = getRandomMessage(SPEECH.GREETINGS)
 			log(() => `[Speech] Greeting: "${greeting}"`, LOG_CONTEXT.SPEECH)
 			me.say(greeting)
+			logChipInventory(me)
 			isFirstTurn = false
 		}
 
@@ -237,13 +239,18 @@ export function turn(): void {
 		observeThreatMap(me)
 		displayDangerZone()
 
+		const mpAtStart = me.mp
+		// Avant le plan : en contact, un boost de force rentable change la force et les PT que le plan verra.
+		castBoostInContact(me, target)
+
 		planAct(me, undefined, {
 			reachable: enemyMemory.getReachable(me.id),
 			threat: enemyMemory.getThreatMap()
 		})
 
-		// Après le plan : l'équipement du tour 1 n'utilise que des PT que le plan n'a pas voulu dépenser.
+		// Après le plan : l'équipement du tour 1 et le boost de force n'utilisent que des PT non dépensés par le plan.
 		equipOpeningWeapon(me)
+		castBoostWithSpareTp(me, target, mpAtStart)
 		recordMyTurnEnd(me)
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
@@ -56,6 +56,22 @@ export function strengthBoostOf(chip: Chip, science: number): number {
 		}
 	}
 	return gain > 0 ? gain : 0
+}
+
+/** La feature est-elle un boost de force (`BUFF_STRENGTH` ou `RAW_BUFF_STRENGTH`) ? */
+export function isStrengthBoostType(type: number): boolean {
+	return type === Effect.BUFF_STRENGTH || type === (Effect.RAW_BUFF_STRENGTH ?? RAW_BUFF_STRENGTH_ID)
+}
+
+/** Durée en tours (la plus longue) des features de boost de force d'une puce ; 0 si elle n'en a pas. */
+export function strengthBoostTurns(chip: Chip): number {
+	let turns = 0
+	for (const feature of chip.features ?? []) {
+		if (isStrengthBoostType(feature.type)) {
+			turns = Math.max(turns, Number.isFinite(feature.turns) ? feature.turns : 0)
+		}
+	}
+	return turns
 }
 
 /** L'item a-t-il au moins une feature DAMAGE de valeur maximale > 0 ? */
