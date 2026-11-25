@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { ExecutionBudget, hasExecutionRoom } from "../dist/Classes/Plannification/ExecutionBudget.js"
+import { ExecutionBudget, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "../dist/Classes/Plannification/ExecutionBudget.js"
 
 // Coûts synthétiques : aucune calibration du moteur n'est revendiquée.
 function counter(start, run) {
@@ -9,12 +9,17 @@ function counter(start, run) {
 	try { run(n => { ops += n }) } finally { delete globalThis.System }
 }
 
-test("execution starts beyond research70%, but keeps the explicit 3% tail", () => {
-	counter(711002, spend => {
+test("the search ceiling shared by the tactical search and the plan B is 85 % of the total", () => {
+	assert.equal(SEARCH_GLOBAL_FRACTION, 0.85)
+})
+
+test("execution starts beyond the 85% search ceiling, but keeps the explicit 3% tail", () => {
+	counter(851002, spend => {
+		assert.ok(851002 > 1000000 * SEARCH_GLOBAL_FRACTION)
 		const budget = new ExecutionBudget()
 		assert.ok(hasExecutionRoom())
 		assert.ok(budget.available())
-		spend(258997)
+		spend(118997)
 		assert.equal(hasExecutionRoom(), true)
 		spend(1)
 		assert.equal(hasExecutionRoom(), false)

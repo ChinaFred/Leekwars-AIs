@@ -198,9 +198,19 @@ test("multiple enemies: retreat uses aggregate danger, not distance from the cho
 	assert.deepEqual(w.events, ["shoot", "shoot", ["move", 0, 1, 1]])
 })
 
-test("absolute reserve is not increased: no search movement at 70 percent ops", () => {
-	const w = world(); w.setOps(700000); w.run()
-	assert.deepEqual(w.events, [])
+test("plan B search ceiling is 85 percent: full search at 750000 and 849999, no search movement from 850000", () => {
+	// Même plafond que la recherche tactique (SEARCH_GLOBAL_FRACTION). À 70 % (700 000) le plan B était dégradé :
+	// ses 8 premières cases natives seulement, aucune approche, aucun tir.
+	const fullPlan = [["move", 1, 0, 1], "shoot", "shoot", ["move", -2, 0, 3]]
+	for (const ops of [700000, 750000, 849999]) {
+		const w = world(); w.steady(); w.setOps(ops); executeReservePlan(w.me, w.profile, w.context)
+		assert.deepEqual(w.events, fullPlan, `plan B starting at ${ops}`)
+		assert.equal(w.me.tp, 2)
+	}
+	for (const ops of [850000, 850001]) {
+		const w = world(); w.steady(); w.setOps(ops); executeReservePlan(w.me, w.profile, w.context)
+		assert.deepEqual(w.events, [], `plan B starting at ${ops}`)
+	}
 })
 
 test("no shot: route around a wall progresses even when Manhattan distance initially increases", () => {
@@ -328,14 +338,14 @@ test("rejected native attack must not be reported as two successful attacks", ()
 })
 
 test("tactical validation checks reserve while scanning danger before fallback", () => {
-	const w = world(); let ops = 690000
+	const w = world(); let ops = 840000
 	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	const dangerAt = w.context.threat.dangerAt.bind(w.context.threat)
-	// Compteur synthétique, pas une mesure d'ops du moteur.
+	// Compteur synthétique, pas une mesure d'ops du moteur. Plafond global de la recherche tactique : 85 %.
 	w.context.threat.dangerAt = cell => { ops += 10000; return dangerAt(cell) }
 	const result = evaluateTacticalPlans(w.me, w.profile, w.context)
 	assert.equal(result.reason, "operations reserve")
-	assert.ok(ops <= 710000, `unguarded validation crossed reserve: ${ops} operations`)
+	assert.ok(ops <= 860000, `unguarded validation crossed reserve: ${ops} operations`)
 	assert.deepEqual(w.events, [])
 })
 
@@ -353,7 +363,7 @@ test("reserve validation stops searching at 3%, then may execute a validated sho
 
 for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
 	for (const [start, after] of [
-		[660000, 699999], [660000, 700000], [660000, 700001],
+		[800000, 849999], [800000, 850000], [800000, 850001],
 		[500000, 549999], [500000, 550000], [500000, 550001]
 	]) test(`${role}: reserve executes with operations ${after} after starting at ${start}`, () => {
 		const w = world(); w.steady(); let ops = start

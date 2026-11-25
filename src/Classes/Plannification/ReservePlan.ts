@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
@@ -7,7 +7,7 @@ import { LeekProfile } from "../LeekProfile.js"
 import { Plannification } from "./Plannification.js"
 import { TacticalContext, TacticalPreparation } from "./TacticalPlanner.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
-import { ExecutionBudget, EXECUTION_BUDGET_POLICY, hasExecutionRoom } from "./ExecutionBudget.js"
+import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
 const key = (cell: Cell): number => cell.x * 4096 + cell.y
 const same = (a: Cell, b: Cell): boolean => key(a) === key(b)
@@ -137,7 +137,7 @@ export function executeReservePlan(
 	}
 	const globalBudget = (): boolean => typeof System === "undefined" ||
 		!Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
-		System.operations < System.maxOperations * 0.70
+		System.operations < System.maxOperations * SEARCH_GLOBAL_FRACTION
 	let executionBudget: ExecutionBudget | null = null
 	const budget = (): boolean => executionBudget ? executionBudget.available() : hasExecutionRoom()
 	const searchBudget = (): boolean => globalBudget() && (typeof System === "undefined" ||
@@ -422,7 +422,7 @@ export function executeReservePlan(
 				ops: typeof System === "undefined" ? null : {
 					current: System.operations, relative: System.operations - startOps,
 					searchConsumed: System.operations - startOps - loggingOps, loggingConsumed: loggingOps,
-					searchFraction: SEARCH_FRACTION, researchGlobalFraction: 0.70,
+					searchFraction: SEARCH_FRACTION, researchGlobalFraction: SEARCH_GLOBAL_FRACTION,
 					executionMargin: EXECUTION_BUDGET_POLICY
 				},
 				approach: shot ? { to: { x: shot.cell.x, y: shot.cell.y }, mpCost: shot.cost,

@@ -183,10 +183,18 @@ test("the relative ceiling is 30 % of the total: 300 000 abandons, with the plan
 	}
 })
 
-test("the global 70 % ceiling is unchanged: a late start stops the search before the relative ceiling", () => {
-	const result = turn5({ startOps: 450000, searchCost: 260000 })
-	assert.equal(result.reason, "operations reserve")
-	const kept = turn5({ startOps: 400000, searchCost: 250000 })
-	assert.equal(kept.reason, "complete search")
-	assert.equal(kept.plan.destination.id, SAFE_CELL)
+test("the global ceiling is 85 %: a search crossing 700 000 is no longer abandoned, 850 000 stops it", () => {
+	// Avant : plafond global de 70 % → ces deux recherches (relatif < 300 000) étaient abandonnées au passage de 700 000.
+	for (const [startOps, searchCost] of [[500000, 250000], [590000, 250000]]) {
+		const result = turn5({ startOps, searchCost })
+		assert.equal(result.reason, "complete search", `start ${startOps}, cost ${searchCost}`)
+		assert.equal(result.plan.destination.id, SAFE_CELL)
+		assert.ok(result.getOps() > 700000 && result.getOps() < 850000)
+	}
+	for (const [startOps, searchCost] of [[600000, 250000], [650000, 260000]]) {
+		const result = turn5({ startOps, searchCost })
+		assert.equal(result.reason, "operations reserve", `start ${startOps}, cost ${searchCost}`)
+		assert.equal(result.plan, null)
+		assert.ok(result.getOps() >= 850000)
+	}
 })

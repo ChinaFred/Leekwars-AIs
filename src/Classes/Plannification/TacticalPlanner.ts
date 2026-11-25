@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 13
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -7,7 +7,7 @@ import { ThreatMap } from "../Context/ThreatMap.js"
 import { ShotCandidate, baseMeanDamage, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
-import { ExecutionBudget, EXECUTION_BUDGET_POLICY, hasExecutionRoom } from "./ExecutionBudget.js"
+import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
 export interface TacticalContext {
 	readonly reachable: ReachableCells | null
@@ -66,8 +66,6 @@ export const TACTICAL_LIMITS = {
  * alors que le planificateur complet choisissait une case sûre. Aucun coût réel mesuré : politique, pas borne moteur.
  */
 const SEARCH_FRACTION = 0.30
-/** Part du total au-delà de laquelle aucune recherche ne démarre ni ne continue (inchangée). */
-const GLOBAL_FRACTION = 0.70
 
 class Budget {
 	private work = 0
@@ -84,7 +82,7 @@ class Budget {
 	check(): void {
 		if (typeof System !== "undefined" &&
 			Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
-			(System.operations >= System.maxOperations * GLOBAL_FRACTION ||
+			(System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION ||
 				System.operations - this.start >= System.maxOperations * SEARCH_FRACTION)) {
 			throw new Unavailable("operations reserve")
 		}

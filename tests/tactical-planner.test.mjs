@@ -314,7 +314,7 @@ test("bounded search and low operation reserve fall back before any action", () 
 	const w = world({ tp: TACTICAL_LIMITS.tp + 1 })
 	assert.match(w.evaluate().reason, /bound/)
 	w.me.tp = 6
-	globalThis.System = { operations: 701, maxOperations: 1000 }
+	globalThis.System = { operations: 851, maxOperations: 1000 }
 	assert.match(w.evaluate().reason, /operations reserve/)
 	delete globalThis.System
 	assert.deepEqual(w.events, [])
@@ -322,7 +322,7 @@ test("bounded search and low operation reserve fall back before any action", () 
 
 test("provider interruption retains only a complete incumbent when the execution budget permits", () => {
 	for (const { start, max, after, retained } of [
-		{ start: 600, max: 1000, after: 701, retained: true },
+		{ start: 600, max: 1000, after: 851, retained: true },
 		{ start: 1000, max: 10000, after: 4000, retained: true },
 		{ start: 600, max: 1000, after: 969, retained: true },
 		{ start: 600, max: 1000, after: 970, retained: false },
@@ -348,6 +348,29 @@ test("provider interruption retains only a complete incumbent when the execution
 				assert.ok(w.events.some(event => event.startsWith("shoot:")))
 				assert.ok(w.me.tp >= 0 && w.me.mp >= 0)
 			}
+		} finally {
+			Fight.weaponCells = nativeWeaponCells
+			delete globalThis.System
+		}
+	}
+})
+
+test("global search ceiling is exactly 85 %: 849 999 completes, 850 000 stops (shared with the plan B)", () => {
+	for (const [after, stopped] of [[849999, false], [850000, true], [850001, true]]) {
+		const w = world()
+		let operations = 600000 // départ + 249 999 < plafond relatif de 300 000 : seul le plafond global joue
+		globalThis.System = { get operations() { return operations }, maxOperations: 1000000 }
+		const nativeWeaponCells = Fight.weaponCells
+		Fight.weaponCells = (...args) => {
+			operations = after
+			return nativeWeaponCells(...args)
+		}
+		try {
+			const result = w.evaluate()
+			assert.equal(result.reason === "complete search", !stopped, `after ${after}`)
+			if (stopped) assert.match(result.reason, /operations reserve/)
+			assert.ok(result.plan !== null)
+			assert.deepEqual(w.events, [])
 		} finally {
 			Fight.weaponCells = nativeWeaponCells
 			delete globalThis.System
@@ -527,7 +550,7 @@ for (const [role, crossover] of [
 
 for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) test(`${role}: search boundaries retain a complete incumbent where permitted`, () => {
 	for (const [start, max, below, boundary] of [
-		[600, 1000, 699, 700], [1000, 10000, 3999, 4000]
+		[600, 1000, 849, 850], [1000, 10000, 3999, 4000]
 	]) {
 		const cases = [[below, true], [boundary, true], [boundary + 1, true]]
 		if (max === 1000) cases.push([969, true], [970, false], [971, false])

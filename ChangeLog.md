@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Plafond global de recherche à 85 %
+
+- La recherche tactique et le plan B peuvent aller jusqu'à 850 000 opérations sur 1 000 000 (70 % avant), plafond unique partagé.
+
 ## 2026-11-25 — Client API Garden résilient au 401
 
 - Ré-authentification unique, disjoncteurs, archivage interrompu après 3 refus et reconnexion au principal.

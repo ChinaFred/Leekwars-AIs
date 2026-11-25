@@ -1,11 +1,18 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 
 // Politique prudente, PAS une borne mesurée des primitives natives :
 // garder l'équivalent de la fenêtre de recherche courte (3 %) en fin de tour,
 // plus deux segments du plus gros coût observé ENTRE contrôles d'exécution
 // (prochain segment + marge d'erreur). Ne jamais y inclure la recherche passée.
 const TAIL_FRACTION = 0.03
+/**
+ * Part du total au-delà de laquelle ni la recherche tactique ni celle du plan B ne démarrent ni ne continuent
+ * (850 000 sur 1 000 000). Source unique : les deux plafonds ne dérivent pas l'un de l'autre, ce qui supprime la
+ * fenêtre où la recherche tactique s'arrêterait alors que le plan B, plus strict, serait déjà dégradé.
+ * Les actions n'y sont pas soumises (voir `room`).
+ */
+export const SEARCH_GLOBAL_FRACTION = 0.85
 export const EXECUTION_BUDGET_POLICY =
 	"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed"
 
