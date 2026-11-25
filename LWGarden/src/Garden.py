@@ -189,7 +189,10 @@ def main():
             confirmation = input(
                 "PULL will replace the configured local AI folder. Type OVERWRITE to continue: ")
             if confirmation.strip() == "OVERWRITE":
-                get_all_ais(api, config["AIs_folder"])
+                try:
+                    get_all_ais(api, config["AIs_folder"])
+                except RuntimeError as error:
+                    print("PULL failed: {0}".format(error))
             else:
                 print("PULL cancelled.")
         elif selection == '2':
@@ -202,8 +205,12 @@ def main():
             confirmation = input(
                 "PUSH local .leek/.ts source files to primary account {0}? [y/N]: ".format(farmer["login"]))
             if is_yes_confirmation(confirmation):
-                summary = deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
-                record_publication(config, farmer["login"], summary)
+                try:
+                    summary = deploy_local_ais(api, config["AIs_folder"], confirm_remote_deletions)
+                except RuntimeError as error:
+                    print("PUSH failed: {0}".format(error))
+                else:
+                    record_publication(config, farmer["login"], summary)
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
@@ -243,10 +250,23 @@ def local_path_for_ai(root_folder, ai_path):
     return os.path.join(root_folder, *normalize_ai_path(ai_path).split("/"))
 
 
+def read_remote_tree(api):
+    """Return the remote AI tree, or raise with the server error instead of a KeyError."""
+    tree = api.get_ai_tree()
+    if (not isinstance(tree, dict) or not isinstance(tree.get("folders"), list)
+            or not isinstance(tree.get("files"), list)):
+        error = tree.get("error") if isinstance(tree, dict) else None
+        raise RuntimeError(
+            "Could not read the remote AI tree (server error: {0}). "
+            "The session may have expired: restart Garden.".format(error or "unexpected response")
+        )
+    return tree
+
+
 def get_all_ais(api, root_folder: str):
     """Download all AI files, preserving their paths in the local source folder."""
     print("\nget_all_ais()\n")
-    ai_tree = api.get_ai_tree()
+    ai_tree = read_remote_tree(api)
 
     root_folder = os.path.abspath(root_folder)
     print("Delete previous files & folder under " + root_folder)
@@ -308,7 +328,7 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
         normalize_ai_path(entry.relative_path) for entry in local_folders
     }
 
-    remote_tree = api.get_ai_tree()
+    remote_tree = read_remote_tree(api)
     existing_folders = {normalize_ai_path(path) for path in remote_tree["folders"]}
     existing_files = {normalize_ai_path(ai["path"]) for ai in remote_tree["files"]}
     remote_only_files = sorted(existing_files - local_file_path_set)

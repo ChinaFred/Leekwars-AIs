@@ -116,6 +116,23 @@ class GardenRecordPublicationTests(unittest.TestCase):
             self.assertIsNone(self.record(self.summary))
 
 
+class RemoteTreeErrorTests(unittest.TestCase):
+    def test_error_response_is_reported_and_never_wipes_local_sources(self):
+        class ErrorApi:
+            def get_ai_tree(self):
+                return {"error": "unauthorized"}
+
+        with tempfile.TemporaryDirectory() as root:
+            marker = os.path.join(root, "keep.ts")
+            with open(marker, "w") as handle:
+                handle.write("x")
+            for action in (lambda: Garden.get_all_ais(ErrorApi(), root),
+                           lambda: Garden.deploy_local_ais(ErrorApi(), root)):
+                with self.assertRaisesRegex(RuntimeError, "unauthorized"):
+                    action()
+            self.assertTrue(os.path.exists(marker))
+
+
 class RetentionBoundaryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
