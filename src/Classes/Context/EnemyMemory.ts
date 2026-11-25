@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -206,7 +206,7 @@ export class EnemyMemory {
 
 	/**
 	 * À appeler au début de MON tour, après `updateReachable` : calcule la carte de danger de `me` (voir
-	 * `ThreatMap.ts`) et remplace la précédente. Collecte seule, aucun effet tactique. Retourne null (et
+	 * `ThreatMap.ts`) et remplace la précédente. Le planificateur conjoint lit cette carte. Retourne null (et
 	 * efface la carte) si mes cases atteignables du tour sont absentes ou périmées.
 	 *
 	 * Par ennemi vivant : force = `entity.strength` actuelle (hypothèse non vérifiée : elle inclut déjà les

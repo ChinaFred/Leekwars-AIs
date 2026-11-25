@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { planAct } from "../Brain/PlanActScenario.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
@@ -16,7 +16,7 @@ initLeekLogging(leekLogConfig)
 
 let isFirstTurn = true
 
-/** Mémoire de l'adversaire : collecte seule, non transmise à planAct (aucun effet sur la tactique). */
+/** Mémoire et cartes du tour ; seules les cartes sont transmises à planAct. */
 export const enemyMemory = new EnemyMemory()
 
 /**
@@ -57,8 +57,8 @@ function observeEnemies(me: Me): void {
 }
 
 /**
- * Calcule les cases atteignables de moi, de mes alliés et des ennemis vivants (collecte seule, aucun effet
- * sur planAct). Une erreur est journalisée sans interrompre le tour. Un seul log court par tour.
+ * Calcule les cases atteignables utilisées par le planificateur et les visualisations.
+ * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour.
  */
 function observeReachableCells(me: Me): void {
 	try {
@@ -79,8 +79,8 @@ function observeReachableCells(me: Me): void {
 }
 
 /**
- * Calcule la carte de danger de mon poireau à partir des cases atteignables (collecte seule, aucun effet
- * sur planAct). Une erreur est journalisée sans interrompre le tour. Un seul log court par tour ; son coût
+ * Calcule la carte de danger utilisée par planAct à partir des cases atteignables.
+ * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour ; son coût
  * est inclus dans la ligne d'opérations de `logTurnOperations`.
  */
 function observeThreatMap(me: Me): void {
@@ -197,7 +197,10 @@ export function turn(): void {
 		observeThreatMap(me)
 		displayDangerZone()
 
-		planAct(me)
+		planAct(me, undefined, {
+			reachable: enemyMemory.getReachable(me.id),
+			threat: enemyMemory.getThreatMap()
+		})
 
 		recordMyTurnEnd(me)
 

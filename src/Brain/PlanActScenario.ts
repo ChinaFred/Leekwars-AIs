@@ -1,13 +1,23 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
+import { TacticalContext, evaluateTacticalPlans, executeTacticalPlan } from "../Classes/Plannification/TacticalPlanner.js"
+import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
-export function planAct(me: Me, profile = createDefaultProfile()): void {
+export function planAct(me: Me, profile = createDefaultProfile(), context?: TacticalContext): void {
 	const target = Fight.getNearestEnemy()
 	if (target === null) {
 		return
 	}
+
+	const tactical = evaluateTacticalPlans(me, profile, context)
+	if (tactical.plan !== null) {
+		executeTacticalPlan(me, tactical.plan)
+		return
+	}
+	log(() => `[Plannification] SkipShootOrChip: [Tactical] fallback: ${tactical.reason}; legacy planning`,
+		LOG_CONTEXT.PLANNING)
 
 	const plan = new Plannification(me, target, profile)
 	plan.chooseWeapon()

@@ -1,17 +1,64 @@
 # Stratégies de combat de Kassbi
 
-Document de référence unique des décisions tactiques. Les valeurs ci-dessous sont celles du code (`src/Classes/Strategy/*.ts`, `src/Classes/Plannification/Plannification.ts`, `src/Brain/PlanActScenario.ts`) ; en cas d'écart, le code fait foi.
+Document de référence unique des décisions tactiques. Les valeurs ci-dessous sont celles du code (`src/Classes/Strategy/*.ts`, `src/Classes/Plannification/{Plannification,TacticalPlanner}.ts`, `src/Brain/PlanActScenario.ts`) ; en cas d'écart, le code fait foi.
 
 **Règle de maintenance** : tout changement de seuil, de condition ou d'ordre de planification met à jour ce fichier et ajoute ou ajuste un test de régression dans `tests/`.
 
 ## Chaîne de décision
 
-1. [`turn()`](../src/Main/Kassbi_Class.ts) met d'abord à jour la mémoire de l'adversaire (voir plus bas, sans effet sur les décisions), puis appelle `planAct(me)` avec le profil par défaut : rôle `BALANCED`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés. L'entrée principale n'utilise donc aujourd'hui que `BalancedStrategy` ; `AggressiveStrategy` et `DefensiveStrategy` s'obtiennent en passant un autre `LeekProfile` à `planAct`.
-2. `Plannification` choisit l'arme (`chooseWeapon`), l'équipe si besoin, puis planifie des actions exécutées d'un coup par `execute()`.
-3. Ordre normal : `planMove` → `planShootOrChip` → `planChipsActionsAfterShoot` (bouclier, soin) → `planHide` → `planRetreatAfterShoot`.
+1. [`turn()`](../src/Main/Kassbi_Class.ts) met d'abord à jour la mémoire de l'adversaire et les cartes, puis appelle `planAct(me, undefined, { reachable, threat })` avec le profil par défaut : rôle `BALANCED`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés.
+2. `planAct` évalue d'abord des plans conjoints avec `TacticalPlanner` (voir ci-dessous). Si les données ou le budget sont insuffisants, aucune action de cette évaluation n'a été exécutée : repli explicite vers **la séquence historique inchangée**, sur l'ennemi le plus proche. `Kassbi_test.ts` et les appels à deux arguments n'apportent pas de cartes : ils gardent ce repli historique.
+3. **Séquence historique seulement** : `Plannification` choisit l'arme (`chooseWeapon`), l'équipe si besoin ; ordre normal : `planMove` → `planShootOrChip` → `planChipsActionsAfterShoot` (bouclier, soin) → `planHide` → `planRetreatAfterShoot`.
 4. Ordre « situation critique » : si `distance <= 8`, `vie <= 60 %` et `shouldHide` est vrai, l'ordre devient `planHide` → chips → tir → déplacement (→ `planRetreatAfterShoot`, ajouté en fin dans les deux ordres).
 5. `planShootOrChip` ne dépend plus de `planMove` : le tir et la chip d'attaque sont planifiés quel que soit l'ordre (arme choisie si besoin). Dans l'ordre critique, le repli s'exécute avant les tirs, qui restent gardés à l'exécution par `canUseWeapon` : ils ne partent que si la cible est encore à portée après le repli.
 6. `planRetreatAfterShoot` (recul de `zone_control`) est un no-op si `planHide` ou `planMove` ont déjà consommé les PM (`mpLeft = 0`), donc l'ordre critique n'est pas modifié et `planHide` garde la priorité.
+
+## Plans conjoints attaque / protection / déplacement
+
+Implémentation : [`TacticalPlanner.ts`](../src/Classes/Plannification/TacticalPlanner.ts). Les seuils de soin, bouclier, chip d'attaque et repli décrits plus bas appartiennent au **repli historique** ; le chemin conjoint met ces actions en concurrence via le score, sans ces seuils. Les autorisations du profil restent obligatoires.
+
+### Données obligatoires et repli
+
+- `ReachableCells` et `ThreatMap` doivent être présentes, du poireau courant et du tour courant. La zone atteignable doit aussi correspondre à la position et aux PM actuels ; `candidateCells` doit correspondre à sa taille.
+- Toute troncature (`reachable.truncated`, `threat.truncated`, **`inputsTruncated`**) invalide l'évaluation entière. Chaque case atteignable doit avoir un danger **connu, fini et ≥ 0**, y compris la destination. Aucune valeur manquante n'est remplacée par zéro. Les indisponibilités attendues entraînent un repli motivé ; toute autre exception pendant l'évaluation est signalée avec sa cause et sa pile dans le contexte `ERROR`, puis entraîne aussi le repli sans action tactique préalable. Comme les autres erreurs du dépôt, ce signalement est désactivable via `ERROR`.
+- Repli journalisé sous `PLANNING` : `[Plannification] SkipShootOrChip: [Tactical] fallback: <raison>; legacy planning`. Les limites de la carte restent valables même complète : **danger potentiel modélisé = 0 n'est pas une preuve d'absence de menace**.
+- Si aucune attaque positive ni protection utile n'est possible dans la zone, retour à l'historique pour ne pas rester immobile hors portée. Si une attaque est possible mais trop risquée au score, un plan sans attaque peut gagner.
+
+### Espace de plans et faisabilité
+
+1. Toutes les cibles vivantes, toutes mes armes (dont l'arme équipée) et les puces offensives prêtes entrent en compétition dans les bornes ci-dessous. Un plan attaque **une seule cible depuis une seule case de tir**, avec au plus une arme ; l'option sans arme existe, y compris si je n'ai aucune arme.
+2. Cases de tir natives, calculées une fois par `(cible, item)` : `Fight.weaponCells(target, weapon)` et `me.chipCells(chip, target)`, déjà utilisées par `ShootingOptions`. Elles filtrent portées minimale/maximale, motif de lancer et LOS. **Le score de `ShootingOptions` n'est pas utilisé**, ni le glouton `planShots` de la carte de danger. `toCandidate`/`maxUsesOf` sont réutilisés pour les dégâts bruts et limites.
+   Une puce offensive n'est créditée que si `me.canUseChip(chip, target)` est **vrai depuis la case actuelle** et que la case hypothétique figure dans `chipCells`. Si ce test est faux, la puce est exclue pour cette cible, mais les autres attaques restent candidates. Ce refus ne prouve **pas** que la puce serait inutilisable ailleurs : il peut être dû uniquement à la portée ou à la LOS, ou à une restriction supplémentaire impossible à distinguer depuis l'origine. Si la case actuelle figure dans `chipCells` malgré le refus, celui-ci est identifié comme une divergence avec les cellules ; sinon la cause est indéterminée. Sans API vérifiée permettant d'isoler ces restrictions à distance, l'exclusion est délibérément prudente ; si rien d'autre n'est exploitable, repli historique avec le motif `offensive chip refused at current cell` ou `offensive chip legality unverified` (ce dernier prioritaire si les deux cas existent). Une puce déjà utilisable peut encore être planifiée après déplacement, mais le succès futur n'est pas garanti et `canUseChip` est revérifié sur place.
+3. Départ → tir : coût BFS de ma zone courante. Tir → destination : **nouveau BFS depuis la case de tir**, avec uniquement `PM − coût avant tir`. Occupants et obstacles bloquent le passage ; la destination doit aussi appartenir à la zone initiale et être connue de la carte. Cela inclut les trajets aller-retour, sans réutiliser les PM du départ. Le modèle garde l'hypothèse de 4-connexité de `ReachableCells`.
+4. Pour chaque arme et budget de PT, sac à dos borné par coût **exact** : tous les nombres de tirs permis par `maxUses` et les PT, chaque puce au plus une fois (même cooldown nul). Aucun filtre « ratio de puce supérieur à celui de l'arme ». Les puces peuvent utiliser un reliquat ou battre une combinaison gloutonne. Changer d'arme coûte **1 PT**, inclus avant comparaison ; pas de changement dans les plans sans tir d'arme.
+5. Protection : tous les sous-ensembles de puces prêtes, abordables, actuellement utilisables sur moi, dont les seules features sont `HEAL`, `ABSOLUTE_SHIELD`, `RELATIVE_SHIELD`. `allowHealing`/`allowShielding` filtrent les types ; pas de crédit pour des buffs non simulés. Une puce ne peut pas être à la fois support et attaque dans ce modèle.
+6. Ordre exécuté : **déplacement avant tir → protection → équipement éventuel → puces offensives → tirs → déplacement final**. Les PT de protection sont réservés avant de composer l'attaque. Si `allowHiding = false`, destination = case de tir et un plan sans dégâts estimés positifs ne peut pas changer de case avant tir ; l'approche permettant des dégâts utiles reste autorisée.
+
+### Score et compromis explicite
+
+Pour chaque impact offensif, estimation `d = max(0, dégâts moyens bruts × (1 − clamp(bouclier relatif cible, 0, 100)/100) − max(0, bouclier absolu cible))`. C'est une approximation statique : pas d'arrondis moteur ni de simulation des variations de bouclier. Dégâts utiles `U = min(PV actuels cible, Σ d)` : l'excès de dégâts n'est pas récompensé.
+
+Avec `D` le danger **brut inchangé** de la destination :
+
+- soin crédité `H = min(PV manquants, Σ soin moyen × (1 + sagesse/100))` ;
+- protection absolue de base `A = Σ valeur moyenne ABSOLUTE_SHIELD`, relative `R = min(100, Σ valeur moyenne RELATIVE_SHIELD)` ;
+- crédit d'armure **heuristique** `C = min(D, A + D × R/100)` : seulement un impact d'armure absolue crédité, sans amplification par la résistance, ni multiplication par le nombre de tirs possibles ;
+- poids `w = facteur rôle × (1,5 − agressivité/100)` ; facteur rôle = **0,75 AGGRESSIVE**, **1 BALANCED**, **1,25 DEFENSIVE** (donc `w = 1` par défaut) ;
+- **score = `U − w × (D − C) + w × H`**. À égalité : danger brut inférieur, puis PT dépensés inférieurs, puis PM totaux inférieurs, puis ordre d'énumération stable.
+
+Ce score échange des dégâts moyens **ce tour** contre une menace potentielle **au prochain tour ennemi**, de précision différente ; il ne constitue ni une probabilité de survie ni un minimax exact. Le crédit de soin et d'armure n'est pas une réduction garantie de dégâts. Les boucliers déjà présents sur moi ne sont pas déduits de `D` ; les buffs de protection ne sont pas garantis par une simulation moteur. La portée préférée n'est pas un bonus du score conjoint (elle reste utilisée par l'historique).
+
+**Jamais de retrait d'un ennemi de la carte sur la seule base de dégâts moyens**, même si `U` atteint ses PV : le danger reste celui de tous les ennemis modélisés. À l'exécution seulement, `target.life <= 0` arrête les attaques restantes ; le déplacement final reste possible.
+
+### Exécution dynamique et budget
+
+- Avant l'approche : recalcul d'atteignabilité avec les PM réels, coût ≤ budget prévu ; `moveToward(cell, coût)` puis vérification de la **case réellement atteinte**. Sinon arrêt du plan, journalisé.
+- Chaque protection/attaque vérifie vie, PT actuels, cooldown, limites, possession de la puce, puis `canUseChip` / `canUseWeapon`. Une arme n'est tirée que si elle est réellement équipée (un équipement raté ne fait pas tirer l'ancienne au mauvais coût). Avant le déplacement final : nouveau BFS avec `min(PM réels, PM après tir prévus)`, destination réellement atteignable ; échec/obstacle/arrivée incomplète journalisés.
+- Aucun retour à l'historique **après** début d'exécution : éviter doubles actions/doubles dépenses. Pas de recomposition optimale après échec, variation des dégâts ou mort effective ; certaines ressources peuvent rester inutilisées.
+- Bornes `TACTICAL_LIMITS` : **85 cases**, **4 ennemis**, **4 armes**, **8 puces offensives**, **3 protections**, **30 PT**. Au-delà, repli historique explicite, pas de sous-ensemble caché présenté comme optimum. Au plus **100 000 unités de travail** de recherche (itérations comptées, **pas des opérations moteur**), puis abandon de l'ensemble.
+- Si les compteurs `System` sont disponibles : contrôle périodique (toutes les 64 unités, dès la première), ainsi qu'avant/après les fournisseurs natifs de cases et les BFS de recherche ; abandon à **70 % du budget total** utilisé, ou **15 % du budget total** consommé depuis le début de la recherche. Réserve indicative pour l'exécution/le repli ; une primitive native ou un BFS entre deux contrôles peut dépasser cette réserve. Aucun coût réel en ops n'a été mesuré. Les tableaux de PT font au plus 31 entrées ; une seule table par cible/case/arme dessert tous les budgets de protection, les cellules natives sont mises en cache pour l'évaluation, pas recalculées pour chaque couple.
+
+**Limites restantes** : une seule cible/case de tir, pas de tir-déplacement-tir ; pas de simulation de zones et dommages collatéraux, effets secondaires des items, poison, érosion, vol de vie, critiques, arrondis, résistances spéciales, contre-effets ou combos de buffs. Les dégâts de zone ou features multiples peuvent donc être mal valorisés. Les restrictions peuvent changer après le départ et restent contrôlées à l'exécution ; la séquence historique de repli conserve ses propres limites, dont sa puce d'attaque non gardée à l'exécution. La doc officielle [canUseChip](https://leekwars.com/help/documentation/canUseChip) décrit une vérification depuis la position courante (portée et LOS, sans PT ni cooldown) ; elle ne confirme pas un test de restrictions à position hypothétique en TypeScript. Les PT/cooldowns restent vérifiés séparément. La ThreatMap conserve son propre glouton et ses menaces omises (ci-dessous) : une attaque optimisée ne rend pas sa défense exhaustive. À vérifier en combat réel : équivalence des cellules natives avec les tirs depuis une position hypothétique, API TypeScript `Fight.weaponCells(target, weapon)` (usage local existant), surcharge `moveToward(Cell, mp)` (déclaration et usages locaux, documentation générale TypeScript moins détaillée), coût des primitives, effets exacts des boucliers. Tests : mondes simulés dans `tests/tactical-planner.test.mjs` et `tests/tactical-chip-safety.test.mjs`, pas mesure de force en combat.
 
 ## Profil (`LeekProfile`)
 
@@ -22,7 +69,7 @@ Document de référence unique des décisions tactiques. Les valeurs ci-dessous 
 | `preferredMinRange` / `preferredMaxRange` | Portée visée pour le score d'arme et la distance de sécurité du repli. |
 | `allowHealing`, `allowShielding`, `allowHiding` | Désactivent respectivement le soin, le bouclier et le repli. |
 
-## Seuils par stratégie
+## Seuils par stratégie (séquence historique)
 
 `vie` = PV / PV max ; `perte` = (PV max − PV) / PV max ; `d` = distance à la cible. Colonne « a = 0,5 » : valeur à l'agressivité par défaut (50).
 
@@ -41,14 +88,14 @@ Document de référence unique des décisions tactiques. Les valeurs ci-dessous 
 - Le soin n'est planifié que si le chip `bandage` est équipé, prêt, abordable en PT, soigne moins que la vie perdue, et qu'il ne vaut pas mieux tirer : on saute le soin si `dégâts moyens par PT × coût du soin > 2 × soin moyen` (`shouldSkipHealForDamage`).
 - `LeekStrategy` (classe de base, repli à 0,45 − 0,10a) n'est pas instanciée par `createStrategy` ; elle sert de base commune.
 
-## Priorité défense / attaque
+## Priorité défense / attaque (séquence historique)
 
 `predictContactNextTurn` estime, à partir de la distance, des PM restants et des portées max, qui peut tirer au prochain tour.
 
 - **Défense prioritaire** : l'ennemi peut tirer et pas moi, **ou** les deux peuvent tirer et `vie <= 0,60`. Le bouclier est alors tenté avant le soin, et si un bouclier est planifié le soin est sauté ce tour-là.
 - **Attaque favorable** : je peux tirer et pas l'ennemi.
 
-## Comportements de déplacement (`MovementBehavior`)
+## Comportements de déplacement historiques (`MovementBehavior`)
 
 Choisis dans `planMove` quand l'arme ne peut pas tirer sur la cible (PM restants > 0), selon `predictContactNextTurn` :
 
@@ -70,7 +117,7 @@ Si ces conditions sont réunies, l'action `retreat after shoot` est ajoutée apr
 
 ## Mémoire de l'adversaire
 
-Collecte de données uniquement (`src/Classes/Context/EnemyMemory.ts`, `EnemyProfile.ts`) : **aucun effet sur la tactique**. `turn()` met la mémoire à jour avant `planAct(me)` mais ne la lui transmet pas ; une erreur de la mémoire est journalisée (`reportError`) sans interrompre le tour. Instance exportée : `enemyMemory` dans `Kassbi_Class.ts`.
+Mémoire (`src/Classes/Context/EnemyMemory.ts`, `EnemyProfile.ts`) : `turn()` la met à jour avant `planAct` et transmet maintenant ses **cartes du tour**, pas les profils ni le journal des coups. Les cooldowns/items connus et maxima de PT/PM influencent indirectement la carte de danger. Une erreur de collecte est journalisée (`reportError`) sans interrompre le tour ; des cartes insuffisantes entraînent le repli historique explicite. Instance exportée : `enemyMemory` dans `Kassbi_Class.ts`.
 
 **Stocké par ennemi vivant** (`EnemyProfile`) : id, nom, niveau, PV max, caractéristiques (force, agilité, sagesse, résistance, science, magie) à l'identification ; armes et puces connues (`weapons`, `chips`, enrichies des items observés) ; arme équipée ; items observés avec premier/dernier tour et nombre d'usages ; cooldowns suivis ; journal des coups (borné à `MAX_HIT_LOG` = 20, les plus anciens sont supprimés). Lecture : `getProfile`, `knownWeapons`, `observedWeapons`, `observedChips`, `maxKnownWeaponRange`, `getCooldown(id, chip)`, `isChipReady(id, chip)` (ennemi inconnu : 0 / prête).
 
@@ -88,7 +135,7 @@ Collecte de données uniquement (`src/Classes/Context/EnemyMemory.ts`, `EnemyPro
 
 ### Cases atteignables (`ReachableCells.ts`)
 
-Collecte seule, **aucun effet tactique** : `planAct`, `Plannification` et les stratégies ne lisent pas ces données. Au début de chaque tour, après l'identification des ennemis et avant `planAct`, `turn()` appelle `enemyMemory.updateReachable(me, alliés, ennemis vivants, Fight.turn)` (try/catch + `reportError`, fonction `observeReachableCells` ; un seul log `[Reachable] me:23 (3 MP), ally#5:12 (2 MP), enemy#2:13 (2 MP)` par tour). Seul `Kassbi_Class.ts` est branché ; `Kassbi_test.ts` ne l'est pas.
+Données utilisées par le planificateur conjoint (ma zone), la carte de danger et les visualisations. Au début de chaque tour, après l'identification des ennemis et avant `planAct`, `turn()` appelle `enemyMemory.updateReachable(me, alliés, ennemis vivants, Fight.turn)` (try/catch + `reportError`, fonction `observeReachableCells` ; un seul log `[Reachable] me:23 (3 MP), ally#5:12 (2 MP), enemy#2:13 (2 MP)` par tour). Seul `Kassbi_Class.ts` est branché ; `Kassbi_test.ts` ne l'est pas.
 
 - **Calcul** : `computeReachableCells(entity, mp, turn)` = parcours en largeur depuis `entity.cell`, au plus `mp` pas. Résultat : cases atteignables avec leur coût en PM (case de départ incluse, coût 0), `mp` utilisés, tour, drapeau `truncated` ; `canReach(cell)`, `costTo(cell)` (`null` si inatteignable), `size`, `cells()`, `entries()`. Pas d'appel à `Field.pathLength` : seulement `Field.cellFromXY`, une fois par coordonnée, soit au plus ~4 appels par case atteinte.
 - **Plafond de sécurité** : `MAX_REACHABLE_CELLS` = 500 cases retenues (un losange complet va jusqu'à 15 PM = 481 cases ; la carte en compte 613 au plus). Au-delà, `truncated = true` : toutes les cases de coût < c et une partie de celles de coût c.
@@ -101,7 +148,7 @@ Collecte seule, **aucun effet tactique** : `planAct`, `Plannification` et les st
 
 ### Carte de danger (`ThreatMap.ts`, `ShotPlan.ts`, `LaunchPattern.ts`)
 
-Collecte seule, **aucun effet tactique** : `planAct`, `Plannification` et les stratégies ne lisent pas la carte. Au début de chaque tour, après `observeReachableCells` et avant `planAct`, `turn()` appelle `enemyMemory.updateThreatMap(me, ennemis vivants, Fight.turn)` (fonction `observeThreatMap`, try/catch + `reportError` ; un seul log par tour : `[Threat] 23/23 cells, danger max 15.0 min 0.0, safest (5,5), 1 armed enemies, 299 pairs, 0 LoS`, ou `[Threat] unavailable` si mes cases atteignables du tour manquent). Son coût est inclus dans la ligne `Operations:` de `logTurnOperations`. Lecture : `enemyMemory.getThreatMap()` (une seule carte, remplacée à chaque tour) → `dangerAt(cell)` (`null` hors carte), `breakdownAt(cell)`, `entries()`, `maxDanger`, `minDanger`, `safestCells()`, `size`, `turn`, `truncated`, `inputsTruncated`, `pairsEvaluated`, `lineOfSightCalls`.
+Carte utilisée par le planificateur conjoint pour le danger final ; l'historique `Plannification` ne la lit pas. Au début de chaque tour, après `observeReachableCells` et avant `planAct`, `turn()` appelle `enemyMemory.updateThreatMap(me, ennemis vivants, Fight.turn)` (fonction `observeThreatMap`, try/catch + `reportError` ; un seul log par tour : `[Threat] 23/23 cells, danger max 15.0 min 0.0, safest (5,5), 1 armed enemies, 299 pairs, 0 LoS`, ou `[Threat] unavailable` si mes cases atteignables du tour manquent). Son coût est inclus dans la ligne `Operations:` de `logTurnOperations`. Lecture : `enemyMemory.getThreatMap()` (une seule carte, remplacée à chaque tour) → `dangerAt(cell)` (`null` hors carte), `breakdownAt(cell)`, `entries()`, `maxDanger`, `minDanger`, `safestCells()`, `size`, `turn`, `truncated`, `inputsTruncated`, `pairsEvaluated`, `lineOfSightCalls`.
 
 **Règles** (valeurs et formules) :
 
@@ -154,7 +201,7 @@ Toute sortie texte du log de combat passe par une seule fonction, `log(texte, co
 | `ARMOR` | Plannification : `Shield (defense priority)`, `Shield (after healing)` |
 | `CHIP` | Plannification : `AttackChip`, `Heal`, `SkipHeal` |
 | `STRATEGY` | Plannification : `PredictContactNextTurn`, `ChipsAfterShoot`, `SkipChipsAfterShoot`, `HideCheck`, `SkipHide`, `RetreatCheck`, `SkipRetreatAfterShoot` |
-| `PLANNING` | Plannification : `Execute`, `  → action`, `Done`, `SkipShootOrChip` |
+| `PLANNING` | Plannification : `Execute`, `  → action`, `Done`, `SkipShootOrChip` ; plans `[Tactical]`, repli explicite et interruptions d'exécution |
 | `SHOOTING` | `ShootingOption.debugUsedItems`, `ShootingOptions.debugDamagingItems` / `debugShootingOptions` |
 | `DEBUG` | `debugSet`, `debugMap`, `Tests/testWorld.ts` ; marques `Coordinates.mark` / `markArray` |
 | `ACCESSIBLE_ZONE` | « Accessible zone » : `Accessible zone: <nom> (<n> cells, <mp> MP)` + marques + pause (voir ci-dessous) |

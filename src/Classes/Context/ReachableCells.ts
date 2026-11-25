@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 
 /**
  * Hypothèse (non vérifiée en combat réel) : un déplacement de 1 PM va vers un voisin orthogonal,
@@ -124,7 +124,7 @@ export interface ReachableOptions {
  * comportement inchangé.
  */
 export function computeReachableCells(
-	entity: Entity,
+	entity: Pick<Entity, "id" | "cell">,
 	mp: number,
 	turn: number = Fight.turn,
 	options: ReachableOptions = {}

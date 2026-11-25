@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — V1 tactique basée sur le risque
+
+- Planification conjointe attaque, protection et déplacement selon la carte de danger, avec repli historique et tests de régression.
+
 ## 2026-11-25 — FEAT: erreurs en rouge, zone accessible et zone de danger affichées sur le terrain
 
 - `Toolbox/Logger.ts` (v2) : le contexte `ERROR` sort en rouge via `Debug.log(texte, Color.rgb(255, 0, 0))` (texte inchangé ; repli sans couleur si l'appel à 2 arguments lève). Aucun équivalent TypeScript de `debugE` n'est documenté, la forme `Debug.log(valeur, couleur)` n'est pas confirmée en TS. Nouveaux contextes `ACCESSIBLE_ZONE` et `DANGER_ZONE` (18 contextes, actifs par défaut).

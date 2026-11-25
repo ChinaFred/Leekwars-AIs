@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { isCellInLaunchPattern } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
@@ -320,7 +320,7 @@ function bestThreat(
 /**
  * Carte de danger de `me` : pour chaque case que je peux atteindre (`myReachable`, case actuelle incluse),
  * danger = Σ sur les ennemis de leurs meilleurs dégâts potentiels sur cette case (voir `bestThreat` et
- * `planShots`). Collecte de données uniquement : aucun effet tactique.
+ * `planShots`). Fournit le danger potentiel utilisé par le planificateur conjoint (modèle incomplet).
  *
  * Coût borné : au plus `maxPairs` (défaut `MAX_THREAT_PAIRS`) paires (S, X) ; un ennemi sans item offensif
  * utilisable (aucune arme équipée avec dégâts, aucune puce prête avec dégâts, coût > PT) n'est pas parcouru.
