@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Anticipation tactique et carte de menace
+
+- Préparation des futurs tirs et replis, estimation des boucliers et des boosts adverses.
+
 ## 2026-11-25 — Archives Garden et messages de commit
 
 - Archivage des combats et des versions publiées ; modèle et contrôle des messages de commit.

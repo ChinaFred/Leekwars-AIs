@@ -761,6 +761,50 @@ test("enemy boosts that cannot be cast do not take one of the MAX_THREAT_BOOSTS 
 	assert.equal(result.breakdownAt(me.cell)[0].boostTp, 2)
 })
 
+test("enemy TP boosts can finance later boosts in a different order than their inventory", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: weapon({ cost: 1, min: 10, max: 10 }), tp: 4 })
+	const costly = boostChip(19, 3000)
+	const second = tpBoostChip(8, 20)
+	const first = tpBoostChip(4, 8)
+	const map = buildThreatMap(me, myReach, [{ ...input, boosts: [costly, second, first] }], 1)
+	const threat = map.breakdownAt(me.cell)[0]
+	assert.equal(threat.damage, 310) // 4 → 8 → 20 → 1 PT, then one shot × 310
+	assert.equal(threat.boostTp, 31)
+	assert.equal(threat.tpGain, 28)
+	assert.equal(threat.strengthGain, 3000)
+})
+
+test("enemy boost subsets cannot spend TP from a boost omitted from the subset", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: weapon({ cost: 1, min: 10, max: 10 }), tp: 4 })
+	const first = tpBoostChip(4, 8)
+	const second = tpBoostChip(8, 12)
+	const last = chip({ id: 920, cost: 11, features: [
+		{ type: 32, minValue: 20, maxValue: 20 },
+		{ type: 6, minValue: 1000, maxValue: 1000 }
+	] })
+	const map = buildThreatMap(me, myReach, [{ ...input, boosts: [last, second, first] }], 1)
+	const threat = map.breakdownAt(me.cell)[0]
+	assert.equal(threat.damage, 2310) // 4 → 8 → 12 → 21 PT; last alone would falsely give 13 PT
+	assert.equal(threat.boostTp, 23)
+	assert.equal(threat.tpGain, 40)
+	assert.equal(threat.strengthGain, 1000)
+})
+
+test("enemy TP boosts cannot finance each other without an affordable first cast", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: weapon({ cost: 1, min: 10, max: 10 }), tp: 4 })
+	const boosts = [tpBoostChip(5, 12), tpBoostChip(6, 12), boostChip(1, 100)]
+	const map = buildThreatMap(me, myReach, [{ ...input, boosts }], 1)
+	assert.equal(map.dangerAt(me.cell), 60)
+	assert.equal(map.breakdownAt(me.cell)[0].boostTp, 1)
+	assert.equal(map.breakdownAt(me.cell)[0].tpGain, 0)
+})
+
 test("EnemyMemory.updateThreatMap: a ready TP boost chip raises the danger, one in cooldown does not", () => {
 	const gun = weapon({ id: 94, cost: 4, min: 10, max: 10 })
 	const motivation = tpBoostChip(2, 4, { cooldown: 5 })

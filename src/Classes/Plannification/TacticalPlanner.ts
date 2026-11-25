@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 8
+// file version: 10
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
+import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
-import { ShotCandidate, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
+import { ShotCandidate, baseMeanDamage, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, hasExecutionRoom } from "./ExecutionBudget.js"
@@ -43,6 +44,11 @@ export interface TacticalPlan {
 	readonly danger: number
 	readonly score: number
 	readonly progress?: number
+	readonly progressModel?: "future firing route"
+	/** Distance dans le graphe courant vers une case de tir native, si connue. */
+	readonly firingDistance?: number
+	/** Distance vers une case de tir géométrique hypothétique, non native. */
+	readonly futureRouteDistance?: number
 	readonly searchStatus?: string
 	readonly state?: { readonly turn: number; readonly enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }> }
 }
@@ -88,10 +94,20 @@ function featureValue(chip: Chip, type: number): number {
 	return Math.max(0, value)
 }
 
-/** Estimation par impact ; arrondis, critiques, érosion et effets secondaires non simulés. */
+/** Estimation par feature de dégâts ; arrondis, critiques, érosion et effets secondaires non simulés. */
 function netDamage(candidate: ShotCandidate, target: Entity): number {
 	const relative = Math.max(0, Math.min(100, target.relativeShield || 0))
-	return Math.max(0, candidate.damage * (1 - relative / 100) - Math.max(0, target.absoluteShield || 0))
+	const absolute = Math.max(0, target.absoluteShield || 0)
+	const base = baseMeanDamage(candidate.item)
+	const scale = base > 0 ? candidate.damage / base : 0
+	let damage = 0
+	for (const feature of candidate.item.features) {
+		if (feature.type === Effect.DAMAGE) {
+			const impact = (feature.minValue + feature.maxValue) / 2 * scale
+			damage += Math.max(0, impact * (1 - relative / 100) - absolute)
+		}
+	}
+	return damage
 }
 
 interface Attack {
@@ -131,10 +147,11 @@ function attacks(
 	states[0] = { damage: 0, weaponShots: 0, chips: [] }
 	if (weapon !== null) {
 		const limit = Math.min(weapon.uses, Math.floor(tp / weapon.cost))
+		const impact = netDamage(weapon, target)
 		for (let shots = 1; shots <= limit; shots++) {
 			budget.tick()
 			states[shots * weapon.cost] = {
-				damage: shots * netDamage(weapon, target), weaponShots: shots, chips: []
+				damage: shots * impact, weaponShots: shots, chips: []
 			}
 		}
 	}
@@ -228,11 +245,93 @@ function killsLastEnemy(damage: number, target: Entity, enemyCount: number): boo
 }
 
 function better(candidate: TacticalPlan, best: TacticalPlan | null): boolean {
-	return best === null || candidate.score > best.score ||
-		(candidate.score === best.score && (candidate.danger < best.danger ||
-			(candidate.danger === best.danger && (candidate.tpUsed < best.tpUsed ||
-				(candidate.tpUsed === best.tpUsed &&
-					candidate.beforeMp + candidate.afterMp < best.beforeMp + best.afterMp)))))
+	if (best === null) return true
+	if (candidate.score !== best.score) return candidate.score > best.score
+	if (candidate.danger !== best.danger) return candidate.danger < best.danger
+	if (candidate.tpUsed !== best.tpUsed) return candidate.tpUsed < best.tpUsed
+	if (candidate.target === best.target && candidate.firingDistance !== undefined &&
+		best.firingDistance !== undefined && candidate.firingDistance !== best.firingDistance) {
+		return candidate.firingDistance < best.firingDistance
+	}
+	if (candidate.target === best.target && candidate.futureRouteDistance !== undefined &&
+		best.futureRouteDistance !== undefined && candidate.futureRouteDistance !== best.futureRouteDistance) {
+		return candidate.futureRouteDistance < best.futureRouteDistance
+	}
+	return candidate.beforeMp + candidate.afterMp < best.beforeMp + best.afterMp
+}
+
+/**
+ * Parcours exploratoire facultatif, sans tir promis : l'unique arme choisie peut
+ * être inabordable ce tour. Les distances retournées suivent seulement des
+ * cases actuellement traversables, y compris au-delà des PM de ce tour.
+ */
+function futureWeaponRoute(
+	me: Me, target: Entity, weapons: readonly Weapon[], reachable: ReachableCells, budget: Budget
+): Map<number, number> | null {
+	if (me.mp <= 0 || typeof Field === "undefined" || typeof Field.cellFromXY !== "function") return null
+	const weapon = weapons.find((item) => validCost(item.cost) &&
+		Number.isFinite(item.minRange) && Number.isFinite(item.maxRange) &&
+		item.minRange >= 0 && item.maxRange >= item.minRange && toCandidate(item, false, me.strength) !== null)
+	if (!weapon || (weapon.needsLos && typeof Field.lineOfSight !== "function")) return null
+	const maximumCells = 160, maximumDistance = 8, maximumSightCalls = 8
+	const startOps = typeof System === "undefined" ? 0 : System.operations
+	const room = (): boolean => {
+		budget.check()
+		return typeof System === "undefined" || !Number.isFinite(System.maxOperations) ||
+			System.maxOperations <= 0 || System.operations - startOps < System.maxOperations * 0.02
+	}
+	const queue = [...reachable.entries()].map(({ cell, cost }) => ({ cell, cost }))
+	const cells = new Map<number, Cell>(queue.map(({ cell }) => [key(cell), cell]))
+	const seen = new Set<number>(cells.keys())
+	let goal: Cell | null = null
+	let sightCalls = 0
+	for (let head = 0; head < queue.length; head++) {
+		if (!room()) return null
+		budget.tick()
+		const { cell, cost } = queue[head]!
+		const dx = target.cell.x - cell.x, dy = target.cell.y - cell.y
+		const range = Math.abs(dx) + Math.abs(dy)
+		if (cost <= maximumDistance && range >= weapon.minRange && range <= weapon.maxRange &&
+			isCellInLaunchPattern(weapon.launchType, dx, dy)) {
+			if (!weapon.needsLos) { goal = cell; break }
+			if (sightCalls >= maximumSightCalls) return null
+			sightCalls++
+			const visible = Field.lineOfSight(cell, target.cell)
+			if (!room()) return null
+			if (visible) { goal = cell; break }
+		}
+		if (cost >= maximumDistance || queue.length >= maximumCells) continue
+		for (const [offsetX, offsetY] of MOVE_NEIGHBOR_OFFSETS) {
+			if (!room()) return null
+			const x = cell.x + offsetX, y = cell.y + offsetY
+			const id = x * 4096 + y
+			if (seen.has(id)) continue
+			seen.add(id)
+			const next = Field.cellFromXY(x, y)
+			if (!room()) return null
+			if (!next || next.obstacle || (next.entity !== null && next.entity.id !== me.id)) continue
+			cells.set(id, next)
+			queue.push({ cell: next, cost: cost + 1 })
+			if (queue.length >= maximumCells) break
+		}
+	}
+	if (!goal) return null
+	// Les distances sont calculées dans le sous-graphe exploré, pas à vol d'oiseau.
+	const distances = new Map<number, number>([[key(goal), 0]])
+	const reverse = [goal]
+	for (let head = 0; head < reverse.length; head++) {
+		if (!room()) return null
+		budget.tick()
+		const cell = reverse[head]!
+		const nextDistance = distances.get(key(cell))! + 1
+		for (const [dx, dy] of MOVE_NEIGHBOR_OFFSETS) {
+			const id = (cell.x + dx) * 4096 + cell.y + dy
+			const next = cells.get(id)
+			if (next && !distances.has(id)) { distances.set(id, nextDistance); reverse.push(next) }
+		}
+	}
+	for (const { cell } of reachable.entries()) if (!distances.has(key(cell))) return null
+	return distances
 }
 
 /**
@@ -365,6 +464,7 @@ function evaluate(
 		neighbors.set(key(cell), adjacent)
 	}
 	const endingCache = new Map<number, { cell: Cell; cost: number }>()
+	let firingDistances: Map<number, number> | null = null
 	const endingFor = (shot: { cell: Cell; cost: number }): { cell: Cell; cost: number } => {
 		const cached = endingCache.get(key(shot.cell))
 		if (cached) return cached
@@ -376,7 +476,10 @@ function evaluate(
 			budget.tick()
 			const entry = queue[head]!
 			const value = dangers.get(key(entry.cell))!
-			if (value < danger) { best = entry; danger = value }
+			if (value < danger || (value === danger && firingDistances &&
+				(firingDistances.get(key(entry.cell)) ?? Infinity) < (firingDistances.get(key(best.cell)) ?? Infinity))) {
+				best = entry; danger = value
+			}
 			if (!profile.allowHiding || entry.cost >= me.mp - shot.cost) continue
 			for (const cell of neighbors.get(key(entry.cell))!) {
 				if (visited.has(key(cell))) continue
@@ -479,24 +582,59 @@ function evaluate(
 			return { candidate: toCandidate(chip, true, me.strength) as ShotCandidate, cells }
 		}).filter((chip) => chip !== null)
 	}))
+	// Anticipation limitée : distances dans le graphe courant vers les cases de tir
+	// natives déjà obtenues pour l'unique cible. Aucun nouveau fournisseur ni LOS.
+	// La position ennemie et les obstacles au prochain tour restent inconnus.
+	if (prepared.length === 1) {
+		const distances = new Map<number, number>()
+		const queue: Cell[] = []
+		for (const weapon of prepared[0]!.weapons) for (const id of weapon.cells) {
+			budget.tick()
+			const cell = byKey.get(id)
+			if (cell && !distances.has(id)) { distances.set(id, 0); queue.push(cell) }
+		}
+		for (let head = 0; head < queue.length; head++) {
+			budget.tick()
+			const cell = queue[head]!
+			const nextDistance = distances.get(key(cell))! + 1
+			for (const neighbor of neighbors.get(key(cell))!) {
+				const id = key(neighbor)
+				if (!distances.has(id)) { distances.set(id, nextDistance); queue.push(neighbor) }
+			}
+		}
+		if (queue.length > 0) firingDistances = distances
+		endingCache.clear()
+	}
+	const firingDistance = (target: Entity, cell: Cell): number | undefined =>
+		target === prepared[0]?.target ? firingDistances?.get(key(cell)) : undefined
 	const hasOffense = prepared.some((enemy) =>
 		enemy.weapons.some((w) => w.candidate && netDamage(w.candidate, enemy.target) > 0 && w.cells.size > 0) ||
 		enemy.chips.some((c) => netDamage(c.candidate, enemy.target) > 0 && c.cells.size > 0))
+	const futureRoute = !hasOffense && enemies.length === 1
+		? futureWeaponRoute(me, enemies[0]!, weapons, reachable, budget) : null
+	// Si la case hypothétique est déjà accessible ce tour, conserver le progrès
+	// Manhattan existant ; la distance sert seulement à départager les égalités.
+	const futureProgress = futureRoute && futureRoute.get(key(me.cell))! > me.mp ? futureRoute : null
 	// Sans attaque connue, progression/couvert/support sont AUSSI un plan complet.
 	// Une légalité de puce refusée/non vérifiée n'autorise pas une approche de tir fictive.
 	let progressPlan: TacticalPlan | null = null
-	if (enemies.length && (hasAffordableWeapon || (!skipped.unverified && !skipped.refused))) {
+	if (enemies.length && (hasAffordableWeapon || futureRoute || (!skipped.unverified && !skipped.refused))) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
 		for (const protection of support) for (const ending of entries) {
 			budget.tick()
-			const progress = distance(me.cell) - distance(ending.cell)
-			if (!profile.allowHiding && progress <= 0 && !same(ending.cell, me.cell)) continue
+			const geometricProgress = distance(me.cell) - distance(ending.cell)
+			const progress = futureProgress
+				? futureProgress.get(key(me.cell))! - futureProgress.get(key(ending.cell))! : geometricProgress
+			if (!profile.allowHiding && geometricProgress <= 0 && !same(ending.cell, me.cell)) continue
 			const danger = dangers.get(key(ending.cell))!
 			const candidate: TacticalPlan = {
 				target, shotCell: me.cell, destination: ending.cell, beforeMp: 0, afterMp: ending.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips,
 				tpUsed: protection.cost, usefulDamage: 0, danger, progress,
+				progressModel: futureProgress ? "future firing route" : undefined,
+				firingDistance: firingDistance(target, ending.cell),
+				futureRouteDistance: futureRoute?.get(key(ending.cell)),
 				score: progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
 			}
 			if (better(candidate, progressPlan)) {
@@ -564,6 +702,7 @@ function evaluate(
 					weapon: attack.weaponShots > 0 ? option.weapon : null,
 					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
 					tpUsed: cost + protection.cost + option.equipCost, usefulDamage, danger: finalDanger,
+					firingDistance: firingDistance(option.target, ending.cell),
 					score: usefulDamage - riskCost(me, weight, protection, finalDanger,
 						killsLastEnemy(attack.damage, option.target, enemies.length)) + weight * protection.heal
 				}
@@ -626,7 +765,8 @@ function execute(me: Me, plan: TacticalPlan): void {
 			: "no attack selected",
 		usefulDamage: plan.usefulDamage, danger: currentState() ? plan.danger : null,
 		score: currentState() ? plan.score : null, stateCurrent: currentState(),
-		progress: plan.progress ?? 0, searchStatus: plan.searchStatus ?? "complete search",
+		progress: plan.progress ?? 0, progressModel: plan.progressModel ?? "Manhattan",
+		searchStatus: plan.searchStatus ?? "complete search",
 		executionBudget: EXECUTION_BUDGET_POLICY,
 		estimates: "damage/score/danger modeled, not guaranteed outcome"
 	})}`, LOG_CONTEXT.PLANNING)

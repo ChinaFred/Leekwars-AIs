@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { isCellInLaunchPattern } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
@@ -347,31 +347,45 @@ function dominates(a: PreparedWeapon, b: PreparedWeapon, tp: number): boolean {
 /** Configurations de force et de PT : aucun boost, puis combinaisons de puces de boost (≤ `MAX_THREAT_BOOSTS`), non dominées. */
 function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; gain: number; tpGain: number }> {
 	const boosts: Array<{ cost: number; gain: number; tpGain: number }> = []
+	const candidates: Array<{ cost: number; gain: number; tpGain: number }> = []
 	for (const chip of enemy.boosts ?? []) {
-		if (boosts.length >= MAX_THREAT_BOOSTS) {
-			break
+		if (!Number.isInteger(chip.cost) || chip.cost <= 0) {
+			continue
 		}
 		const gain = strengthBoostOf(chip, enemy.science ?? 0)
 		const tpGain = tpBoostOf(chip, enemy.science ?? 0)
-		if ((gain > 0 || tpGain > 0) && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= tp &&
-			chip.cost - tpGain < tp) {
-			boosts.push({ cost: chip.cost, gain, tpGain })
+		if (gain > 0 || tpGain > 0) {
+			candidates.push({ cost: chip.cost, gain, tpGain })
 		}
 	}
-	const all: Array<{ cost: number; gain: number; tpGain: number }> = []
-	for (let mask = 0; mask < (1 << boosts.length); mask++) {
-		let cost = 0
-		let gain = 0
-		let tpGain = 0
+	// Les gains nets positifs retenus peuvent financer une puce auparavant inaccessible.
+	// Repartir du début conserve la priorité de l'ordre fourni dès qu'une puce devient lançable.
+	let maxTp = tp
+	while (boosts.length < MAX_THREAT_BOOSTS) {
+		const index = candidates.findIndex((boost) => boost.cost <= maxTp && boost.cost - boost.tpGain < maxTp)
+		if (index < 0) break
+		const boost = candidates.splice(index, 1)[0]!
+		boosts.push(boost)
+		maxTp += Math.max(0, boost.tpGain - boost.cost)
+	}
+	const empty = { cost: 0, gain: 0, tpGain: 0 }
+	const all: Array<{ cost: number; gain: number; tpGain: number }> = [empty]
+	const states: Array<{ cost: number; gain: number; tpGain: number } | null> = [empty]
+	for (let mask = 1; mask < (1 << boosts.length); mask++) {
+		let state: { cost: number; gain: number; tpGain: number } | null = null
 		for (let i = 0; i < boosts.length; i++) {
 			if ((mask & (1 << i)) !== 0) {
-				cost += boosts[i]!.cost
-				gain += boosts[i]!.gain
-				tpGain += boosts[i]!.tpGain
+				const previous = states[mask ^ (1 << i)]
+				const boost = boosts[i]!
+				if (previous && boost.cost <= tp - previous.cost + previous.tpGain) {
+					state = { cost: previous.cost + boost.cost, gain: previous.gain + boost.gain, tpGain: previous.tpGain + boost.tpGain }
+					break
+				}
 			}
 		}
-		if (cost <= tp && cost - tpGain < tp) {
-			all.push({ cost, gain, tpGain })
+		states.push(state)
+		if (state !== null && state.cost - state.tpGain < tp) {
+			all.push(state)
 		}
 	}
 	// Une configuration qui coûte plus de PT pour moins de force et de PT qu'une autre est inutile.

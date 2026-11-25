@@ -104,14 +104,25 @@ const reach = (ent, mp, ignore) => computeReachableCells(ent, mp, 1, { ignoreEnt
 // force et PT) — le MAX doit être identique, la dominance n'étant qu'un élagage.
 function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
-	const boosts = []
+	const candidates = []
 	for (const chip of enemy.boosts ?? []) {
-		if (boosts.length >= MAX_THREAT_BOOSTS) break
 		const gain = strengthBoostOf(chip, enemy.science ?? 0)
 		const tpGain = tpBoostOf(chip, enemy.science ?? 0)
-		// Un boost sans PT gagnés doit rester abordable (coût < PT) ; un boost de PT peut valoir son coût.
-		if ((gain > 0 || tpGain > 0) && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= tp &&
-			chip.cost - tpGain < tp) boosts.push({ cost: chip.cost, gain, tpGain })
+		if ((gain > 0 || tpGain > 0) && Number.isInteger(chip.cost) && chip.cost > 0) {
+			candidates.push({ cost: chip.cost, gain, tpGain })
+		}
+	}
+	// La limite porte sur les boosts successivement accessibles : un boost de PT
+	// peut rendre sélectionnable un coût supérieur aux PT initiaux.
+	const boosts = []
+	let maxTp = tp
+	while (boosts.length < MAX_THREAT_BOOSTS) {
+		const index = candidates.findIndex((boost) =>
+			boost.cost <= maxTp && boost.cost - boost.tpGain < maxTp)
+		if (index < 0) break
+		const boost = candidates.splice(index, 1)[0]
+		boosts.push(boost)
+		maxTp += Math.max(0, boost.tpGain - boost.cost)
 	}
 	const combos = []
 	for (let mask = 0; mask < 1 << boosts.length; mask++) {
@@ -119,7 +130,17 @@ function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
 		let gain = 0
 		let tpGain = 0
 		boosts.forEach((boost, i) => { if (mask & (1 << i)) { cost += boost.cost; gain += boost.gain; tpGain += boost.tpGain } })
-		if (cost <= tp && cost - tpGain < tp) combos.push({ cost, gain, tpGain })
+		const canCast = (remaining, unused) => {
+			if (unused === 0) return true
+			for (let i = 0; i < boosts.length; i++) {
+				if ((unused & (1 << i)) === 0) continue
+				const boost = boosts[i]
+				if (boost.cost <= remaining &&
+					canCast(remaining - boost.cost + boost.tpGain, unused ^ (1 << i))) return true
+			}
+			return false
+		}
+		if (canCast(tp, mask) && tp - cost + tpGain > 0) combos.push({ cost, gain, tpGain })
 	}
 	const configs = !prune ? combos : combos.filter((v, i) => !combos.some((o, j) => j !== i && o.gain >= v.gain &&
 		o.tpGain >= v.tpGain && o.cost <= v.cost && (o.gain > v.gain || o.tpGain > v.tpGain || o.cost < v.cost || j < i)))
@@ -165,6 +186,32 @@ function naiveBest(enemy, target, provider, counter, { prune = true } = {}) {
 		}
 	}
 	return best
+}
+
+function realizesBoostThreat(enemy, threat) {
+	if (threat.boostTp === 0) {
+		return threat.strengthGain === 0 && threat.tpGain === 0
+	}
+	const boosts = enemy.boosts ?? []
+	const visit = (budget, used, cost, strength, tpGain) => {
+		if (Math.abs(cost - threat.boostTp) < 1e-6 &&
+			Math.abs(strength - threat.strengthGain) < 1e-6 &&
+			Math.abs(tpGain - threat.tpGain) < 1e-6 && budget > 0) return true
+		if (used.toString(2).replaceAll("0", "").length >= MAX_THREAT_BOOSTS) return false
+		for (let i = 0; i < boosts.length; i++) {
+			if (used & (1 << i)) continue
+			const chip = boosts[i]
+			const nextCost = cost + chip.cost
+			const nextStrength = strength + strengthBoostOf(chip, enemy.science ?? 0)
+			const nextTpGain = tpGain + tpBoostOf(chip, enemy.science ?? 0)
+			if ((nextCost - threat.boostTp) > 1e-6 || nextStrength - threat.strengthGain > 1e-6 ||
+				nextTpGain - threat.tpGain > 1e-6 || chip.cost > budget) continue
+			if (visit(budget - chip.cost + tpBoostOf(chip, enemy.science ?? 0),
+				used | (1 << i), nextCost, nextStrength, nextTpGain)) return true
+		}
+		return false
+	}
+	return visit(Math.floor(enemy.tp), 0, 0, 0, 0)
 }
 
 function randomScenario(seed) {
@@ -525,7 +572,9 @@ test("randomised equivalence with TP boosts (fixed seeds): the map equals the na
 				for (const threat of map.breakdownAt(mine.cell)) {
 					assert.ok(Math.abs(threat.damage - perEnemy.get(threat.enemyId)) < 1e-6, where)
 					assert.equal(threat.boostTp > 0, threat.strengthGain > 0 || threat.tpGain > 0, where)
-					assert.ok(threat.boostTp <= inputs.find((i) => i.id === threat.enemyId).tp, `${where}: boost paid beyond the TP`)
+					const input = inputs.find((i) => i.id === threat.enemyId)
+					assert.ok(realizesBoostThreat(input, threat),
+						`${where}: boost costs ${threat.boostTp} PT but is not a feasible cast sequence`)
 					if (threat.tpGain > 0) tpBoosted++
 					if (threat.tpGain > 0 && threat.strengthGain > 0) mixed++
 				}
