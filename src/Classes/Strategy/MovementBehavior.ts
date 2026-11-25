@@ -1,5 +1,10 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+// Poids de la distance « moi → cellule » dans le score de repli (pénalité légère).
+const RETREAT_SELF_DISTANCE_WEIGHT = 0.1
+// Voisins orthogonaux d'une cellule (x ± 1, y ± 1) — hypothèse sur la grille Leek Wars, voir docs/strategies.md.
+const NEIGHBOR_OFFSETS: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+
 export const MOVEMENT_BEHAVIOR = {
 	RETREAT_TO_CORNER: "retreat_to_corner",
 	AGGRESSIVE_KITING: "aggressive_kiting",
@@ -38,12 +43,22 @@ export class MovementBehavior {
 	}
 
 	executeRetreatToCorner(): void {
-		const safeCorner = this.findNearestCorner()
-		if (safeCorner !== null) {
-			this.leek.moveToward(safeCorner)
+		const retreatCell = this.findRetreatCell()
+		if (retreatCell !== null) {
+			this.leek.moveToward(retreatCell)
 		} else {
 			this.leek.moveAwayFrom(this.target)
 		}
+	}
+
+	/** L'ennemi peut-il me toucher (après avoir marché avec ses PM) depuis cette distance ? */
+	isInEnemyReach(distance: number): boolean {
+		return distance - this.target.mp <= this.getEnemyMaxRange()
+	}
+
+	/** Reculer de `mp` cases (au mieux) me sortirait-il de la portée de l'ennemi, PM de l'ennemi inclus ? */
+	canLeaveEnemyReach(distance: number, mp: number): boolean {
+		return distance + mp - this.target.mp > this.getEnemyMaxRange()
 	}
 
 	executeAggressiveKiting(): void {
@@ -59,16 +74,20 @@ export class MovementBehavior {
 		}
 	}
 
+	/**
+	 * Phase d'approche de zone_control : avance tant que je ne peux pas tirer.
+	 * Ne recule jamais ici : un recul avant le tir pourrait me sortir de ma propre portée.
+	 * Le recul se fait après les tirs via `executeZoneRetreat` (Plannification.planRetreatAfterShoot).
+	 */
 	executeZoneControl(): void {
 		if (!this.leek.canUseWeapon(this.target)) {
 			this.leek.moveToward(this.target)
-			return
 		}
+	}
 
-		const distance = this.leek.distance(this.target)
-		const enemyMaxRange = this.enemyWeapon?.maxRange ?? 1
-
-		if (distance < enemyMaxRange) {
+	/** Phase de recul de zone_control, à exécuter après les tirs : s'éloigne si l'ennemi peut encore m'atteindre. */
+	executeZoneRetreat(): void {
+		if (this.isInEnemyReach(this.leek.distance(this.target))) {
 			this.leek.moveAwayFrom(this.target)
 		}
 	}
@@ -110,31 +129,61 @@ export class MovementBehavior {
 		}
 	}
 
-	private findNearestCorner(): Cell | null {
-		const field = Field as any
-		if (!field || typeof field.getObstacles !== "function") {
+	private getEnemyMaxRange(): number {
+		return this.enemyWeapon?.maxRange ?? 1
+	}
+
+	/**
+	 * Cellule libre de repli : voisine de l'obstacle qui maximise
+	 * `distance(ennemi, cellule) − 0,1 × distance(moi, cellule)`, et strictement plus loin de l'ennemi que moi.
+	 * Retourne null (→ `moveAwayFrom`) si l'API de terrain manque ou si aucune cellule libre ne convient.
+	 * Coût : 2 `Field.distance` par obstacle + au plus 4 `cellFromXY` et 8 distances pour les voisins.
+	 */
+	private findRetreatCell(): Cell | null {
+		if (
+			typeof Field === "undefined" ||
+			typeof Field.getObstacles !== "function" ||
+			typeof Field.cellFromXY !== "function"
+		) {
 			return null
 		}
 
-		const obstacles = field.getObstacles()
-		const me = this.leek
+		const myCell = this.leek.cell
+		const enemyCell = this.target.cell
+		const currentDistance = Field.distance(myCell, enemyCell)
 
-		let bestCorner: Cell | null = null
+		let bestObstacle: Cell | null = null
 		let bestScore = Number.NEGATIVE_INFINITY
-
-		for (const obstacle of obstacles) {
-			const scoreAwayFromEnemy = this.leek.distance(this.target) - this.target.distance(obstacle)
-			const scoreDistance = Field.distance(me.cell, obstacle)
-
-			const score = scoreAwayFromEnemy - scoreDistance * 0.1
-
+		for (const obstacle of Field.getObstacles()) {
+			const score = Field.distance(enemyCell, obstacle) -
+				RETREAT_SELF_DISTANCE_WEIGHT * Field.distance(myCell, obstacle)
 			if (score > bestScore) {
 				bestScore = score
-				bestCorner = obstacle
+				bestObstacle = obstacle
 			}
 		}
+		if (bestObstacle === null) {
+			return null
+		}
 
-		return bestCorner
+		let bestCell: Cell | null = null
+		bestScore = Number.NEGATIVE_INFINITY
+		for (const [dx, dy] of NEIGHBOR_OFFSETS) {
+			const cell = Field.cellFromXY(bestObstacle.x + dx, bestObstacle.y + dy)
+			if (cell === null || !cell.empty) {
+				continue
+			}
+			const enemyDistance = Field.distance(enemyCell, cell)
+			if (enemyDistance <= currentDistance) {
+				continue
+			}
+			const score = enemyDistance - RETREAT_SELF_DISTANCE_WEIGHT * Field.distance(myCell, cell)
+			if (score > bestScore) {
+				bestScore = score
+				bestCell = cell
+			}
+		}
+		return bestCell
 	}
 
 	private findTerrainAwarePathToward(): Cell | null {

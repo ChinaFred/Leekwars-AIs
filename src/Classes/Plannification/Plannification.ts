@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -17,7 +17,7 @@ export class Plannification {
 	private tpLeft: number
 	private mpLeft: number
 	private chosenWeapon: Weapon | null = null
-	private willShoot = false
+	private plannedAttacks = 0
 	private weaponEquipPlanned = false
 	private movementBehavior: MovementBehavior
 	private debugEnabled = true
@@ -132,7 +132,6 @@ export class Plannification {
 			return
 		}
 
-		this.willShoot = true
 		if (this.mpLeft > 0 && !this.leek.canUseWeapon(this.target)) {
 			const contact = this.predictContactNextTurn()
 			const distance = this.leek.distance(this.target)
@@ -161,8 +160,12 @@ export class Plannification {
 	}
 
 	planShootOrChip(): void {
-		if (!this.willShoot || this.leek.maxLife <= 0) {
-			this.debug(`SkipShootOrChip: willShoot=${this.willShoot}, alive=${this.leek.maxLife > 0}`)
+		// Indépendant de l'ordre de planification : ne dépend plus d'un drapeau posé par planMove.
+		if (this.chosenWeapon === null) {
+			this.chooseWeapon()
+		}
+		if (this.chosenWeapon === null || this.leek.maxLife <= 0) {
+			this.debug(`SkipShootOrChip: weapon=${this.chosenWeapon?.name}, alive=${this.leek.maxLife > 0}`)
 			return
 		}
 		const lifeRatio = this.leek.life / this.leek.maxLife
@@ -179,15 +182,15 @@ export class Plannification {
 					new Action("attack chip", () => this.leek.useChip(attackChip, this.target), attackChip.name)
 				)
 				this.tpLeft -= attackChip.cost
+				this.plannedAttacks++
 			}
 		}
 
 		if (
-			this.chosenWeapon === null ||
 			this.chosenWeapon.cost <= 0 ||
 			(!this.weaponEquipPlanned && this.leek.weapon !== this.chosenWeapon)
 		) {
-			this.debug(`SkipShoot: weapon=${this.chosenWeapon?.name}, cost=${this.chosenWeapon?.cost}`)
+			this.debug(`SkipShoot: weapon=${this.chosenWeapon.name}, cost=${this.chosenWeapon.cost}`)
 			return
 		}
 
@@ -201,6 +204,7 @@ export class Plannification {
 			}, this.chosenWeapon.name))
 			this.tpLeft -= this.chosenWeapon.cost
 		}
+		this.plannedAttacks += shootCount
 
 		if (shootCount > 0) {
 			this.debug(`Shoot: ${this.chosenWeapon.name} ×${shootCount} (cost ${shootCount * this.chosenWeapon.cost} TP)`)
@@ -333,6 +337,48 @@ export class Plannification {
 			)
 			this.mpLeft = 0
 		}
+	}
+
+	/**
+	 * Recul de zone_control, planifié APRÈS les tirs (et après planHide, qui garde la priorité) :
+	 * déplacer ne coûte pas de PT, donc on tire d'abord puis on sort de la portée de l'ennemi si c'est possible.
+	 * Conditions : au moins une attaque planifiée, des PM restants, repli autorisé, ennemi vivant,
+	 * l'ennemi peut m'atteindre depuis ma position et un recul de `mpLeft` cases m'en sort.
+	 * Met mpLeft à 0 pour qu'aucun autre déplacement ne s'ajoute.
+	 */
+	planRetreatAfterShoot(): void {
+		if (
+			!this.profile.allowHiding ||
+			this.plannedAttacks <= 0 ||
+			this.mpLeft <= 0 ||
+			this.leek.maxLife <= 0 ||
+			this.target.life <= 0
+		) {
+			this.debug(
+				`SkipRetreatAfterShoot: allowHiding=${this.profile.allowHiding}, attacks=${this.plannedAttacks}, mpLeft=${this.mpLeft}`
+			)
+			return
+		}
+
+		const distance = this.leek.distance(this.target)
+		const inReach = this.movementBehavior.isInEnemyReach(distance)
+		const canLeave = this.movementBehavior.canLeaveEnemyReach(distance, this.mpLeft)
+		this.debug(
+			`RetreatCheck: distance=${distance}, enemyMp=${this.target.mp}, inEnemyReach=${inReach}, canLeaveReach=${canLeave}`
+		)
+		if (!inReach || !canLeave) {
+			return
+		}
+
+		this.debug(`RetreatAfterShoot: mpLeft=${this.mpLeft} → 0`)
+		this.actions.push(
+			new Action(
+				"retreat after shoot",
+				() => this.movementBehavior.executeZoneRetreat(),
+				"Zone control retreat"
+			)
+		)
+		this.mpLeft = 0
 	}
 
 	execute(): void {

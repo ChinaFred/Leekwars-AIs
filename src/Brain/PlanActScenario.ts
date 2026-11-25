@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 
@@ -32,7 +32,11 @@ export function planAct(me: Me, profile = createDefaultProfile()): void {
 		plan.planChipsActionsAfterShoot()
 		plan.planHide()
 	}
-	
+
+	// Recul après tir : planifié en dernier dans les deux ordres. No-op si planHide ou planMove
+	// ont déjà consommé les PM (mpLeft = 0), donc l'ordre critique n'est pas modifié.
+	plan.planRetreatAfterShoot()
+
 	plan.execute()
 }
 
