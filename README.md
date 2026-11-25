@@ -13,6 +13,11 @@ python -m pip install -r LWGarden\src\requirements.txt
 python LWGarden\src\Garden.py
 ```
 
+Raccourci : le script [garden.cmd](garden.cmd) à la racine lance la même commande
+(`garden` dans cmd, `.\garden` dans PowerShell ; PowerShell n'exécute pas un script
+du dossier courant sans `.\`). Ajoutez la racine du dépôt à votre `PATH` pour taper
+`garden` depuis n'importe où. Les dépendances restent à installer une fois (commande ci-dessus).
+
 La configuration, l'authentification, les options PULL/PUSH et les précautions
 de déploiement sont décrites dans [LWGarden/README.md](LWGarden/README.md).
 Le [journal des modifications](ChangeLog.md) récapitule les changements du dépôt.

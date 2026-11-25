@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Raccourci Windows pour Garden
+
+- Ajout de `garden.cmd` et de ses instructions d'utilisation.
+
 ## 2026-11-25 — V1 tactique basée sur le risque
 
 - Planification conjointe attaque, protection et déplacement selon la carte de danger, avec repli historique et tests de régression.
