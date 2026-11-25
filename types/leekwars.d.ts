@@ -183,6 +183,8 @@ declare const Effect: {
 	readonly ABSOLUTE_SHIELD: number
 	readonly RELATIVE_SHIELD: number
 	readonly DEBUFF: number
+	/** Nom non confirmé dans la doc TypeScript (EFFECT_RAW_BUFF_STRENGTH = 38 en LeekScript) : optionnel. */
+	readonly RAW_BUFF_STRENGTH?: number
 	readonly BUFF_STRENGTH: number
 	readonly BUFF_AGILITY: number
 	readonly BUFF_MP: number

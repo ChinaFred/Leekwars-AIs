@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { isCellInLaunchPattern } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
@@ -9,6 +9,7 @@ import {
 	ShotItem,
 	ShotPlan,
 	sortByRatio,
+	strengthBoostOf,
 	toCandidate
 } from "./ShotPlan.js"
 
@@ -27,11 +28,18 @@ export const MAX_THREAT_PAIRS = 8000
  * (`GeometricShotCells`) existe aujourd'hui.
  */
 export interface ShotCellsProvider {
-	/** Un tir de `item` lancé depuis `from` peut-il toucher `target` (tir direct, sans zone d'effet) ? */
+	/**
+	 * Un tir de `item` lancé depuis `from` peut-il toucher `target` (tir direct, sans zone d'effet) ? Doit
+	 * impliquer que la distance de Manhattan `from`–`target` est dans [minRange, maxRange] : `buildThreatMap`
+	 * écarte sans appel les paires hors de toutes les portées.
+	 */
 	canHit(from: Cell, target: Cell, item: ShotItem): boolean
 	/** Appels à `Field.lineOfSight` réellement effectués (statistique, optionnelle). */
 	readonly lineOfSightCalls?: number
 }
+
+/** Entrées maximales du cache de ligne de vue partagé (mémoire du combat bornée ; vidé au-delà). */
+export const MAX_SIGHT_CACHE = 20000
 
 /** Clé numérique d'une paire ordonnée de cases (coordonnées décalées pour rester positives). */
 function pairKey(from: Cell, to: Cell): number {
@@ -43,14 +51,17 @@ function pairKey(from: Cell, to: Cell): number {
 /**
  * Méthode géométrique : distance de Manhattan |dx| + |dy| dans [minRange, maxRange], motif du type de
  * lancer (`isCellInLaunchPattern`, hypothèse de masque), puis — seulement si `item.needsLos` et seulement
- * après ces deux filtres — `Field.lineOfSight(from, target)`, mémorisée par paire ordonnée (S, X) pour la
- * durée de vie de l'instance (une construction de carte). Hypothèse non vérifiée : `Field.lineOfSight` ne
- * tient compte que des obstacles de la grille, pas des entités ; dans le jeu une entité peut bloquer la vue.
+ * après ces deux filtres — `Field.lineOfSight(from, target)`, mémorisée par paire ordonnée (S, X). Le cache
+ * peut être FOURNI et partagé entre cartes (`EnemyMemory` le garde tout le combat) : les obstacles sont fixes,
+ * une paire déjà vue ne coûte plus d'appel. Hypothèse non vérifiée : `Field.lineOfSight` ne tient compte que
+ * des obstacles de la grille, pas des entités ; dans le jeu une entité peut bloquer la vue (le cache partagé
+ * figerait alors une réponse dépendant de la position d'une entité).
  * `launchType` absent → CIRCLE. Ignore la zone d'effet (`area`).
  */
 export class GeometricShotCells implements ShotCellsProvider {
 	lineOfSightCalls = 0
-	private readonly sight = new Map<number, boolean>()
+
+	constructor(private readonly sight: Map<number, boolean> = new Map()) {}
 
 	canHit(from: Cell, target: Cell, item: ShotItem): boolean {
 		const dx = target.x - from.x
@@ -70,6 +81,9 @@ export class GeometricShotCells implements ShotCellsProvider {
 		if (visible === undefined) {
 			this.lineOfSightCalls++
 			visible = Field.lineOfSight(from, target) === true
+			if (this.sight.size >= MAX_SIGHT_CACHE) {
+				this.sight.clear()
+			}
 			this.sight.set(key, visible)
 		}
 		return visible
@@ -93,6 +107,14 @@ export interface ThreatEnemy {
 	readonly otherWeapons?: readonly Weapon[]
 	/** Puces connues et PRÊTES (cooldown déjà filtré par l'appelant) ; seules celles avec dégâts comptent. */
 	readonly chips: readonly Chip[]
+	/**
+	 * Puces de boost de force PRÊTES (cooldown déjà filtré) : l'ennemi peut en lancer sur lui avant de tirer,
+	 * chacune au plus une fois, en payant son coût en PT ; la force gagnée s'ajoute à `strength` (voir
+	 * `strengthBoostOf`). Au plus `MAX_THREAT_BOOSTS` sont combinées. Absent = aucune.
+	 */
+	readonly boosts?: readonly Chip[]
+	/** Science de l'ennemi (amplifie `BUFF_STRENGTH`) ; absente = 0. */
+	readonly science?: number
 	/** Cases atteignables par l'ennemi EN IGNORANT mon entité comme obstacle. */
 	readonly reachable: ReachableCells
 }
@@ -102,6 +124,9 @@ export const WEAPON_SWAP_TP = 1
 
 /** Armes examinées par ennemi (équipée comprise) : borne le coût de la carte. */
 export const MAX_THREAT_WEAPONS = 4
+
+/** Puces de boost combinées par ennemi (2^n configurations de force, dont « aucun boost »). */
+export const MAX_THREAT_BOOSTS = 3
 
 /** Meilleur plan d'un ennemi contre une case X (détail conservé pour chaque ennemi). */
 export interface EnemyThreat {
@@ -117,6 +142,10 @@ export interface EnemyThreat {
 	readonly chips: readonly Chip[]
 	/** PT de changement d'arme payés par le plan (0 : arme équipée ou aucune arme). */
 	readonly swapTp: number
+	/** PT dépensés en boosts de force avant de tirer (0 : aucun boost). */
+	readonly boostTp: number
+	/** Force gagnée par ces boosts (0 : aucun boost). */
+	readonly strengthGain: number
 }
 
 /** Une case que je peux atteindre, avec son danger. */
@@ -250,15 +279,47 @@ export class ThreatMap {
 interface PreparedWeapon {
 	readonly candidate: ShotCandidate
 	readonly swapTp: number
+	/** Position de l'arme dans `PreparedEnemy.items` (un `canHit` par item et par paire, partagé). */
+	readonly index: number
 }
 
-/** Préparation d'un ennemi : items offensifs triés, calculée une fois par carte. */
+interface PreparedChip {
+	readonly candidate: ShotCandidate
+	readonly index: number
+}
+
+/**
+ * Une configuration de force de l'ennemi : aucun boost, ou une combinaison de puces de boost lancées avant
+ * de tirer (PT payés, force gagnée). Dégâts et PT restants ne dépendent pas de la case : calculés une fois.
+ */
+interface PreparedVariant {
+	readonly boostTp: number
+	readonly strengthGain: number
+	/** PT restants après les boosts (avant tout changement d'arme). */
+	readonly tpLeft: number
+	readonly weapons: readonly PreparedWeapon[]
+	/** Puces triées par dégâts/PT décroissant. */
+	readonly chips: readonly PreparedChip[]
+}
+
+/** Préparation d'un ennemi, calculée une fois par carte (aucune valeur dépendante de la case). */
 interface PreparedEnemy {
 	readonly enemy: ThreatEnemy
-	readonly weapons: readonly PreparedWeapon[]
-	readonly chips: readonly ShotCandidate[]
+	readonly variants: readonly PreparedVariant[]
+	/** Items distincts (armes et puces de toutes les configurations). */
+	readonly items: readonly ShotItem[]
+	readonly minRange: number
+	readonly maxRange: number
 	readonly shotCells: readonly Cell[]
+	/** Plans déjà calculés, par (configuration, arme, masque de puces qui touchent) : un seul `planShots` par combinaison. */
+	readonly plans: Map<number, ShotPlan>
+	/** Réponses de `canHit` de la paire en cours (réutilisé, entièrement réécrit à chaque paire). */
+	readonly hits: boolean[]
 }
+
+/** Puces offensives retenues par configuration (les mieux classées en dégâts/PT) : borne le masque de plans. */
+const MAX_MASK_CHIPS = 30
+const MASK_RADIX = 1073741824 // 2^30
 
 /** Dégâts d'une arme seule dans le budget de PT (changement d'arme déduit). */
 function weaponOnlyDamage(entry: PreparedWeapon, tp: number): number {
@@ -278,13 +339,48 @@ function dominates(a: PreparedWeapon, b: PreparedWeapon, tp: number): boolean {
 		weaponOnlyDamage(a, tp) >= weaponOnlyDamage(b, tp)
 }
 
-function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
-	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
+/** Configurations de force : aucun boost, puis combinaisons de puces de boost (≤ `MAX_THREAT_BOOSTS`), non dominées. */
+function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; gain: number }> {
+	const boosts: Array<{ cost: number; gain: number }> = []
+	for (const chip of enemy.boosts ?? []) {
+		if (boosts.length >= MAX_THREAT_BOOSTS) {
+			break
+		}
+		const gain = strengthBoostOf(chip, enemy.science ?? 0)
+		if (gain > 0 && Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost < tp) {
+			boosts.push({ cost: chip.cost, gain })
+		}
+	}
+	const all: Array<{ cost: number; gain: number }> = []
+	for (let mask = 0; mask < (1 << boosts.length); mask++) {
+		let cost = 0
+		let gain = 0
+		for (let i = 0; i < boosts.length; i++) {
+			if ((mask & (1 << i)) !== 0) {
+				cost += boosts[i]!.cost
+				gain += boosts[i]!.gain
+			}
+		}
+		if (cost < tp) {
+			all.push({ cost, gain })
+		}
+	}
+	// Une configuration qui coûte plus de PT pour moins de force qu'une autre est inutile.
+	return all.filter((variant, index) => !all.some((rival, other) =>
+		other !== index && rival.gain >= variant.gain && rival.cost <= variant.cost &&
+		(rival.gain > variant.gain || rival.cost < variant.cost || other < index)))
+}
+
+function prepareVariant(
+	enemy: ThreatEnemy, cost: number, gain: number, tp: number, indexOf: (item: ShotItem) => number
+): PreparedVariant | null {
+	const tpLeft = tp - cost
+	const strength = enemy.strength + gain
 	const found: PreparedWeapon[] = []
 	if (enemy.weapon !== null) {
-		const candidate = toCandidate(enemy.weapon, false, enemy.strength)
-		if (candidate !== null && candidate.cost <= tp) {
-			found.push({ candidate, swapTp: 0 })
+		const candidate = toCandidate(enemy.weapon, false, strength)
+		if (candidate !== null && candidate.cost <= tpLeft) {
+			found.push({ candidate, swapTp: 0, index: 0 })
 		}
 	}
 	for (const other of enemy.otherWeapons ?? []) {
@@ -294,39 +390,108 @@ function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 		if (other === enemy.weapon || (enemy.weapon !== null && other.id === enemy.weapon.id)) {
 			continue
 		}
-		const candidate = toCandidate(other, false, enemy.strength)
-		if (candidate !== null && candidate.cost + WEAPON_SWAP_TP <= tp &&
+		const candidate = toCandidate(other, false, strength)
+		if (candidate !== null && candidate.cost + WEAPON_SWAP_TP <= tpLeft &&
 			!found.some((entry) => entry.candidate.item.id === other.id)) {
-			found.push({ candidate, swapTp: WEAPON_SWAP_TP })
+			found.push({ candidate, swapTp: WEAPON_SWAP_TP, index: 0 })
 		}
 	}
 	const weapons = found.filter((entry) => !found.some((rival) =>
-		rival !== entry && dominates(rival, entry, tp) &&
+		rival !== entry && dominates(rival, entry, tpLeft) &&
 		// À égalité mutuelle, seule la première (l'équipée si elle y est) est conservée.
-		(!dominates(entry, rival, tp) || found.indexOf(rival) < found.indexOf(entry))))
+		(!dominates(entry, rival, tpLeft) || found.indexOf(rival) < found.indexOf(entry))))
+		.map((entry) => ({ ...entry, index: indexOf(entry.candidate.item) }))
 	const chips: ShotCandidate[] = []
 	for (const chip of enemy.chips) {
-		const candidate = toCandidate(chip, true, enemy.strength)
-		if (candidate !== null && candidate.cost <= tp) {
+		const candidate = toCandidate(chip, true, strength)
+		if (candidate !== null && candidate.cost <= tpLeft) {
 			chips.push(candidate)
 		}
 	}
 	if (weapons.length === 0 && chips.length === 0) {
 		return null
 	}
+	return {
+		boostTp: cost,
+		strengthGain: gain,
+		tpLeft,
+		weapons,
+		chips: sortByRatio(chips).slice(0, MAX_MASK_CHIPS).map((candidate) => ({ candidate, index: indexOf(candidate.item) }))
+	}
+}
+
+function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
+	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
+	const items: ShotItem[] = []
+	const indexOf = (item: ShotItem): number => {
+		const known = items.indexOf(item)
+		if (known >= 0) {
+			return known
+		}
+		items.push(item)
+		return items.length - 1
+	}
+	const variants: PreparedVariant[] = []
+	for (const { cost, gain } of boostVariants(enemy, tp)) {
+		const variant = prepareVariant(enemy, cost, gain, tp, indexOf)
+		if (variant !== null) {
+			variants.push(variant)
+		}
+	}
+	if (variants.length === 0) {
+		return null
+	}
+	let minRange = Number.POSITIVE_INFINITY
+	let maxRange = Number.NEGATIVE_INFINITY
+	for (const item of items) {
+		minRange = Math.min(minRange, item.minRange)
+		maxRange = Math.max(maxRange, item.maxRange)
+	}
 	const shotCells: Cell[] = []
 	for (const reachable of enemy.reachable.entries()) {
 		shotCells.push(reachable.cell)
 	}
-	return { enemy, weapons, chips: sortByRatio(chips), shotCells }
+	return {
+		enemy, variants, items, minRange, maxRange, shotCells,
+		plans: new Map(), hits: new Array<boolean>(items.length).fill(false)
+	}
+}
+
+/** Plan de l'ennemi pour une configuration, une arme (`slot` 0 = aucune) et un masque de puces qui touchent. */
+function planFor(
+	prepared: PreparedEnemy, variantIndex: number, weaponIndex: number, mask: number
+): ShotPlan {
+	const variant = prepared.variants[variantIndex]!
+	const key = (variantIndex * 8 + weaponIndex + 1) * MASK_RADIX + mask
+	const cached = prepared.plans.get(key)
+	if (cached !== undefined) {
+		return cached
+	}
+	const usable: ShotCandidate[] = []
+	for (let i = 0; i < variant.chips.length; i++) {
+		if ((mask & (1 << i)) !== 0) {
+			usable.push(variant.chips[i]!.candidate)
+		}
+	}
+	const weapon = weaponIndex < 0 ? null : variant.weapons[weaponIndex]!
+	const plan = weapon === null
+		? planShots(variant.tpLeft, null, usable)
+		: planShots(variant.tpLeft - weapon.swapTp, weapon.candidate, usable)
+	prepared.plans.set(key, plan)
+	return plan
 }
 
 /**
- * Meilleur plan de l'ennemi contre la case `target` : MAX sur ses cases de tir S (pas de somme entre cases)
- * et sur ses armes (une seule arme par plan ; hors équipée, elle coûte `WEAPON_SWAP_TP` PT). Hypothèse « se
- * déplace puis tire tout » : un plan = une case S, pas de tir-déplacement-tir. L'ennemi ne peut pas se tenir
- * sur la case X (je l'occupe si j'y vais). Consomme `budget.pairs` ; retourne null si le garde-fou est
- * atteint (calcul de la case abandonné).
+ * Meilleur plan de l'ennemi contre la case `target` : MAX sur ses cases de tir S (pas de somme entre cases),
+ * sur ses configurations de force (boosts payés en PT) et sur ses armes (une seule par plan ; hors équipée,
+ * elle coûte `WEAPON_SWAP_TP` PT). Hypothèse « se déplace puis tire tout » : un plan = une case S, pas de
+ * tir-déplacement-tir. L'ennemi ne peut pas se tenir sur la case X (je l'occupe si j'y vais). Consomme
+ * `budget.pairs` ; retourne null si le garde-fou est atteint (calcul de la case abandonné).
+ *
+ * Économies sans changer le résultat : une case X hors de portée de toute case de tir est écartée sans
+ * parcours (distance au départ de l'ennemi − PM > portée maximale) ; une paire hors de toutes les portées
+ * n'appelle pas `canHit` ; chaque item est testé une fois par paire pour toutes les configurations ; chaque
+ * combinaison (configuration, arme, masque de puces) n'est planifiée qu'une fois par carte.
  */
 function bestThreat(
 	prepared: PreparedEnemy,
@@ -334,9 +499,14 @@ function bestThreat(
 	provider: ShotCellsProvider,
 	budget: { pairs: number, max: number }
 ): EnemyThreat | null | "aborted" {
-	const { enemy, weapons, chips } = prepared
+	const { enemy, variants, items, hits } = prepared
+	const origin = enemy.reachable.startCell
+	if (Math.abs(origin.x - target.x) + Math.abs(origin.y - target.y) - enemy.reachable.mp > prepared.maxRange) {
+		return null
+	}
 	let best: ShotPlan = EMPTY_PLAN
 	let bestSwap = 0
+	let bestVariant = 0
 	let bestCell: Cell | null = null
 	for (const from of prepared.shotCells) {
 		if (budget.pairs >= budget.max) {
@@ -346,27 +516,44 @@ function bestThreat(
 		if (from.x === target.x && from.y === target.y) {
 			continue
 		}
-		const hitting = weapons.filter((entry) => provider.canHit(from, target, entry.candidate.item))
-		const usable: ShotCandidate[] = []
-		for (const chip of chips) {
-			if (provider.canHit(from, target, chip.item)) {
-				usable.push(chip)
-			}
-		}
-		if (hitting.length === 0 && usable.length === 0) {
+		const distance = Math.abs(from.x - target.x) + Math.abs(from.y - target.y)
+		if (distance < prepared.minRange || distance > prepared.maxRange) {
 			continue
 		}
-		const options = hitting.length === 0
-			? [{ plan: planShots(enemy.tp, null, usable), swapTp: 0 }]
-			: hitting.map((entry) => ({
-				plan: planShots(enemy.tp - entry.swapTp, entry.candidate, usable),
-				swapTp: entry.swapTp
-			}))
-		for (const option of options) {
-			if (option.plan.damage > best.damage) {
-				best = option.plan
-				bestSwap = option.swapTp
-				bestCell = from
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i]!
+			hits[i] = distance >= item.minRange && distance <= item.maxRange && provider.canHit(from, target, item)
+		}
+		for (let v = 0; v < variants.length; v++) {
+			const variant = variants[v]!
+			let mask = 0
+			for (let c = 0; c < variant.chips.length; c++) {
+				if (hits[variant.chips[c]!.index]) {
+					mask |= 1 << c
+				}
+			}
+			let weaponHit = false
+			for (let w = 0; w < variant.weapons.length; w++) {
+				if (!hits[variant.weapons[w]!.index]) {
+					continue
+				}
+				weaponHit = true
+				const plan = planFor(prepared, v, w, mask)
+				if (plan.damage > best.damage) {
+					best = plan
+					bestSwap = variant.weapons[w]!.swapTp
+					bestVariant = v
+					bestCell = from
+				}
+			}
+			if (!weaponHit && mask !== 0) {
+				const plan = planFor(prepared, v, -1, mask)
+				if (plan.damage > best.damage) {
+					best = plan
+					bestSwap = 0
+					bestVariant = v
+					bestCell = from
+				}
 			}
 		}
 	}
@@ -381,7 +568,9 @@ function bestThreat(
 		weapon: best.weapon,
 		weaponShots: best.weaponShots,
 		chips: best.chips,
-		swapTp: best.weapon === null ? 0 : bestSwap
+		swapTp: best.weapon === null ? 0 : bestSwap,
+		boostTp: variants[bestVariant]!.boostTp,
+		strengthGain: variants[bestVariant]!.strengthGain
 	}
 }
 

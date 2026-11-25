@@ -1,24 +1,61 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
 
-/**
- * Dégâts moyens d'UN tir : Σ (minValue + maxValue) / 2 des features `Effect.DAMAGE`, × (1 + force / 100)
- * (même formule que `Plannification`). Sans critique (pas de × 1,3), sans tenir compte de mes boucliers ni de
- * ma résistance : valeur brute. `strength` absent ou non fini → 0. Ne tient compte ni du poison ni des
- * dégâts sur la durée (seules les features DAMAGE comptent), ni de la zone d'effet.
- */
-export function meanDamage(item: ShotItem, strength: number): number {
+/** Somme des dégâts moyens de base (sans force) d'un item : précalculée une fois par instance (singletons du jeu). */
+const baseDamageCache = new WeakMap<object, number>()
+
+export function baseMeanDamage(item: ShotItem): number {
+	const cached = baseDamageCache.get(item)
+	if (cached !== undefined) {
+		return cached
+	}
 	let total = 0
 	for (const feature of item.features ?? []) {
 		if (feature.type === Effect.DAMAGE) {
 			total += (feature.minValue + feature.maxValue) / 2
 		}
 	}
+	baseDamageCache.set(item, total)
+	return total
+}
+
+/**
+ * Dégâts moyens d'UN tir : dégâts de base × (1 + force / 100) (même formule que `Plannification`). Sans
+ * critique (pas de × 1,3), sans tenir compte de mes boucliers ni de ma résistance : valeur brute. `strength`
+ * absent ou non fini → 0. Ne tient compte ni du poison ni des dégâts sur la durée (seules les features DAMAGE
+ * comptent), ni de la zone d'effet. Les dégâts de base sont mis en cache par instance d'item (les features
+ * d'un item ne changent pas pendant le combat).
+ */
+export function meanDamage(item: ShotItem, strength: number): number {
 	const force = Number.isFinite(strength) ? strength : 0
-	return total * (1 + force / 100)
+	return baseMeanDamage(item) * (1 + force / 100)
+}
+
+/** Identifiant officiel de l'effet « force brute » (EFFECT_RAW_BUFF_STRENGTH = 38) si l'API ne le nomme pas. */
+const RAW_BUFF_STRENGTH_ID = 38
+
+/**
+ * Force supplémentaire qu'apporte une puce de boost de force lancée sur soi : moyenne des features
+ * `BUFF_STRENGTH` (amplifiée par la science du lanceur : × (1 + science / 100)) et `RAW_BUFF_STRENGTH`
+ * (non amplifiable). 0 si la puce ne boost pas la force. Durée et ciblage non vérifiés : on suppose un
+ * lancer sur soi, effectif dès le tir qui suit.
+ */
+export function strengthBoostOf(chip: Chip, science: number): number {
+	const raw = Effect.RAW_BUFF_STRENGTH ?? RAW_BUFF_STRENGTH_ID
+	const amplifier = 1 + (Number.isFinite(science) && science > 0 ? science : 0) / 100
+	let gain = 0
+	for (const feature of chip.features ?? []) {
+		const mean = (feature.minValue + feature.maxValue) / 2
+		if (feature.type === Effect.BUFF_STRENGTH) {
+			gain += mean * amplifier
+		} else if (feature.type === raw) {
+			gain += mean
+		}
+	}
+	return gain > 0 ? gain : 0
 }
 
 /** L'item a-t-il au moins une feature DAMAGE de valeur maximale > 0 ? */

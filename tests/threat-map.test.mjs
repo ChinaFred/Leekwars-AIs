@@ -9,7 +9,7 @@ globalThis.Fight = { turn: 1 }
 
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { LAUNCH_TYPE, isCellInLaunchPattern } = await import("../dist/Classes/Context/LaunchPattern.js")
-const { meanDamage, planShots, toCandidate, sortByRatio } = await import("../dist/Classes/Context/ShotPlan.js")
+const { meanDamage, planShots, toCandidate, sortByRatio, strengthBoostOf } = await import("../dist/Classes/Context/ShotPlan.js")
 const { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS, MAX_THREAT_WEAPONS } = await import("../dist/Classes/Context/ThreatMap.js")
 const { EnemyMemory } = await import("../dist/Classes/Context/EnemyMemory.js")
 
@@ -489,6 +489,129 @@ test("pair cap: the map is truncated, unevaluated cells are absent (never shown 
 	assert.equal(capped.dangerAt(grid.cell(5, 10)), 45)
 	assert.equal(capped.dangerAt(grid.cell(7, 10)), null)
 	assert.ok(capped.safestCells().every((cell) => capped.has(cell)))
+})
+
+const boostChip = (cost, gain, extra = {}) =>
+	chip({ id: 300 + cost * 10 + gain, name: `boost${gain}`, cost, features: [{ type: 6, minValue: gain, maxValue: gain }], ...extra })
+
+test("a ready strength boost is cast before shooting when it pays, with its TP deducted", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 70, cost: 3, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun })
+	assert.equal(buildThreatMap(me, myReach, [input], 1).dangerAt(me.cell), 30) // 3 tirs de 10
+
+	const boosted = buildThreatMap(me, myReach, [{ ...input, boosts: [boostChip(3, 100)] }], 1)
+	assert.equal(boosted.dangerAt(me.cell), 40) // 7 PT : 2 tirs de 10 × (1 + 100/100)
+	const threat = boosted.breakdownAt(me.cell)[0]
+	assert.equal(threat.boostTp, 3)
+	assert.equal(threat.strengthGain, 100)
+	assert.equal(threat.weaponShots, 2)
+
+	const weak = buildThreatMap(me, myReach, [{ ...input, boosts: [boostChip(3, 5)] }], 1)
+	assert.equal(weak.dangerAt(me.cell), 30) // 2 tirs × 10,5 < 3 tirs : le boost ne paie pas
+	assert.equal(weak.breakdownAt(me.cell)[0].boostTp, 0)
+	const unaffordable = buildThreatMap(me, myReach, [{ ...input, boosts: [boostChip(10, 500)] }], 1)
+	assert.equal(unaffordable.dangerAt(me.cell), 30) // coût ≥ PT : ignoré
+})
+
+test("boost chips combine (each at most once) and only the paying subset is kept", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 71, cost: 2, min: 10, max: 10 })
+	const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: gun })
+	assert.equal(buildThreatMap(me, myReach, [input], 1).dangerAt(me.cell), 50) // 5 tirs
+	const one = buildThreatMap(me, myReach, [{ ...input, boosts: [boostChip(2, 100)] }], 1)
+	assert.equal(one.dangerAt(me.cell), 80) // 8 PT : 4 tirs × 20
+	const both = buildThreatMap(me, myReach, [{ ...input, boosts: [boostChip(2, 100, { id: 9 }), boostChip(2, 100, { id: 10 })] }], 1)
+	assert.equal(both.dangerAt(me.cell), 90) // 6 PT : 3 tirs × 30
+	assert.equal(both.breakdownAt(me.cell)[0].boostTp, 4)
+	assert.equal(both.breakdownAt(me.cell)[0].strengthGain, 200)
+})
+
+test("strengthBoostOf: BUFF_STRENGTH is amplified by science, the raw boost (id 38) is not", () => {
+	const buff = chip({ id: 80, features: [{ type: 6, minValue: 40, maxValue: 60 }] })
+	const raw = chip({ id: 81, features: [{ type: 38, minValue: 40, maxValue: 60 }] })
+	const damage = chip({ id: 82 })
+	assert.equal(strengthBoostOf(buff, 100), 100)
+	assert.equal(strengthBoostOf(buff, 0), 50)
+	assert.equal(strengthBoostOf(raw, 100), 50)
+	assert.equal(strengthBoostOf(damage, 100), 0)
+})
+
+test("EnemyMemory.updateThreatMap: ready boost chips raise the danger, a chip in cooldown does not", () => {
+	const gun = weapon({ id: 72, cost: 3, min: 10, max: 10 })
+	const protein = boostChip(3, 100, { cooldown: 3 })
+	const scenario = memoryScenario({ enemyWeapon: gun, enemyChips: [protein] })
+	run(scenario)
+	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 40)
+	scenario.memory.getProfile(2).startCooldown(protein)
+	scenario.memory.updateReachable(scenario.me, [], [scenario.enemy], 2)
+	scenario.memory.updateThreatMap(scenario.me, [scenario.enemy], 2)
+	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 30)
+})
+
+test("line of sight is shared between maps through a common cache, one Field call per pair", () => {
+	const grid = makeGrid(21, 21)
+	const sight = new Map()
+	const sighted = weapon({ id: 73, minRange: 1, maxRange: 8, needsLos: true })
+	const from = grid.cell(5, 10)
+	const target = grid.cell(9, 10)
+	assert.equal(new GeometricShotCells(sight).canHit(from, target, sighted), true)
+	assert.equal(new GeometricShotCells(sight).canHit(from, target, sighted), true)
+	const again = new GeometricShotCells(sight)
+	assert.equal(again.canHit(from, target, sighted), true)
+	assert.equal(again.lineOfSightCalls, 0)
+	assert.equal(grid.losCalls.length, 1)
+	assert.equal(new GeometricShotCells().canHit(from, target, sighted), true) // cache propre : nouvel appel
+	assert.equal(grid.losCalls.length, 2)
+})
+
+test("EnemyMemory reuses line of sight across turns: the second identical map makes no Field.lineOfSight call", () => {
+	const sighted = weapon({ id: 74, minRange: 1, maxRange: 8, needsLos: true })
+	const scenario = memoryScenario({ enemyWeapon: sighted, mp: 2 })
+	const grid = scenario.grid
+	run(scenario, 1)
+	const first = grid.losCalls.length
+	assert.ok(first > 0)
+	scenario.memory.updateReachable(scenario.me, [], [scenario.enemy], 2)
+	const update = scenario.memory.updateThreatMap(scenario.me, [scenario.enemy], 2)
+	assert.equal(update.lineOfSightCalls, 0)
+})
+
+test("pairs outside every range never reach the provider, and the danger equals the unfiltered result", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10], 1)
+	const gun = weapon({ id: 75, minRange: 1, maxRange: 3 })
+	const { input } = addEnemy(grid, me, 2, [6, 10], { mp: 2, weaponItem: gun })
+	const reference = buildThreatMap(me, myReach, [input], 1)
+	let calls = 0
+	const base = new GeometricShotCells()
+	const counting = { canHit: (a, b, c) => { calls++; return base.canHit(a, b, c) } }
+	const counted = buildThreatMap(me, myReach, [input], 1, { provider: counting })
+	for (const entry of reference.entries()) assert.equal(counted.dangerAt(entry.cell), entry.danger)
+	assert.ok(calls < counted.pairsEvaluated, `${calls} calls for ${counted.pairsEvaluated} pairs`)
+})
+
+test("a cell farther than the enemy's movement plus its longest range is skipped without any pair", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [18, 10])
+	const gun = weapon({ id: 76, minRange: 1, maxRange: 3 })
+	const { input } = addEnemy(grid, me, 2, [2, 10], { mp: 2, weaponItem: gun })
+	let calls = 0
+	const map = buildThreatMap(me, myReach, [input], 1, { provider: { canHit() { calls++; return true } } })
+	assert.equal(map.dangerAt(me.cell), 0)
+	assert.equal(map.pairsEvaluated, 0)
+	assert.equal(calls, 0)
+})
+
+test("base damage is cached per item instance: the same id with other features is not confused", () => {
+	const a = weapon({ id: 90, min: 10, max: 10 })
+	const b = weapon({ id: 90, min: 30, max: 30 })
+	assert.equal(meanDamage(a, 0), 10)
+	assert.equal(meanDamage(b, 0), 30)
+	assert.equal(meanDamage(a, 50), 15)
+	assert.equal(meanDamage(a, Number.NaN), 10)
 })
 
 test("truncated reachable inputs are flagged", () => {

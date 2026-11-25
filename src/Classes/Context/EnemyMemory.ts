@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
-import { hasDamage } from "./ShotPlan.js"
-import { buildThreatMap, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
+import { hasDamage, strengthBoostOf } from "./ShotPlan.js"
+import { buildThreatMap, GeometricShotCells, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
 
 /** Multiplicateur de coup critique : constante officielle CRITICAL_FACTOR = 1.3. */
 export const CRITICAL_FACTOR = 1.3
@@ -67,6 +67,8 @@ export class EnemyMemory {
 	private lastLifeTurn = 0
 	/** Carte de danger de mon poireau pour le tour courant (remplacée à chaque tour). */
 	private threatMap: ThreatMap | null = null
+	/** Lignes de vue (case de tir, case visée) déjà demandées : les obstacles sont fixes pendant le combat. */
+	private readonly sightCache = new Map<number, boolean>()
 
 	has(enemyId: number): boolean {
 		return this.profiles.has(enemyId)
@@ -237,6 +239,9 @@ export class EnemyMemory {
 			const otherWeapons = profile.knownWeapons.filter((known) =>
 				hasDamage(known) && known.id !== weapon?.id)
 			const chips = profile.knownChips.filter((chip) => hasDamage(chip) && profile.isChipReady(chip))
+			const science = enemy.science ?? 0
+			const boosts = profile.knownChips.filter((chip) =>
+				strengthBoostOf(chip, science) > 0 && profile.isChipReady(chip))
 			if ((weapon === null || !hasDamage(weapon)) && otherWeapons.length === 0 && chips.length === 0) {
 				continue
 			}
@@ -248,10 +253,12 @@ export class EnemyMemory {
 				weapon,
 				otherWeapons,
 				chips,
+				boosts,
+				science,
 				reachable: computeReachableCells(enemy, profile.maxMpSeen, turn, { ignoreEntityId: me.id })
 			})
 		}
-		const map = buildThreatMap(me, mine, inputs, turn)
+		const map = buildThreatMap(me, mine, inputs, turn, { provider: new GeometricShotCells(this.sightCache) })
 		this.threatMap = map
 		return {
 			size: map.size,
