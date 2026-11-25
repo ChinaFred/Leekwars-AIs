@@ -1,10 +1,56 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { planAct } from "../Brain/PlanActScenario.js"
-import { withErrorReporting } from "../Toolbox/Debug.js"
+import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+import { reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { getRandomMessage, SPEECH } from "../Toolbox/Speeches.js"
 
 let isFirstTurn = true
+
+/** Mémoire de l'adversaire : collecte seule, non transmise à planAct (aucun effet sur la tactique). */
+export const enemyMemory = new EnemyMemory()
+
+/**
+ * Identifie les ennemis vivants nouveaux et met à jour les connus. Une erreur est journalisée
+ * mais n'interrompt pas le tour : la collecte de données ne doit jamais empêcher de jouer.
+ */
+function observeEnemies(me: Me): void {
+	try {
+		const turnNumber = Fight.turn
+		const enemies = Fight.getAliveEnemies()
+		for (const enemy of enemies) {
+			if (!enemyMemory.has(enemy.id)) {
+				const profile = enemyMemory.identify(enemy, turnNumber)
+				console.log(
+					`[EnemyMemory] Identified ${profile.name} (#${profile.id}) lvl ${profile.level}, ` +
+					`${profile.maxLife} HP, ${profile.knownWeapons.length} weapons, ${profile.knownChips.length} chips`
+				)
+			}
+			const update = enemyMemory.update(enemy, me, turnNumber, enemies.length)
+			if (update === null) {
+				continue
+			}
+			if (update.newItems.length > 0) {
+				console.log(`[EnemyMemory] ${enemy.name} observed: ${update.newItems.join(", ")}`)
+			}
+			if (update.hit !== null && update.hit.item !== null) {
+				console.log(
+					`[EnemyMemory] ${enemy.name} hit ${update.hit.amount} with ${update.hit.item.name} (${update.hit.source})`
+				)
+			}
+		}
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "observeEnemies", error)
+	}
+}
+
+function recordMyTurnEnd(me: Me): void {
+	try {
+		enemyMemory.endMyTurn(me, Fight.turn)
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "recordMyTurnEnd", error)
+	}
+}
 
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Class.ts", "turn", () => {
@@ -35,7 +81,11 @@ export function turn(): void {
 			}
 		}
 
+		observeEnemies(me)
+
 		planAct(me)
+
+		recordMyTurnEnd(me)
 
 		console.log(`=== KASSBI TURN END ===\n`)
 	})

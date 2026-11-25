@@ -19,7 +19,27 @@ interface Entity {
 	readonly ram: number
 	readonly weapons: Weapon[]
 	readonly chips: Chip[]
+	readonly tp: number
+	readonly wisdom: number
+	readonly effects: Effect[]
+	readonly launchedEffects: Effect[]
 	distance(target: Entity): number
+}
+
+/**
+ * Effet actif (doc : https://leekwars.com/help/documentation/getEffects et getLaunchedEffects, section TypeScript).
+ * La doc nomme les champs mais ne précise pas si caster/item/target sont des objets ou des ids :
+ * le type est volontairement l'union des deux et le code doit gérer les deux formes.
+ */
+interface Effect {
+	readonly type: number
+	readonly value: number
+	readonly caster: Entity | number
+	readonly turns: number
+	readonly critical: boolean
+	readonly item: Weapon | Chip | number
+	readonly target: Entity | number
+	readonly modifiers: number
 }
 
 interface Cell {
@@ -54,6 +74,7 @@ interface Chip {
 	readonly id: number
 	readonly name: string
 	readonly cost: number
+	readonly cooldown: number
 	readonly currentCooldown: number
 	readonly minRange: number
 	readonly maxRange: number
@@ -135,6 +156,7 @@ declare const Chip: {
 
 declare const Effect: {
 	readonly DAMAGE: number
+	readonly POISON: number
 	readonly HEAL: number
 	readonly ABSOLUTE_SHIELD: number
 	readonly RELATIVE_SHIELD: number

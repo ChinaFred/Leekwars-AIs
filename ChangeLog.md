@@ -2,6 +2,17 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — FEAT: mémoire de l'adversaire (collecte seule)
+
+- `EnemyMemory`/`EnemyProfile` (Context, v1) : identification de l'ennemi, armes/puces observées via arme équipée et effets, cooldowns de ses puces, journal borné des coups (attribution heuristique) ; branchés dans `turn()` (Kassbi_Class.ts v5) avant `planAct`, sans effet sur la tactique. Types `Effect`, `Entity.tp/wisdom/effects/launchedEffects`, `Chip.cooldown` ajoutés. Tests : `tests/enemy-memory.test.mjs`.
+
+## 2026-11-25 — FIX: cellule de repli, tir en ordre critique, recul de zone_control
+
+- `findRetreatCell` (ex-`findNearestCorner`) : score `distance(ennemi, cellule) − 0,1 × distance(moi, cellule)` (l'ancien choisissait l'obstacle le plus proche de l'ennemi) et cible une cellule libre voisine de l'obstacle, repli sur `moveAwayFrom`.
+- `planShootOrChip` ne dépend plus de `planMove` : le tir et la chip d'attaque sont planifiés aussi dans l'ordre « situation critique ».
+- Recul de `zone_control` : `planRetreatAfterShoot` après les tirs (PM de l'ennemi inclus, borne `d == portée` incluse) ; `executeZoneControl` ne fait plus qu'avancer (jamais de recul avant le tir). `docs/strategies.md` mis à jour, tests dans `tests/movement-planning.test.mjs`.
+- Fichiers : MovementBehavior.ts (v2), Plannification.ts (v8), PlanActScenario.ts (v4).
+
 ## 2026-11-24 — FIX: Bugs critiques Defense/Heal/Hide - Logique stratégique améliorée
 
 **3 Bugs identifiés et corrigés** dans les décisions tactiques :
