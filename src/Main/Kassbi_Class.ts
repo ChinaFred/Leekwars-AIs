@@ -1,7 +1,9 @@
 // @version:5.8
-// file version: 11
+// file version: 12
+import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, isLogEnabled, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
@@ -19,6 +21,43 @@ let isFirstTurn = true
 /** Mémoire et cartes du tour ; seules les cartes sont transmises à planAct. */
 export const enemyMemory = new EnemyMemory()
 
+/** Coffres : listés et observés à part, jamais ciblés ni comptés comme ennemis. */
+export const chestMemory = new EnemyMemory()
+
+/**
+ * Liste les coffres vivants et enregistre leurs actions (armes/puces vues). Les coups attribués par la mémoire
+ * sont ignorés : l'attribution des dégâts n'a de sens que pour un adversaire.
+ */
+function observeChests(me: Me): void {
+	try {
+		const chests = aliveChests()
+		const turnNumber = Fight.turn
+		for (const chest of chests) {
+			if (!chestMemory.has(chest.id)) {
+				chestMemory.identify(chest, turnNumber)
+				log(
+					() => `[Chest] Listed ${chest.name} (#${chest.id}) ${chest.life}/${chest.maxLife} HP ` +
+						`at (${chest.cell.x},${chest.cell.y}); not an enemy`,
+					LOG_CONTEXT.MEMORY
+				)
+			}
+			// Argument 2 (> 1 ennemi vivant) : toute perte de PV reste « ambiguous », jamais imputée au coffre.
+			const update = chestMemory.update(chest, me, turnNumber, 2)
+			if (update !== null && update.newItems.length > 0) {
+				log(() => `[Chest] ${chest.name} (#${chest.id}) observed: ${update.newItems.join(", ")}`, LOG_CONTEXT.MEMORY)
+			}
+		}
+		if (chests.length > 0) {
+			log(
+				() => `[Chest] ${chests.map((chest) => `#${chest.id} ${chest.life}/${chest.maxLife} HP`).join(", ")}`,
+				LOG_CONTEXT.MEMORY
+			)
+		}
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "observeChests", error)
+	}
+}
+
 /**
  * Identifie les ennemis vivants nouveaux et met à jour les connus. Une erreur est journalisée
  * mais n'interrompt pas le tour : la collecte de données ne doit jamais empêcher de jouer.
@@ -26,7 +65,7 @@ export const enemyMemory = new EnemyMemory()
 function observeEnemies(me: Me): void {
 	try {
 		const turnNumber = Fight.turn
-		const enemies = Fight.getAliveEnemies()
+		const enemies = aliveEnemies()
 		for (const enemy of enemies) {
 			if (!enemyMemory.has(enemy.id)) {
 				const profile = enemyMemory.identify(enemy, turnNumber)
@@ -63,7 +102,7 @@ function observeEnemies(me: Me): void {
 function observeReachableCells(me: Me): void {
 	try {
 		const allies = Fight.getAllies().filter((ally) => ally.id !== me.id)
-		const updates = enemyMemory.updateReachable(me, allies, Fight.getAliveEnemies(), Fight.turn)
+		const updates = enemyMemory.updateReachable(me, allies, aliveEnemies(), Fight.turn)
 		log(() => {
 			const summary = updates
 				.map((update) => {
@@ -85,7 +124,7 @@ function observeReachableCells(me: Me): void {
  */
 function observeThreatMap(me: Me): void {
 	try {
-		const update = enemyMemory.updateThreatMap(me, Fight.getAliveEnemies(), Fight.turn)
+		const update = enemyMemory.updateThreatMap(me, aliveEnemies(), Fight.turn)
 		if (update === null) {
 			log("[Threat] unavailable", LOG_CONTEXT.THREAT)
 			return
@@ -123,7 +162,7 @@ function displayAccessibleZones(me: Me): void {
 			seen.add(ally.id)
 			sources.push({ name: ally.name, side: "ally", reachable: enemyMemory.getReachable(ally.id) })
 		}
-		for (const enemy of Fight.getAliveEnemies()) {
+		for (const enemy of aliveEnemies()) {
 			if (seen.has(enemy.id) || !(enemy.life > 0)) {
 				continue
 			}
@@ -162,7 +201,7 @@ function recordMyTurnEnd(me: Me): void {
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Class.ts", "turn", () => {
 		const me = Fight.me
-		const target = Fight.getNearestEnemy()
+		const target = nearestEnemy()
 
 		log(`\n=== KASSBI TURN START ===`, LOG_CONTEXT.SYSTEM)
 		log(() => `My HP: ${me.life}/${me.maxLife}, TP: ${me.tp}, MP: ${me.mp}`, LOG_CONTEXT.COMBAT)
@@ -192,6 +231,7 @@ export function turn(): void {
 		}
 
 		observeEnemies(me)
+		observeChests(me)
 		observeReachableCells(me)
 		displayAccessibleZones(me)
 		observeThreatMap(me)
@@ -202,6 +242,8 @@ export function turn(): void {
 			threat: enemyMemory.getThreatMap()
 		})
 
+		// Après le plan : l'équipement du tour 1 n'utilise que des PT que le plan n'a pas voulu dépenser.
+		equipOpeningWeapon(me)
 		recordMyTurnEnd(me)
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)

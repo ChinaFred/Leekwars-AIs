@@ -12,6 +12,8 @@ Document de référence unique des décisions tactiques. Les valeurs ci-dessous 
 4. Ordre « situation critique » : si `distance <= 8`, `vie <= 60 %` et `shouldHide` est vrai, l'ordre devient `planHide` → chips → tir → déplacement (→ `planRetreatAfterShoot`, ajouté en fin dans les deux ordres).
 5. `planShootOrChip` ne dépend plus de `planMove` : le tir et la chip d'attaque sont planifiés quel que soit l'ordre (arme choisie si besoin). Dans l'ordre critique, le repli s'exécute avant les tirs, qui restent gardés à l'exécution par `canUseWeapon` : ils ne partent que si la cible est encore à portée après le repli.
 6. `planRetreatAfterShoot` (recul de `zone_control`) est un no-op si `planHide` ou `planMove` ont déjà consommé les PM (`mpLeft = 0`), donc l'ordre critique n'est pas modifié et `planHide` garde la priorité.
+7. **Arme du tour 1** (`equipOpeningWeapon`, `src/Brain/OpeningWeapon.ts`) : après `planAct`, au tour 1 uniquement, si aucune arme n'est équipée et qu'il reste au moins 1 PT, la meilleure arme (dégâts moyens par PT, force comprise ; à égalité, la plus longue portée) est équipée. Équiper coûte 1 PT : le faire au tour 1 est presque gratuit et évite ce PT plus tard, même si une autre arme est choisie ensuite. Le plan passe avant : cet équipement n'utilise que des PT qu'il n'a pas dépensés, et ne s'applique pas si le plan a déjà équipé une arme.
+8. **Coffres** (`src/Classes/Context/Targets.ts`) : une entité `Chest` (test `instanceof Chest`, classe officielle) n'est pas un ennemi. Elle est exclue de la cible (`nearestEnemy`), de la mémoire adverse, des cases atteignables, de la carte de danger, des plans conjoints et de réserve (`aliveEnemies`). Elle est listée et suivie à part (`chestMemory`, contexte de journal `MEMORY`, lignes `[Chest]`) : identité, PV et case à la première vue, PV à chaque tour, armes/puces vues (ses « actions »). L'attribution de coups de la mémoire est ignorée pour les coffres. Si le moteur ne fournit pas `Chest`, rien ne change.
 
 ## Plans conjoints attaque / protection / déplacement
 
@@ -270,6 +272,8 @@ Limites : le préfixe `[Plannification] ` est ajouté par `Plannification.debug(
 - Dans l'ordre critique, le repli précède les tirs ; une arme à courte portée peut donc ne plus tirer après le repli (tirs gardés par `canUseWeapon`, pas d'erreur mais PT non dépensés). La chip d'attaque n'est pas gardée à l'exécution (échec silencieux de `useChip` si hors portée).
 - `LeekProfile` a `preferredMinRange = 1` par défaut, alors que `planAct` crée un profil avec 3–8 : le comportement dépend de qui construit le profil.
 - Les types de `types/leekwars.d.ts` sont un sous-ensemble local de l'API du jeu ; les comportements de `Field`, `Chip` et `Fight` en combat réel ne sont pas validés par les tests.
+- Détection des coffres : `instanceof Chest` suit la doc officielle (arbre des classes) mais n'a pas été vérifiée en combat réel ; on suppose aussi que les coffres figurent dans `Fight.getAliveEnemies()`. Si la détection échouait, un coffre serait traité comme un ennemi (comportement antérieur).
+- Équipement du tour 1 : un plan qui dépense tous les PT sans équiper d'arme (puces seules) laisse le poireau sans arme équipée ; non corrigé.
 
 ## Comment tester une modification
 

@@ -145,6 +145,9 @@ interface DebugApi {
 
 declare const Fight: FightApi
 
+/** Classe officielle `Chest` (arbre des classes, doc JavaScript_and_TypeScript) : test par `instanceof`. */
+declare const Chest: abstract new (...args: never[]) => Entity
+
 declare const Field: FieldApi
 
 declare const Debug: DebugApi

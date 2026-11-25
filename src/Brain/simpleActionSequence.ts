@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
+import { nearestEnemy } from "../Classes/Context/Targets.js"
 
 export function simpleActionSequence(me: Me): void {
-	const enemy = Fight.getNearestEnemy()
+	const enemy = nearestEnemy()
 	if (enemy === null) {
 		return
 	}

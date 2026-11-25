@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
+import { aliveEnemies } from "../Context/Targets.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
 import { ShotCandidate, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
@@ -277,7 +278,7 @@ function evaluate(
 	if (reachable.size > TACTICAL_LIMITS.cells || !Number.isInteger(me.tp) ||
 		me.tp < 0 || me.tp > TACTICAL_LIMITS.tp) throw new Unavailable("cells/PT bound")
 
-	const enemies = Fight.getAliveEnemies().filter((enemy) => enemy.life > 0)
+	const enemies = aliveEnemies().filter((enemy) => enemy.life > 0)
 	preparation.enemies.push(...enemies.map((enemy) => ({ enemy, cell: enemy.cell })))
 	if (threat.enemyCount !== enemies.length) throw new Unavailable("stale/inconsistent enemy count")
 	// La validation fait partie du budget, pas seulement la recherche qui la suit.

@@ -1,13 +1,14 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { Plannification } from "../Classes/Plannification/Plannification.js"
+import { nearestEnemy } from "../Classes/Context/Targets.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { TacticalContext, evaluateTacticalPlans, executeTacticalPlan } from "../Classes/Plannification/TacticalPlanner.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { executeReservePlan } from "../Classes/Plannification/ReservePlan.js"
 
 export function planAct(me: Me, profile = createDefaultProfile(), context?: TacticalContext): void {
-	const target = Fight.getNearestEnemy()
+	const target = nearestEnemy()
 	if (target === null) {
 		return
 	}

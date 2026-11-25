@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { Leek } from "../Leek.js"
+import { nearestEnemy } from "../Context/Targets.js"
 import { ItemModel } from "../Items/Item.js"
 import { ChipModel } from "../Items/Chip.js"
 import { WeaponModel } from "../Items/Weapon.js"
@@ -10,7 +11,7 @@ import { ShootingOption } from "./ShootingOption.js"
 export class ShootingOptions {
 	options: ShootingOption[] = []
 
-	exploreOptions(leek: Me, target = Fight.getNearestEnemy()): ShootingOption[] {
+	exploreOptions(leek: Me, target = nearestEnemy()): ShootingOption[] {
 		this.options = []
 		if (target === null) {
 			return this.options

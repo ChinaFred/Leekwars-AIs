@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
+import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { Plannification } from "./Plannification.js"
@@ -148,7 +149,7 @@ export function executeReservePlan(
 	let moved = false
 	let spentMp = 0
 	try {
-		const allEnemies = Fight.getAliveEnemies().filter((enemy) => enemy.life > 0)
+		const allEnemies = aliveEnemies().filter((enemy) => enemy.life > 0)
 		if (allEnemies.length === 0 || me.life <= 0) return true
 		const enemies = allEnemies.slice(0, RESERVE_LIMITS.enemies)
 		const positions = allEnemies.map((enemy) => ({ enemy, cell: enemy.cell }))

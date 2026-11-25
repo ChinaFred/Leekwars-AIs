@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { Coordinates } from "./Context/Coordinates.js"
+import { nearestEnemy } from "./Context/Targets.js"
 import { World } from "./Context/World.js"
 import { ItemModel } from "./Items/Item.js"
 import { LeekProfile } from "./LeekProfile.js"
@@ -42,7 +43,7 @@ export class Leek {
 	get wearedChips(): Chip[] { return this.chips }
 	get cooledChips(): Chip[] { return this.chips.filter((chip) => chip.currentCooldown === 0) }
 
-	setTarget(target: Entity | null = Fight.getNearestEnemy()): void {
+	setTarget(target: Entity | null = nearestEnemy()): void {
 		this.target = target
 	}
 
