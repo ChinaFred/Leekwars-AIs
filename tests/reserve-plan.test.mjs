@@ -1,0 +1,438 @@
+import test from "node:test"
+import assert from "node:assert/strict"
+import { planAct } from "../dist/Brain/PlanActScenario.js"
+import { evaluateTacticalPlans } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
+import { executeReservePlan } from "../dist/Classes/Plannification/ReservePlan.js"
+import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
+import { LeekProfile } from "../dist/Classes/LeekProfile.js"
+import { initLeekLogging, LogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
+
+function world({ obstacles = [], los = () => true, danger = c => c.x === -2 ? 0 : 100,
+	positions = [[7, 0]], tp = 10, mp = 4, range = 6, chips = [] } = {}) {
+	globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4 }
+	const grid = new Map()
+	for (let x = -4; x <= 9; x++) for (let y = -4; y <= 4; y++) {
+		grid.set(`${x},${y}`, { x, y, id: grid.size, obstacle: false, entity: null, empty: true })
+	}
+	const cell = (x, y = 0) => grid.get(`${x},${y}`) ?? null
+	for (const [x, y] of obstacles) cell(x, y).obstacle = true
+	const gun = { name: "gun", cost: 4, minRange: 1, maxRange: range, maxUses: -1,
+		needsLos: true, features: [{ type: 1, minValue: 30, maxValue: 30 }] }
+	const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+	const hit = (from, target, weapon) => distance(from, target.cell) >= weapon.minRange &&
+		distance(from, target.cell) <= weapon.maxRange && los(from, target.cell)
+	const events = []
+	const me = { id: 1, name: "me", cell: cell(0), life: 70, maxLife: 100, tp, mp,
+		strength: 0, wisdom: 0, weapon: gun, weapons: [gun], chips,
+		distance: target => distance(me.cell, target.cell),
+		canUseWeapon: (target, weapon = me.weapon) => target.life > 0 && !me.deny &&
+			hit(me.cell, target, weapon),
+		canUseChip: (chip, target) => !me.denyChip && target === me,
+		chipCells: () => [me.cell],
+		setWeapon(weapon) { events.push("equip"); if (!me.failEquip) { me.weapon = weapon; me.tp-- } },
+		useWeapon(target) {
+			assert.ok(me.tp >= me.weapon.cost && me.canUseWeapon(target))
+			events.push("shoot"); me.tp -= me.weapon.cost; target.life -= 30; me.afterShot?.()
+			return 1 // USE_SUCCESS : contrat officiel, pas undefined après une dépense réussie.
+		},
+		useChip(chip) { assert.ok(me.tp >= chip.cost); events.push("heal"); me.tp -= chip.cost; return 1 },
+		moveToward(destination, limit) {
+			events.push(["move", destination.x, destination.y, limit])
+			if (me.failMove) return 0
+			const cost = computeReachableCells(me, Math.min(me.mp, limit)).costTo(destination)
+			assert.notEqual(cost, null)
+			assert.ok(cost <= me.mp && cost <= limit)
+			me.cell.entity = null; me.cell = destination; destination.entity = me; me.mp -= cost
+			me.afterMove?.()
+			return cost
+		},
+		moveAwayFrom(target, limit) { events.push(["unknown-retreat", target.id, limit]); me.mp -= limit }
+	}
+	me.cell.entity = me
+	const enemies = positions.map(([x, y], i) => {
+		const enemy = { id: i + 2, cell: cell(x, y), life: 153, maxLife: 243, mp: 3, weapon: gun }
+		enemy.cell.entity = enemy
+		return enemy
+	})
+	globalThis.Fight = { turn: 6, me, getNearestEnemy: () => enemies[0] ?? null,
+		getAliveEnemies: () => enemies.filter(e => e.life > 0), getEnemies: () => enemies,
+		weaponCells: (target, weapon) => [...grid.values()].filter(c => hit(c, target, weapon)) }
+	globalThis.Field = { cellFromXY: cell, distance, lineOfSight: los }
+	// La tactique complète abandonne après le fournisseur natif : +15 %, avant toute action.
+	let ops = 350000
+	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
+	const native = Fight.weaponCells
+	Fight.weaponCells = (...args) => { ops = 510000; return native(...args) }
+	const reachable = computeReachableCells(me, me.mp)
+	const threat = new ThreatMap(me.id, 6, new Map([...reachable.entries()].map(e =>
+		[e.cell.x * 4096 + e.cell.y, { cell: e.cell, danger: danger(e.cell), mpCost: e.cost, breakdown: [] }])),
+	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false,
+		enemyCount: enemies.length, pairsEvaluated: 0, lineOfSightCalls: 0 })
+	const context = { reachable, threat }
+	const profile = new LeekProfile()
+	const config = new LogConfig(); config.setAll(false); config.setEnabled(LOG_CONTEXT.PLANNING, true)
+	initLeekLogging(config)
+	return { me, enemies, events, context, profile, cell,
+		steady() { ops = 510000; Fight.weaponCells = native },
+		resetOps() { ops = 350000 }, setOps(n) { ops = n },
+		run(ctx = context) { planAct(me, profile, ctx) } }
+}
+
+test("turn 6 simulation: operations reserve → approach 1 PM, two shots, retreat 3 PM FROM shot", () => {
+	const w = world()
+	assert.equal(evaluateTacticalPlans(w.me, w.profile, w.context).reason, "operations reserve")
+	assert.deepEqual(w.events, [])
+	w.resetOps()
+	const messages = [], original = console.log
+	try {
+		console.log = message => messages.push(message)
+		w.run()
+	} finally { console.log = original }
+	assert.ok(messages.some(m => m.includes("[Tactical] fallback: operations reserve")))
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["move", -2, 0, 3]])
+	assert.equal(w.me.mp, 0)
+	assert.equal(w.me.tp, 2)
+})
+
+test("obstacle and native LOS prevent a fictitious one-PM shot; path costs include detour", () => {
+	const w = world({ obstacles: [[1, 0]], los: from => from.y === 0 })
+	w.run()
+	assert.deepEqual(w.events.slice(0, 3), [["move", 2, 0, 4], "shoot", "shoot"])
+	assert.equal(w.me.mp, 0)
+})
+
+test("remaining PM cannot reach a low-danger cell using the departure cost", () => {
+	const w = world({ danger: c => c.x === -3 ? 0 : c.x === 0 ? 20 : 100 })
+	w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["move", 0, 0, 1]])
+	assert.equal(w.me.mp, 2)
+})
+
+test("allowHiding=false forbids the post-shot retreat, not minimal approach", () => {
+	const w = world(); w.profile.allowHiding = false; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot"])
+	assert.equal(w.me.mp, 3)
+})
+
+for (const invalid of ["absent", "stale", "truncated", "partial", "wrong-position"]) {
+	test(`unknown map (${invalid}): explicit geometric retreat, never credited as safe`, () => {
+		const w = world()
+		w.steady()
+		if (invalid === "stale") w.context.threat.turn--
+		if (invalid === "truncated") w.context.threat.inputsTruncated = true
+		if (invalid === "partial") w.context.threat.byKey.delete(4096)
+		if (invalid === "wrong-position") w.context.reachable.startCell = w.cell(0, 1)
+		const messages = [], original = console.log
+		try {
+			console.log = message => messages.push(message)
+			w.run(invalid === "absent" ? { reachable: null, threat: null } : w.context)
+		} finally { console.log = original }
+		assert.ok(w.events.includes("shoot"))
+		assert.deepEqual(w.events.at(-1), ["unknown-retreat", 2, 3])
+		assert.ok(messages.some(m => m.includes("danger unknown; geometric only, no safety claim")))
+	})
+}
+
+test("entry without context also uses bounded minimal approach and unknown-danger retreat", () => {
+	const w = world()
+	w.steady()
+	planAct(w.me, w.profile)
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["unknown-retreat", 2, 3]])
+})
+
+test("no reachable shot: main plan protects then progresses, using real PT", () => {
+	const heal = { name: "bandage", cost: 2, currentCooldown: 0,
+		features: [{ type: 2, minValue: 20, maxValue: 20 }] }
+	const w = world({ range: 1, danger: c => c.x <= 2 ? 0 : 100, chips: [heal] })
+	w.run()
+	assert.deepEqual(w.events, ["heal", ["move", 2, 0, 2]])
+	assert.equal(w.me.tp, 8)
+})
+
+test("no shot: cover competes with progress when the path is too dangerous", () => {
+	const w = world({ range: 1, danger: c => c.x < 0 ? 0 : 100 })
+	w.run()
+	assert.deepEqual(w.events, [["move", -1, 0, 1]])
+})
+
+test("zero enemies does nothing; dead target stops shots but permits modeled retreat", () => {
+	let w = world({ positions: [] }); w.run(); assert.deepEqual(w.events, [])
+	w = world(); w.me.afterShot = () => { w.enemies[0].life = 0 }; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", ["move", -2, 0, 3]])
+})
+
+test("failed approach stops the sequence, no attacks or second complete plan", () => {
+	const w = world(); w.me.failMove = true; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1]])
+	assert.equal(w.me.mp, 4)
+	assert.equal(w.me.tp, 10)
+})
+
+test("native refusal after approach prevents all shots, still permits retreat with real PM", () => {
+	const w = world(); w.me.afterMove = () => { w.me.deny = true }; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], ["move", -2, 0, 3]])
+	assert.equal(w.me.tp, 10)
+})
+
+test("target position change invalidates danger and legality is rechecked natively", () => {
+	const w = world(); w.me.afterMove = () => { w.enemies[0].cell = w.cell(9, 4) }; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], ["unknown-retreat", 2, 3]])
+})
+
+test("multiple enemies: retreat uses aggregate danger, not distance from the chosen target", () => {
+	const w = world({ positions: [[7, 0], [-4, 0]],
+		danger: c => c.y === 1 ? 10 : c.x < 0 ? 200 : 100 })
+	w.run()
+	assert.deepEqual(w.events, ["shoot", "shoot", ["move", 0, 1, 1]])
+})
+
+test("absolute reserve is not increased: no search movement at 70 percent ops", () => {
+	const w = world(); w.setOps(700000); w.run()
+	assert.deepEqual(w.events, [])
+})
+
+test("no shot: route around a wall progresses even when Manhattan distance initially increases", () => {
+	const w = world({ range: 1, mp: 1, danger: () => 0,
+		obstacles: Array.from({ length: 7 }, (_, i) => [1, i - 3]) })
+	w.run()
+	assert.equal(w.events.length, 1)
+	assert.equal(w.events[0][0], "move")
+	assert.equal(w.events[0][1], 0)
+	assert.equal(Math.abs(w.events[0][2]), 1)
+	assert.equal(w.me.mp, 0)
+	assert.equal(w.me.tp, 10)
+})
+
+test("new obstacle after shooting blocks the old cheap retreat path", () => {
+	const w = world()
+	w.me.afterShot = () => { w.cell(0).obstacle = true }
+	w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot"])
+	assert.equal(w.me.mp, 3)
+})
+
+test("displacement during attack: final path starts at the real cell, no second approach", () => {
+	const w = world()
+	w.me.afterShot = () => {
+		w.me.cell.entity = null; w.me.cell = w.cell(0, 1); w.me.cell.entity = w.me
+	}
+	w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", ["move", -2, 1, 2]])
+	assert.equal(w.me.mp, 1)
+})
+
+test("failed equipment never shoots the old weapon and never runs a second sequence", () => {
+	const w = world(); w.me.weapon = null; w.me.failEquip = true; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "equip", ["move", -2, 0, 3]])
+	assert.equal(w.me.tp, 10)
+})
+
+test("native action exception after approach cannot trigger legacy planning", () => {
+	const w = world()
+	w.me.useWeapon = () => { w.events.push("failed-shot"); throw new Error("action fixture failure") }
+	w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "failed-shot"])
+})
+
+test("zero affordable shots: progress without equipment or fictitious attack PT", () => {
+	const w = world({ tp: 0, danger: () => 0 }); w.steady(); w.run()
+	assert.deepEqual(w.events, [["move", 4, 0, 4]])
+	assert.equal(w.me.tp, 0)
+})
+
+for (const invalid of ["reachable-id", "threat-id", "reachable-truncated", "threat-truncated",
+	"enemy-count", "negative-danger", "nonfinite-danger"]) {
+	test(`invalid context ${invalid} cannot claim a modeled safe retreat`, () => {
+		const w = world(); w.steady()
+		if (invalid === "reachable-id") w.context.reachable.entityId = 99
+		if (invalid === "threat-id") w.context.threat.entityId = 99
+		if (invalid === "reachable-truncated") w.context.reachable.truncated = true
+		if (invalid === "threat-truncated") w.context.threat.truncated = true
+		if (invalid === "enemy-count") w.context.threat.enemyCount = 99
+		if (invalid === "negative-danger") w.context.threat.byKey.get(4096).danger = -1
+		if (invalid === "nonfinite-danger") w.context.threat.byKey.get(4096).danger = NaN
+		const messages = [], original = console.log
+		try { console.log = m => messages.push(m); w.run() } finally { console.log = original }
+		assert.deepEqual(w.events.at(-1), ["unknown-retreat", 2, 3])
+		assert.ok(messages.some(m => m.includes("danger unknown; geometric only, no safety claim")))
+	})
+}
+
+test("unknown danger permits explicit progress but does not claim modeled cover", () => {
+	const w = world({ range: 1 }); w.steady()
+	const messages = [], original = console.log
+	try {
+		console.log = m => messages.push(m)
+		w.run({ reachable: null, threat: null })
+	} finally { console.log = original }
+	assert.deepEqual(w.events, [["move", 4, 0, 4]])
+	assert.ok(messages.some(m => m.includes("danger unknown")))
+	assert.ok(!messages.some(m => m.includes("danger modeled")))
+})
+
+test("allowHiding=false prevents cover-only movement when no shot is available", () => {
+	const w = world({ range: 1, danger: c => c.x < 0 ? 0 : c.x === 0 ? 100 : 200 })
+	w.profile.allowHiding = false; w.run()
+	assert.deepEqual(w.events, [])
+})
+
+test("support uses real post-shot PT, respects shielding and refusal", () => {
+	const shield = { name: "shield", cost: 2, currentCooldown: 0,
+		features: [{ type: 3, minValue: 20, maxValue: 20 }] }
+	let w = world({ chips: [shield] }); w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", "heal", ["move", -2, 0, 3]])
+	assert.equal(w.me.tp, 0)
+	w = world({ chips: [shield] }); w.profile.allowShielding = false; w.run()
+	assert.ok(!w.events.includes("heal"))
+	w = world({ chips: [shield] }); w.me.denyChip = true; w.run()
+	assert.ok(!w.events.includes("heal")); assert.equal(w.me.tp, 2)
+})
+
+for (const [role, threshold] of [["AGGRESSIVE", 50], ["BALANCED", 80], ["DEFENSIVE", 82.5]]) {
+	test(`${role}: minimal approach, attack then support across the healing threshold`, () => {
+		for (const [life, heal] of [[threshold - 0.1, true], [threshold + 0.1, false]]) {
+			const chip = { name: "bandage", cost: 2, currentCooldown: 0,
+				features: [{ type: 2, minValue: 20, maxValue: 20 }] }
+			const w = world({ tp: 6, chips: [chip] }); w.steady()
+			w.profile.setRole(role); w.me.life = life
+			planAct(w.me, w.profile)
+			assert.deepEqual(w.events, [
+				["move", 1, 0, 1], "shoot", ...(heal ? ["heal"] : []),
+				["unknown-retreat", 2, 3]
+			], `${role} at ${life}%`)
+			assert.equal(w.me.tp, heal ? 0 : 2)
+		}
+	})
+}
+
+test("target disappears during approach: no shot and no second approach", () => {
+	const w = world(); w.me.afterMove = () => { w.enemies[0].life = 0 }; w.run()
+	assert.deepEqual(w.events, [["move", 1, 0, 1], ["move", -2, 0, 3]])
+	assert.equal(w.me.tp, 10)
+})
+
+test("reserve provider exception is reported and interrupts the sequence", () => {
+	const w = world(); w.steady()
+	const reports = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: m => reports.push(m) }
+	globalThis.Color = { rgb: () => 0 }
+	initLeekLogging(new LogConfig().setAll(false).setEnabled(LOG_CONTEXT.ERROR, true))
+	Fight.weaponCells = () => { throw new Error("reserve native fixture failure") }
+	try { planAct(w.me, w.profile) } finally { globalThis.Debug = oldDebug; globalThis.Color = oldColor }
+	assert.deepEqual({
+		reported: reports.some(m => m.includes("reserve native fixture failure")),
+		events: w.events
+	}, { reported: true, events: [] })
+})
+
+test("rejected native attack must not be reported as two successful attacks", () => {
+	const w = world(), messages = [], original = console.log
+	w.me.useWeapon = () => { w.events.push("refused"); return -1 }
+	try { console.log = m => messages.push(m); w.run() } finally { console.log = original }
+	assert.equal(w.me.tp, 10)
+	assert.ok(!messages.some(m => m.includes("attack: 2;")), "no PT spent and no shot executed")
+})
+
+test("tactical validation checks reserve while scanning danger before fallback", () => {
+	const w = world(); let ops = 690000
+	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
+	const dangerAt = w.context.threat.dangerAt.bind(w.context.threat)
+	// Compteur synthétique, pas une mesure d'ops du moteur.
+	w.context.threat.dangerAt = cell => { ops += 10000; return dangerAt(cell) }
+	const result = evaluateTacticalPlans(w.me, w.profile, w.context)
+	assert.equal(result.reason, "operations reserve")
+	assert.ok(ops <= 710000, `unguarded validation crossed reserve: ${ops} operations`)
+	assert.deepEqual(w.events, [])
+})
+
+test("reserve validation stops searching at 3%, then may execute a validated short move", () => {
+	const w = world(); let ops = 500000
+	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
+	const dangerAt = w.context.threat.dangerAt.bind(w.context.threat)
+	w.context.threat.dangerAt = cell => { ops += 2000; return dangerAt(cell) }
+	executeReservePlan(w.me, w.profile, w.context)
+	assert.ok(ops <= 532000, `unguarded reserve validation exceeded its search margin: ${ops} operations`)
+	assert.deepEqual(w.events, [["move", 1, 0, 1]])
+	assert.equal(w.me.mp, 3)
+	assert.equal(w.me.tp, 10)
+})
+
+for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
+	for (const [start, after] of [
+		[660000, 699999], [660000, 700000], [660000, 700001],
+		[500000, 549999], [500000, 550000], [500000, 550001]
+	]) test(`${role}: reserve executes with operations ${after} after starting at ${start}`, () => {
+		const w = world(); w.steady(); let ops = start
+		w.profile.setRole(role)
+		globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
+		const native = Fight.weaponCells
+		Fight.weaponCells = (...args) => { ops = after; return native(...args) }
+		try {
+			executeReservePlan(w.me, w.profile, w.context)
+			assert.ok(w.events.some(e => Array.isArray(e) && e[0] === "move"),
+				`start=${start}, after=${after}`)
+		} finally { delete globalThis.System }
+	})
+}
+
+for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
+	for (const [after, mayAct] of [[969999, true], [970000, false], [970001, false]]) {
+		test(`${role}: reserve respects the real 3% execution tail at ${after}`, () => {
+			const w = world(); w.steady(); w.profile.setRole(role)
+			let ops = 660000
+			globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
+			const native = Fight.weaponCells
+			Fight.weaponCells = (...args) => { ops = after; return native(...args) }
+			try {
+				executeReservePlan(w.me, w.profile, w.context)
+				assert.equal(w.events.length > 0, mayAct)
+				if (!mayAct) {
+					assert.deepEqual(w.events, [])
+					assert.equal(w.me.tp, 10)
+					assert.equal(w.me.mp, 4)
+				}
+			} finally { delete globalThis.System }
+		})
+	}
+}
+
+for (const result of [0, -1, 1, 2]) {
+	test(`native weapon result ${result}: only positive launches count, refusal is not retried`, () => {
+		const w = world(), messages = [], original = console.log
+		const native = w.me.useWeapon
+		let calls = 0
+		w.me.useWeapon = target => {
+			calls++
+			if (result > 0) native(target)
+			return result
+		}
+		try { console.log = m => messages.push(m); w.run() } finally { console.log = original }
+		assert.equal(calls, result > 0 ? 2 : 1)
+		assert.equal(w.me.tp, result > 0 ? 2 : 10)
+		assert.ok(messages.some(m => m.includes(`attack: ${result > 0 ? 2 : 0};`)))
+		assert.equal(messages.some(m => m.includes(`weapon refused: result ${result}`)), result <= 0)
+	})
+}
+
+test("refused support has an explicit result, never a success log or imaginary PT cost", () => {
+	const chip = { name: "bandage", cost: 2, currentCooldown: 0,
+		features: [{ type: 2, minValue: 20, maxValue: 20 }] }
+	const w = world({ chips: [chip] }), messages = [], original = console.log
+	w.me.useChip = () => { w.events.push("refused-support"); return 0 }
+	try { console.log = m => messages.push(m); w.run() } finally { console.log = original }
+	assert.equal(w.me.tp, 2)
+	assert.ok(messages.some(m => m.includes("support refused: bandage; result 0")))
+	assert.ok(!messages.some(m => m.includes("support: bandage;")))
+	assert.equal(w.events.filter(e => e === "refused-support").length, 1)
+})
+
+test("reserve scores and retreat reuse only the complete validated danger snapshot", () => {
+	const w = world(); w.steady()
+	const native = w.context.threat.dangerAt.bind(w.context.threat)
+	let reads = 0
+	w.context.threat.dangerAt = cell => { reads++; return native(cell) }
+	executeReservePlan(w.me, w.profile, w.context)
+	assert.equal(reads, w.context.reachable.size)
+	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["move", -2, 0, 3]])
+})

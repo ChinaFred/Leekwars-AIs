@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 12
 import { Action } from "./Action.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -11,6 +11,7 @@ import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavior.js"
 import { globalCombatLogger } from "../../Toolbox/CombatLogger.js"
 import { log, LOG_CONTEXT, LogContext, LogText } from "../../Toolbox/Logger.js"
+import { ExecutionBudget, EXECUTION_BUDGET_POLICY } from "./ExecutionBudget.js"
 
 export class Plannification {
 	readonly actions: Action[] = []
@@ -409,16 +410,42 @@ export class Plannification {
 	}
 
 	execute(): void {
+		const executionBudget = new ExecutionBudget()
 		this.debug(
-			() => `Execute: ${this.actions.length} actions (TP: ${this.tpLeft} left, MP: ${this.mpLeft} left)`,
+			() => `Execute: plan before execution ${JSON.stringify({
+				mode: "historical queue; intent, not confirmed success",
+				target: { id: `#${this.target.id}`, position: { x: this.target.cell.x, y: this.target.cell.y } },
+				origin: { x: this.leek.cell.x, y: this.leek.cell.y },
+				tp: { available: this.leek.tp, remainingPlanned: this.tpLeft },
+				mp: { available: this.leek.mp, remainingPlanned: this.mpLeft },
+				weapon: this.chosenWeapon?.name ?? null,
+				actions: this.actions.map((action, index) => ({
+					order: index + 1, name: action.name, description: action.desc
+				})),
+				destination: null, danger: null, score: null, executionBudget: EXECUTION_BUDGET_POLICY,
+				limits: "movement destinations resolved at execution; queue budgets are not observed spending"
+			})}`,
 			LOG_CONTEXT.PLANNING
 		)
+		const available = (): boolean => executionBudget.available()
 		while (this.actions.length > 0) {
+			if (!available()) {
+				this.debug("Execute: global operations reserve; remaining queue cancelled", LOG_CONTEXT.PLANNING)
+				return
+			}
 			const action = this.actions.shift()
-			this.debug(() => `  → ${action?.name}`, LOG_CONTEXT.PLANNING)
+			this.debug(() => `  → ${action?.name}; before action; ${action?.desc}; ` +
+				`from (${this.leek.cell.x},${this.leek.cell.y}), TP ${this.leek.tp}, MP ${this.leek.mp}`,
+			LOG_CONTEXT.PLANNING)
+			if (!available()) {
+				this.debug("Execute: global operations reserve after phase log; action cancelled", LOG_CONTEXT.PLANNING)
+				return
+			}
 			action?.action()
 		}
-		this.debug(() => `Done: TP: ${this.tpLeft}, MP: ${this.mpLeft}`, LOG_CONTEXT.PLANNING)
+		this.debug(() => `Done: observed TP ${this.leek.tp}, MP ${this.leek.mp}; ` +
+			`planned remaining TP ${this.tpLeft}, MP ${this.mpLeft}; queue completed, success not inferred`,
+		LOG_CONTEXT.PLANNING)
 	}
 }
 

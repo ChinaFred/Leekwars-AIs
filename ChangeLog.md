@@ -2,6 +2,10 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Plans tactiques et replis fiables
+
+- Plan complet affiché avant exécution, déplacements en plusieurs phases et budgets de recherche et d'exécution distincts ; tests de régression.
+
 ## 2026-11-25 — Raccourci Windows pour Garden
 
 - Ajout de `garden.cmd` et de ses instructions d'utilisation.

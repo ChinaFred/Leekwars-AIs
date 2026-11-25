@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { evaluateTacticalPlans, executeTacticalPlan, TACTICAL_LIMITS } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
+import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"
 import { planAct } from "../dist/Brain/PlanActScenario.js"
@@ -319,10 +320,13 @@ test("bounded search and low operation reserve fall back before any action", () 
 	assert.deepEqual(w.events, [])
 })
 
-test("operation reserve is rechecked after expensive native cell providers", () => {
-	for (const { start, max, after } of [
-		{ start: 600, max: 1000, after: 701 },
-		{ start: 1000, max: 10000, after: 2500 }
+test("provider interruption retains only a complete incumbent when the execution budget permits", () => {
+	for (const { start, max, after, retained } of [
+		{ start: 600, max: 1000, after: 701, retained: true },
+		{ start: 1000, max: 10000, after: 2500, retained: true },
+		{ start: 600, max: 1000, after: 969, retained: true },
+		{ start: 600, max: 1000, after: 970, retained: false },
+		{ start: 600, max: 1000, after: 971, retained: false }
 	]) {
 		const w = world()
 		let operations = start
@@ -334,9 +338,16 @@ test("operation reserve is rechecked after expensive native cell providers", () 
 		}
 		try {
 			const result = w.evaluate()
-			assert.equal(result.plan, null)
+			assert.equal(result.plan !== null, retained)
 			assert.match(result.reason, /operations reserve/)
 			assert.deepEqual(w.events, [], "evaluation must not spend resources after reserve exhaustion")
+			if (retained) {
+				assert.match(result.plan.searchStatus, /complete incumbent/)
+				assert.ok(result.plan.usefulDamage > 0)
+				executeTacticalPlan(w.me, result.plan)
+				assert.ok(w.events.some(event => event.startsWith("shoot:")))
+				assert.ok(w.me.tp >= 0 && w.me.mp >= 0)
+			}
 		} finally {
 			Fight.weaponCells = nativeWeaponCells
 			delete globalThis.System
@@ -394,6 +405,64 @@ test("execution rechecks failed equipment, cooldown/LOS/TP, and stops firing at 
 	noTP.me.tp = 0
 	executeTacticalPlan(noTP.me, noTPPlan)
 	assert.deepEqual(noTP.events, [])
+})
+
+test("joint planner stops remaining weapon shots after a native refusal, preserving real PT", () => {
+	const w = world(), messages = [], original = console.log
+	const native = w.me.useWeapon.bind(w.me)
+	let calls = 0
+	w.me.useWeapon = target => ++calls === 1 ? native(target) : 0
+	try { console.log = m => messages.push(m); planAct(w.me, w.profile, w.context()) }
+	finally { console.log = original }
+	assert.equal(calls, 2)
+	assert.deepEqual(w.events, ["shoot:2"])
+	assert.equal(w.me.tp, 4)
+	assert.ok(messages.some(m => m.includes("[Tactical] execution: weapon refused: result 0")))
+	assert.ok(!messages.some(m => m.includes("[Tactical] fallback:")))
+})
+
+test("joint planner reports refused protection and executes only the planned shot", () => {
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40 })
+	const messages = [], original = console.log
+	let calls = 0
+	w.me.useChip = () => { calls++; return 0 }
+	try { console.log = m => messages.push(m); planAct(w.me, w.profile, w.context()) }
+	finally { console.log = original }
+	assert.equal(calls, 1)
+	assert.deepEqual(w.events, ["shoot:2"])
+	assert.equal(w.me.tp, 2)
+	assert.ok(messages.some(m => m.includes("[Tactical] execution: chip refused: shield, result 0")))
+	assert.ok(!messages.some(m => m.includes("[Tactical] fallback:")))
+})
+
+test("joint planner scores only the complete validated danger snapshot", () => {
+	const w = world({ mp: 2, tp: 2 }), context = w.context()
+	const native = context.threat.dangerAt.bind(context.threat)
+	let reads = 0
+	context.threat.dangerAt = cell => { reads++; return native(cell) }
+	const result = evaluateTacticalPlans(w.me, w.profile, context)
+	assert.notEqual(result.plan, null)
+	assert.equal(reads, context.reachable.size)
+	assert.deepEqual(w.events, [])
+})
+
+test("EnemyMemory map omitting an unarmed enemy causes explicit unknown-danger fallback", () => {
+	const w = world({ positions: [[3, 0], [4, 0]] })
+	Object.assign(w.enemies[0], { tp: 4, strength: 0, weapon: item("enemy gun", 2, 10),
+		weapons: [], chips: [] })
+	Object.assign(w.enemies[1], { tp: 4, strength: 0, weapon: null, weapons: [], chips: [] })
+	const memory = new EnemyMemory()
+	memory.updateReachable(w.me, [], w.enemies, Fight.turn)
+	memory.updateThreatMap(w.me, w.enemies, Fight.turn)
+	const context = { reachable: memory.getReachable(w.me.id), threat: memory.getThreatMap() }
+	assert.equal(context.threat.enemyCount, 1)
+	assert.equal(evaluateTacticalPlans(w.me, w.profile, context).reason, "stale/inconsistent enemy count")
+	const messages = [], original = console.log
+	try { console.log = m => messages.push(m); planAct(w.me, w.profile, context) }
+	finally { console.log = original }
+	assert.deepEqual(w.events, ["shoot:2", "shoot:2", "shoot:2"])
+	assert.ok(messages.some(m => m.includes("fallback: stale/inconsistent enemy count")))
+	assert.ok(messages.some(m => m.includes("danger unknown")))
 })
 
 test("execution aborts a failed approach and checks final blockers after shooting", () => {
@@ -456,12 +525,15 @@ for (const [role, crossover] of [
 	})
 }
 
-test("operation reserve switches to fallback at the absolute and incremental boundaries", () => {
+for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) test(`${role}: search boundaries retain a complete incumbent where permitted`, () => {
 	for (const [start, max, below, boundary] of [
 		[600, 1000, 699, 700], [1000, 10000, 2499, 2500]
 	]) {
-		for (const [after, shouldPlan] of [[below, true], [boundary, false]]) {
+		const cases = [[below, true], [boundary, true], [boundary + 1, true]]
+		if (max === 1000) cases.push([969, true], [970, false], [971, false])
+		for (const [after, shouldPlan] of cases) {
 			const w = world()
+			w.profile.setRole(role)
 			let operations = start
 			globalThis.System = { get operations() { return operations }, maxOperations: max }
 			const nativeWeaponCells = Fight.weaponCells
@@ -472,8 +544,17 @@ test("operation reserve switches to fallback at the absolute and incremental bou
 			try {
 				const result = w.evaluate()
 				assert.equal(result.plan !== null, shouldPlan)
-				if (!shouldPlan) assert.equal(result.reason, "operations reserve")
+				if (after >= boundary) {
+					assert.equal(result.reason, "operations reserve")
+					if (shouldPlan) assert.match(result.plan.searchStatus, /complete incumbent/)
+				}
 				assert.deepEqual(w.events, [])
+				if (after >= boundary && shouldPlan) {
+					assert.ok(result.plan.usefulDamage > 0)
+					executeTacticalPlan(w.me, result.plan)
+					assert.ok(w.events.some(event => event.startsWith("shoot:")))
+					assert.ok(w.me.tp >= 0 && w.me.mp >= 0)
+				}
 			} finally {
 				Fight.weaponCells = nativeWeaponCells
 				delete globalThis.System
@@ -494,17 +575,22 @@ test("target shields lower useful damage; no reachable attack falls back for leg
 	assert.deepEqual(far.events, [])
 })
 
-test("work bound discards the whole partial search without spending PT or PM", () => {
+test("shared search handles the formerly bounded combination without spending PT or PM during evaluation", () => {
 	const weapons = Array.from({ length: 4 }, (_, i) => item(`gun${i}`, 2, 10 + i, { maxRange: 20 }))
 	const w = world({ tp: 30, mp: 4, gun: weapons[0], weapons,
 		chips: Array.from({ length: 8 }, (_, i) => chip(`chip${i}`, 2, 8 + i, { maxRange: 20 })),
 		positions: [[4, 0], [4, 1], [4, -1], [5, 0]] })
 	const result = w.evaluate()
-	assert.equal(result.plan, null)
-	assert.equal(result.reason, "search bound")
+	assert.ok(result.plan)
+	assert.equal(result.reason, "complete search")
+	assert.ok(result.plan.tpUsed <= w.me.tp)
+	assert.ok(result.plan.beforeMp + result.plan.afterMp <= w.me.mp)
 	assert.deepEqual(w.events, [])
 	assert.equal(w.me.tp, 30)
 	assert.equal(w.me.mp, 4)
+	executeTacticalPlan(w.me, result.plan)
+	assert.ok(w.events.some(event => event.startsWith("chip:") || event.startsWith("shoot:")))
+	assert.ok(w.me.tp >= 0 && w.me.mp >= 0)
 })
 
 test("active turn passes real EnemyMemory maps into the joint planner", async () => {

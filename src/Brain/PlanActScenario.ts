@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 5
+// file version: 7
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { TacticalContext, evaluateTacticalPlans, executeTacticalPlan } from "../Classes/Plannification/TacticalPlanner.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
+import { executeReservePlan } from "../Classes/Plannification/ReservePlan.js"
 
 export function planAct(me: Me, profile = createDefaultProfile(), context?: TacticalContext): void {
 	const target = Fight.getNearestEnemy()
@@ -16,8 +17,11 @@ export function planAct(me: Me, profile = createDefaultProfile(), context?: Tact
 		executeTacticalPlan(me, tactical.plan)
 		return
 	}
-	log(() => `[Plannification] SkipShootOrChip: [Tactical] fallback: ${tactical.reason}; legacy planning`,
+	log(() => `[Plannification] SkipShootOrChip: [Tactical] fallback: ${tactical.reason}; legacy planning entry → bounded reserve`,
 		LOG_CONTEXT.PLANNING)
+	if (executeReservePlan(me, profile, context, tactical.preparation)) return
+	log("[Plannification] Execute: [Tactical] reserve API unavailable; historical compatibility queue only; " +
+		"destinations/danger/legality remain conditional, not a complete tactical plan", LOG_CONTEXT.PLANNING)
 
 	const plan = new Plannification(me, target, profile)
 	plan.chooseWeapon()
