@@ -173,7 +173,7 @@ test("complete refused shot: phase is an attempt, refusal is explicit and not re
 
 test("reserve after operations reserve: full conditional sequence precedes approach, attack and retreat", () => {
 	const w = world()
-	let ops = 350000
+	let ops = 200000
 	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	const native = Fight.weaponCells
 	Fight.weaponCells = (...args) => { ops = 510000; return native(...args) }

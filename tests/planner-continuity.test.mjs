@@ -221,8 +221,9 @@ test("turn 7: fallback reaches 711002/1M but remaining engine budget allows two 
 
 test("main interrupted before its first complete firing candidate: fallback reuses cells/danger, fires twice and retreats", () => {
 	// Aucun tir actuel ni progrès court à danger favorable : le premier fournisseur
-	// dépasse la recherche, mais renvoie bien les cellules de l'arme non équipée.
-	const w = arena({ distance: 8, initialOps: 200000, providerCost: 240 })
+	// dépasse la recherche (plafond relatif 30 % : 613 cases × 480 ≈ 294 000 ops, plus la validation des dangers),
+	// mais renvoie bien les cellules de l'arme non équipée.
+	const w = arena({ distance: 8, initialOps: 200000, providerCost: 480 })
 	w.me.chips = []; w.me.weapons = [w.me.weapons[1]]; w.me.weapon = null
 	try {
 		const t = w.run(), actions = t.trace.filter(e => e.kind === "action")

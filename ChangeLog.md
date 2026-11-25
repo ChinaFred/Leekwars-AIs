@@ -2,6 +2,14 @@
 
 Les changements sont consignés ici sous forme d'entrées concises lors de la préparation d'un commit.
 
+## 2026-11-25 — Client API Garden résilient au 401
+
+- Ré-authentification unique, disjoncteurs, archivage interrompu après 3 refus et reconnexion au principal.
+
+## 2026-11-25 — Plafond de recherche tactique à 30 %
+
+- Le repli du tour 5 du combat 54939649 n'est plus perdu par l'abandon de la recherche (plafond relatif de 15 % à 30 %).
+
 ## 2026-11-25 — Agents allégés et tests consolidés
 
 - Agents Copilot simplifiés, tests de stratégie et de menace regroupés en tableaux de cas.

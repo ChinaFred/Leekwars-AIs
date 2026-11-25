@@ -59,8 +59,8 @@ function world({ obstacles = [], los = () => true, danger = c => c.x === -2 ? 0 
 		getAliveEnemies: () => enemies.filter(e => e.life > 0), getEnemies: () => enemies,
 		weaponCells: (target, weapon) => [...grid.values()].filter(c => hit(c, target, weapon)) }
 	globalThis.Field = { cellFromXY: cell, distance, lineOfSight: los }
-	// La tactique complète abandonne après le fournisseur natif : +15 %, avant toute action.
-	let ops = 350000
+	// La tactique complète abandonne après le fournisseur natif : +31 % (plafond relatif 30 %), avant toute action.
+	let ops = 200000
 	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	const native = Fight.weaponCells
 	Fight.weaponCells = (...args) => { ops = 510000; return native(...args) }
@@ -75,7 +75,7 @@ function world({ obstacles = [], los = () => true, danger = c => c.x === -2 ? 0 
 	initLeekLogging(config)
 	return { me, enemies, events, context, profile, cell,
 		steady() { ops = 510000; Fight.weaponCells = native },
-		resetOps() { ops = 350000 }, setOps(n) { ops = n },
+		resetOps() { ops = 200000 }, setOps(n) { ops = n },
 		run(ctx = context) { planAct(me, profile, ctx) } }
 }
 

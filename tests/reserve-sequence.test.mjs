@@ -10,7 +10,7 @@ import { getLogConfig, initLeekLogging, LogConfig, LOG_CONTEXT } from "../dist/T
 const PREFIX = "[Reserve] plan before execution "
 
 // Grille/BFS, dépenses et compteurs dynamiques. Frais synthétiques, PAS mesures moteur.
-function arena({ distance = 7, life = 70, initialOps = 350000,
+function arena({ distance = 7, life = 70, initialOps = 200000, providerJump = 310000,
 	danger = c => c.x === -2 ? 0 : 100, extras = [] } = {}) {
 	const grid = new Map(), trace = [], stats = { providers: 0, danger: 0 }
 	let ops = initialOps
@@ -84,7 +84,7 @@ function arena({ distance = 7, life = 70, initialOps = 350000,
 		getAliveEnemies: () => enemies.filter(e => e.life > 0),
 		weaponCells(target, weapon) {
 			stats.providers++
-			ops += 160000 // Force l'interruption de la recherche principale, avant dépense.
+			ops += providerJump // Par défaut > plafond relatif 30 % : force l'interruption de la recherche principale, avant dépense.
 			return [...grid.values()].filter(c => hit(c, target, weapon))
 		}
 	}
@@ -151,7 +151,7 @@ test("turn6 fallback: actual sequence, support, final path and PT/MP are decided
 })
 
 for (const life of [50, 25]) test(`contact turn8/9 life${life}: support/cover forecast and actual two shots past70%`, () => {
-	const w = arena({ distance: 1, life, initialOps: 665000,
+	const w = arena({ distance: 1, life, initialOps: 665000, providerJump: 160000,
 		danger: c => c.x <= -2 ? 60.3 : 100 })
 	// Réserve directe : le principal a déjà refusé ; simuler un résultat natif tardif.
 	const r = w.run({ direct: true })
@@ -400,7 +400,7 @@ test("PLANNING disabled produces no previews but executes the same preselected s
 })
 
 for (const enabled of [true, false]) test(`expensive final path completion stops safely with PLANNING=${enabled}`, () => {
-	const w = arena({ initialOps: 200000 })
+	const w = arena({ initialOps: 200000, providerJump: 160000 })
 	const entries = w.context.reachable.entries.bind(w.context.reachable)
 	let scans = 0
 	w.context.reachable.entries = () => {

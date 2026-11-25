@@ -323,7 +323,7 @@ test("bounded search and low operation reserve fall back before any action", () 
 test("provider interruption retains only a complete incumbent when the execution budget permits", () => {
 	for (const { start, max, after, retained } of [
 		{ start: 600, max: 1000, after: 701, retained: true },
-		{ start: 1000, max: 10000, after: 2500, retained: true },
+		{ start: 1000, max: 10000, after: 4000, retained: true },
 		{ start: 600, max: 1000, after: 969, retained: true },
 		{ start: 600, max: 1000, after: 970, retained: false },
 		{ start: 600, max: 1000, after: 971, retained: false }
@@ -527,7 +527,7 @@ for (const [role, crossover] of [
 
 for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) test(`${role}: search boundaries retain a complete incumbent where permitted`, () => {
 	for (const [start, max, below, boundary] of [
-		[600, 1000, 699, 700], [1000, 10000, 2499, 2500]
+		[600, 1000, 699, 700], [1000, 10000, 3999, 4000]
 	]) {
 		const cases = [[below, true], [boundary, true], [boundary + 1, true]]
 		if (max === 1000) cases.push([969, true], [970, false], [971, false])

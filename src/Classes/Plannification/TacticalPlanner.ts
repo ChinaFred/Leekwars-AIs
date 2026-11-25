@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -60,6 +60,15 @@ export const TACTICAL_LIMITS = {
 	cells: 85, enemies: 4, weapons: 4, attackChips: 8, protectionChips: 3, tp: 30, work: 100000
 } as const
 
+/**
+ * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (300 000 sur 1 000 000) :
+ * combat 54939649, tours 4 et 5, la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147
+ * alors que le planificateur complet choisissait une case sûre. Aucun coût réel mesuré : politique, pas borne moteur.
+ */
+const SEARCH_FRACTION = 0.30
+/** Part du total au-delà de laquelle aucune recherche ne démarre ni ne continue (inchangée). */
+const GLOBAL_FRACTION = 0.70
+
 class Budget {
 	private work = 0
 	private readonly start = typeof System === "undefined" ? 0 : System.operations
@@ -75,8 +84,8 @@ class Budget {
 	check(): void {
 		if (typeof System !== "undefined" &&
 			Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
-			(System.operations >= System.maxOperations * 0.70 ||
-				System.operations - this.start >= System.maxOperations * 0.15)) {
+			(System.operations >= System.maxOperations * GLOBAL_FRACTION ||
+				System.operations - this.start >= System.maxOperations * SEARCH_FRACTION)) {
 			throw new Unavailable("operations reserve")
 		}
 	}
