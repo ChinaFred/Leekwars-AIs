@@ -10,7 +10,7 @@ globalThis.Fight = { turn: 1 }
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { LAUNCH_TYPE, isCellInLaunchPattern } = await import("../dist/Classes/Context/LaunchPattern.js")
 const { meanDamage, planShots, toCandidate, sortByRatio } = await import("../dist/Classes/Context/ShotPlan.js")
-const { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS } = await import("../dist/Classes/Context/ThreatMap.js")
+const { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS, MAX_THREAT_WEAPONS } = await import("../dist/Classes/Context/ThreatMap.js")
 const { EnemyMemory } = await import("../dist/Classes/Context/EnemyMemory.js")
 
 // --- mocks -----------------------------------------------------------------
@@ -77,12 +77,12 @@ function setupMe(grid, at = [5, 10], mp = 0) {
 }
 
 /** Entrée de `buildThreatMap` pour un ennemi posé sur la grille (cases de tir calculées en ignorant `me`). */
-function addEnemy(grid, me, id, at, { mp = 0, tp = 10, strength = 0, weaponItem = null, chips = [] } = {}) {
+function addEnemy(grid, me, id, at, { mp = 0, tp = 10, strength = 0, weaponItem = null, otherWeapons = [], chips = [] } = {}) {
 	const entity = grid.place(makeEntity(id, mp, { tp, strength, weapon: weaponItem }), at[0], at[1])
 	return {
 		entity,
 		input: {
-			id, name: entity.name, strength, tp, weapon: weaponItem, chips,
+			id, name: entity.name, strength, tp, weapon: weaponItem, otherWeapons, chips,
 			reachable: computeReachableCells(entity, mp, 1, { ignoreEntityId: me.id })
 		}
 	}
@@ -631,13 +631,90 @@ test("EnemyMemory.updateThreatMap: ready offensive chips are used, chips in cool
 	assert.deepEqual(scenario.memory.getThreatMap().breakdownAt(scenario.me.cell)[0].chips, [])
 })
 
-test("EnemyMemory.updateThreatMap: only the EQUIPPED weapon counts", () => {
+test("EnemyMemory.updateThreatMap: the other known weapons count, at 1 TP for the swap", () => {
 	const equipped = weapon({ id: 53, cost: 3, min: 10, max: 10 })
 	const other = weapon({ id: 54, cost: 2, min: 100, max: 100 })
 	const scenario = memoryScenario({ enemyWeapon: equipped, enemyWeapons: [equipped, other] })
 	assert.deepEqual(scenario.memory.knownWeapons(2), [equipped, other])
 	run(scenario)
+	// 10 PT − 1 (changement) = 9 PT : 4 tirs de 100 avec l'arme à 2 PT.
+	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 400)
+	assert.equal(scenario.memory.getThreatMap().breakdownAt(scenario.me.cell)[0].swapTp, 1)
+})
+
+test("EnemyMemory.updateThreatMap: an enemy with no equipped weapon is armed by its other known weapons", () => {
+	const other = weapon({ id: 56, cost: 3, min: 10, max: 10 })
+	const scenario = memoryScenario({ enemyWeapon: null, enemyWeapons: [other] })
+	const update = run(scenario)
+	assert.equal(update.enemies, 1)
 	assert.equal(scenario.memory.getThreatMap().dangerAt(scenario.me.cell), 30)
+})
+
+test("a swapped weapon pays the TP of the swap: fewer shots than the same weapon already equipped", () => {
+	const grid = makeGrid(21, 21)
+	const equipped = weapon({ id: 60, cost: 3, min: 1, max: 1 })
+	const other = weapon({ id: 61, cost: 5, min: 50, max: 50 })
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const swap = addEnemy(grid, me, 2, [7, 10], { weaponItem: equipped, otherWeapons: [other] })
+	const swapMap = buildThreatMap(me, myReach, [swap.input], 1)
+	assert.equal(swapMap.dangerAt(me.cell), 50) // 9 PT → 1 tir (5 PT) ; l'arme équipée ferait 3
+	const ready = addEnemy(makeGrid(21, 21), me, 2, [7, 10], { weaponItem: other })
+	assert.equal(buildThreatMap(me, myReach, [ready.input], 1).dangerAt(me.cell), 100) // 10 PT → 2 tirs
+})
+
+test("a weapon the enemy cannot afford after the swap, or that cannot reach me, adds nothing", () => {
+	const equipped = weapon({ id: 62, cost: 3, min: 10, max: 10 })
+	const tooCostly = weapon({ id: 63, cost: 5, min: 500, max: 500 })
+	const tooShort = weapon({ id: 64, cost: 2, min: 500, max: 500, maxRange: 2 })
+	const { me, myReach } = setupMe(makeGrid(21, 21), [10, 10])
+	const grid = makeGrid(21, 21)
+	const place = addEnemy(grid, me, 2, [7, 10], { tp: 5, weaponItem: equipped, otherWeapons: [tooCostly, tooShort] })
+	assert.equal(buildThreatMap(me, myReach, [place.input], 1).dangerAt(me.cell), 10) // 5 PT : 1 tir, ni 5+1 PT ni portée 2 (distance 3)
+})
+
+test("the equipped weapon listed again in otherWeapons is never counted twice nor charged the swap", () => {
+	const equipped = weapon({ id: 70, cost: 3, min: 10, max: 10 })
+	const twin = { ...equipped } // même id, autre objet
+	const { breakdown } = dangerOf(makeGrid(21, 21), { tp: 9, weaponItem: equipped, otherWeapons: [equipped, twin] })
+	assert.equal(breakdown.length, 1)
+	assert.equal(breakdown[0].damage, 30) // 9 PT / 3 = 3 tirs, sans PT de changement
+	assert.equal(breakdown[0].swapTp, 0)
+})
+
+test("a non-integer enemy TP is floored before the swap affordability check", () => {
+	const equipped = weapon({ id: 71, cost: 3, min: 10, max: 10 })
+	const other = weapon({ id: 72, cost: 5, min: 500, max: 500 })
+	// 5,9 PT -> 5 : coût 5 + changement 1 = 6 > 5 : l'arme à changer est écartée.
+	assert.equal(dangerOf(makeGrid(21, 21), { tp: 5.9, weaponItem: equipped, otherWeapons: [other] }).breakdown[0].damage, 10)
+	// 6,5 PT -> 6 : 5 + 1 = 6 : un tir de 500.
+	const ok = dangerOf(makeGrid(21, 21), { tp: 6.5, weaponItem: equipped, otherWeapons: [other] }).breakdown[0]
+	assert.equal(ok.damage, 500)
+	assert.equal(ok.swapTp, 1)
+})
+
+test("at most MAX_THREAT_WEAPONS weapons are examined, the equipped one first", () => {
+	const equipped = weapon({ id: 80, cost: 3, min: 1, max: 1 })
+	const fillers = [81, 82, 83].map((id) => weapon({ id, cost: 3, min: 2, max: 2 }))
+	const fifth = weapon({ id: 84, cost: 3, min: 900, max: 900 })
+	assert.equal(MAX_THREAT_WEAPONS, 4)
+	const capped = dangerOf(makeGrid(21, 21), { tp: 4, weaponItem: equipped, otherWeapons: [...fillers, fifth] })
+	assert.equal(capped.breakdown[0].damage, 2) // la 5e arme (900) n'est pas examinée
+	const within = dangerOf(makeGrid(21, 21), { tp: 4, weaponItem: equipped, otherWeapons: [fillers[0], fifth] })
+	assert.equal(within.breakdown[0].damage, 900)
+})
+
+test("several enemies: the swap only applies to the enemy that changes weapon, dangers add up", () => {
+	const grid = makeGrid(21, 21)
+	const { me, myReach } = setupMe(grid, [10, 10])
+	const gun = weapon({ id: 90, cost: 3, min: 10, max: 10 })
+	const big = weapon({ id: 91, cost: 4, min: 100, max: 100 })
+	const a = addEnemy(grid, me, 2, [7, 10], { tp: 8, weaponItem: gun, otherWeapons: [big] })
+	const b = addEnemy(grid, me, 3, [13, 10], { tp: 8, weaponItem: gun })
+	const map = buildThreatMap(me, myReach, [a.input, b.input], 1)
+	// A : (8 − 1) / 4 = 1 tir de 100 ; B : 2 tirs de 10.
+	assert.equal(map.dangerAt(me.cell), 120)
+	assert.deepEqual(map.breakdownAt(me.cell).map((entry) => entry.swapTp), [1, 0])
+	assert.equal(map.enemyCount, 2)
 })
 
 test("EnemyMemory.updateThreatMap: null (and map cleared) without my reachable cells of this turn", () => {

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
@@ -202,6 +202,31 @@ function shieldCredit(protection: Protection, danger: number): number {
 	return Math.min(danger, protection.absolute + danger * protection.relative / 100)
 }
 
+/**
+ * Marge sur les dégâts moyens pour compter un meurtre : les dégâts varient (min–max), aucune garantie.
+ * Seul le dernier ennemi vivant, tué, annule le danger du plan.
+ */
+export const KILL_MARGIN = 1.1
+
+/** Pénalité d'un plan dont le danger prévu atteint mes PV (soin compris) : la survie passe avant les dégâts. */
+export const LETHAL_PENALTY = 1000
+
+/**
+ * Coût de risque d'un plan, en points de score : `weight` × danger après protection, plus `LETHAL_PENALTY` et
+ * le dépassement si ce danger atteint mes PV (vie + soin prévu). Nul si le plan tue le dernier ennemi.
+ * Estimation du modèle, pas une garantie de survie (critiques, buffs recastés et armes inconnues non prévus).
+ */
+function riskCost(me: Me, weight: number, protection: Protection, danger: number, kills: boolean): number {
+	if (kills) return 0
+	const exposed = danger - shieldCredit(protection, danger)
+	const life = me.life + protection.heal
+	return weight * exposed + (exposed >= life ? LETHAL_PENALTY + exposed - life : 0)
+}
+
+function killsLastEnemy(damage: number, target: Entity, enemyCount: number): boolean {
+	return enemyCount === 1 && damage >= target.life * KILL_MARGIN
+}
+
 function better(candidate: TacticalPlan, best: TacticalPlan | null): boolean {
 	return best === null || candidate.score > best.score ||
 		(candidate.score === best.score && (candidate.danger < best.danger ||
@@ -308,14 +333,14 @@ function evaluate(
 	if (enemies.length && (hasAffordableWeapon || attackChips.length === 0)) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
-		const stay = -weight * dangers.get(key(me.cell))!
+		const stay = -riskCost(me, weight, support[0]!, dangers.get(key(me.cell))!, false)
 		for (const protection of support) for (const entry of reachable.entries()) {
 			budget.tick()
 			if (entry.cost > 1) continue
 			const progress = distance(me.cell) - distance(entry.cell)
 			if (!profile.allowHiding && entry.cost > 0 && progress <= 0) continue
 			const danger = dangers.get(key(entry.cell))!
-			const score = progress - weight * (danger - shieldCredit(protection, danger)) + weight * protection.heal
+			const score = progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
 			if (score <= stay || (entry.cost === 0 && protection.chips.length === 0)) continue
 			const candidate: TacticalPlan = {
 				target, shotCell: me.cell, destination: entry.cell, beforeMp: 0, afterMp: entry.cost,
@@ -378,7 +403,8 @@ function evaluate(
 				target, shotCell: shot.cell, destination: ending.cell, beforeMp: shot.cost, afterMp: ending.cost,
 				weapon, weaponShots: attack.weaponShots, chips: [], protection: protection.chips,
 				tpUsed: cost + equip + protection.cost, usefulDamage, danger,
-				score: usefulDamage - weight * (danger - shieldCredit(protection, danger)) + weight * protection.heal
+				score: usefulDamage - riskCost(me, weight, protection, danger, killsLastEnemy(attack.damage, target, enemies.length)) +
+					weight * protection.heal
 			}
 			if (better(candidate, budget.incumbent)) budget.incumbent = candidate
 		}
@@ -471,7 +497,7 @@ function evaluate(
 				target, shotCell: me.cell, destination: ending.cell, beforeMp: 0, afterMp: ending.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips,
 				tpUsed: protection.cost, usefulDamage: 0, danger, progress,
-				score: progress - weight * (danger - shieldCredit(protection, danger)) + weight * protection.heal
+				score: progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
 			}
 			if (better(candidate, progressPlan)) {
 				progressPlan = candidate
@@ -522,7 +548,6 @@ function evaluate(
 		const ending = endingFor(shot)
 		const finalDanger = dangers.get(key(ending.cell))!
 		for (const protection of support) {
-			const penalizedDanger = finalDanger - shieldCredit(protection, finalDanger)
 			for (const option of offense) {
 				const available = me.tp - protection.cost - option.equipCost
 				budget.tick()
@@ -539,7 +564,8 @@ function evaluate(
 					weapon: attack.weaponShots > 0 ? option.weapon : null,
 					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
 					tpUsed: cost + protection.cost + option.equipCost, usefulDamage, danger: finalDanger,
-					score: usefulDamage - weight * penalizedDanger + weight * protection.heal
+					score: usefulDamage - riskCost(me, weight, protection, finalDanger,
+						killsLastEnemy(attack.damage, option.target, enemies.length)) + weight * protection.heal
 				}
 				if (better(candidate, best)) {
 					best = candidate

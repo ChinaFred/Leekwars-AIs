@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -211,7 +211,8 @@ export class EnemyMemory {
 	 *
 	 * Par ennemi vivant : force = `entity.strength` actuelle (hypothèse non vérifiée : elle inclut déjà les
 	 * buffs en cours) ; PT = max(`maxTpSeen`, `entity.tp`) (hypothèse : `entity.tp` pendant mon tour peut être
-	 * ses PT restants, le maximum observé estime ses PT au prochain tour) ; arme = arme ÉQUIPÉE seulement ;
+	 * ses PT restants, le maximum observé estime ses PT au prochain tour) ; armes = l'ÉQUIPÉE (sans coût) et
+	 * les autres armes connues à dégâts (1 PT de changement, une seule arme par plan) ;
 	 * puces = connues, offensives et prêtes (`isChipReady`) ; cases de tir = cases atteignables avec ses PM
 	 * (`maxMpSeen`) EN IGNORANT mon entité, recalculées ici (un parcours en largeur de plus par ennemi
 	 * offensif, ≤ ~4 × 500 appels à `Field.cellFromXY`, non stocké). Un ennemi sans item offensif
@@ -233,8 +234,10 @@ export class EnemyMemory {
 			seen.add(enemy.id)
 			const profile = this.identify(enemy, turn)
 			const weapon = enemy.weapon ?? null
+			const otherWeapons = profile.knownWeapons.filter((known) =>
+				hasDamage(known) && known.id !== weapon?.id)
 			const chips = profile.knownChips.filter((chip) => hasDamage(chip) && profile.isChipReady(chip))
-			if ((weapon === null || !hasDamage(weapon)) && chips.length === 0) {
+			if ((weapon === null || !hasDamage(weapon)) && otherWeapons.length === 0 && chips.length === 0) {
 				continue
 			}
 			inputs.push({
@@ -243,6 +246,7 @@ export class EnemyMemory {
 				strength: enemy.strength ?? 0,
 				tp: Math.max(profile.maxTpSeen, enemy.tp ?? 0),
 				weapon,
+				otherWeapons,
 				chips,
 				reachable: computeReachableCells(enemy, profile.maxMpSeen, turn, { ignoreEntityId: me.id })
 			})

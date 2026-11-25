@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { isCellInLaunchPattern } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
 import {
@@ -84,13 +84,24 @@ export interface ThreatEnemy {
 	readonly strength: number
 	/** PT disponibles pour son prochain tour (hypothèse : maximum de `entity.tp` observé). */
 	readonly tp: number
-	/** Arme ÉQUIPÉE (seule arme considérée). */
+	/** Arme ÉQUIPÉE : utilisable sans PT de changement. */
 	readonly weapon: Weapon | null
+	/**
+	 * Autres armes connues : chacune exige un changement d'arme (`WEAPON_SWAP_TP` PT) avant son premier tir.
+	 * Absent = aucune. L'arme équipée peut y figurer : elle est ignorée.
+	 */
+	readonly otherWeapons?: readonly Weapon[]
 	/** Puces connues et PRÊTES (cooldown déjà filtré par l'appelant) ; seules celles avec dégâts comptent. */
 	readonly chips: readonly Chip[]
 	/** Cases atteignables par l'ennemi EN IGNORANT mon entité comme obstacle. */
 	readonly reachable: ReachableCells
 }
+
+/** Coût en PT d'un changement d'arme (règle du jeu : `setWeapon` coûte 1 PT). */
+export const WEAPON_SWAP_TP = 1
+
+/** Armes examinées par ennemi (équipée comprise) : borne le coût de la carte. */
+export const MAX_THREAT_WEAPONS = 4
 
 /** Meilleur plan d'un ennemi contre une case X (détail conservé pour chaque ennemi). */
 export interface EnemyThreat {
@@ -104,6 +115,8 @@ export interface EnemyThreat {
 	readonly weapon: Weapon | null
 	readonly weaponShots: number
 	readonly chips: readonly Chip[]
+	/** PT de changement d'arme payés par le plan (0 : arme équipée ou aucune arme). */
+	readonly swapTp: number
 }
 
 /** Une case que je peux atteindre, avec son danger. */
@@ -233,20 +246,64 @@ export class ThreatMap {
 	}
 }
 
+/** Arme d'un ennemi prête à être évaluée, avec les PT de changement qu'elle exige (0 si équipée). */
+interface PreparedWeapon {
+	readonly candidate: ShotCandidate
+	readonly swapTp: number
+}
+
 /** Préparation d'un ennemi : items offensifs triés, calculée une fois par carte. */
 interface PreparedEnemy {
 	readonly enemy: ThreatEnemy
-	readonly weapon: ShotCandidate | null
+	readonly weapons: readonly PreparedWeapon[]
 	readonly chips: readonly ShotCandidate[]
 	readonly shotCells: readonly Cell[]
 }
 
+/** Dégâts d'une arme seule dans le budget de PT (changement d'arme déduit). */
+function weaponOnlyDamage(entry: PreparedWeapon, tp: number): number {
+	const shots = Math.min(Math.floor((tp - entry.swapTp) / entry.candidate.cost), entry.candidate.uses)
+	return shots > 0 ? shots * entry.candidate.damage : 0
+}
+
+/**
+ * `a` rend `b` inutile : portées incluses, même motif, pas plus exigeante en ligne de vue, et au moins autant
+ * de dégâts seule. Évite des appels `canHit` pour une arme qui ne peut jamais faire mieux.
+ */
+function dominates(a: PreparedWeapon, b: PreparedWeapon, tp: number): boolean {
+	const x = a.candidate.item as Weapon
+	const y = b.candidate.item as Weapon
+	return x.minRange <= y.minRange && x.maxRange >= y.maxRange &&
+		x.launchType === y.launchType && (!x.needsLos || y.needsLos) &&
+		weaponOnlyDamage(a, tp) >= weaponOnlyDamage(b, tp)
+}
+
 function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
-	let weapon = enemy.weapon === null ? null : toCandidate(enemy.weapon, false, enemy.strength)
-	if (weapon !== null && weapon.cost > tp) {
-		weapon = null
+	const found: PreparedWeapon[] = []
+	if (enemy.weapon !== null) {
+		const candidate = toCandidate(enemy.weapon, false, enemy.strength)
+		if (candidate !== null && candidate.cost <= tp) {
+			found.push({ candidate, swapTp: 0 })
+		}
 	}
+	for (const other of enemy.otherWeapons ?? []) {
+		if (found.length >= MAX_THREAT_WEAPONS) {
+			break
+		}
+		if (other === enemy.weapon || (enemy.weapon !== null && other.id === enemy.weapon.id)) {
+			continue
+		}
+		const candidate = toCandidate(other, false, enemy.strength)
+		if (candidate !== null && candidate.cost + WEAPON_SWAP_TP <= tp &&
+			!found.some((entry) => entry.candidate.item.id === other.id)) {
+			found.push({ candidate, swapTp: WEAPON_SWAP_TP })
+		}
+	}
+	const weapons = found.filter((entry) => !found.some((rival) =>
+		rival !== entry && dominates(rival, entry, tp) &&
+		// À égalité mutuelle, seule la première (l'équipée si elle y est) est conservée.
+		(!dominates(entry, rival, tp) || found.indexOf(rival) < found.indexOf(entry))))
 	const chips: ShotCandidate[] = []
 	for (const chip of enemy.chips) {
 		const candidate = toCandidate(chip, true, enemy.strength)
@@ -254,21 +311,22 @@ function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 			chips.push(candidate)
 		}
 	}
-	if (weapon === null && chips.length === 0) {
+	if (weapons.length === 0 && chips.length === 0) {
 		return null
 	}
 	const shotCells: Cell[] = []
 	for (const reachable of enemy.reachable.entries()) {
 		shotCells.push(reachable.cell)
 	}
-	return { enemy, weapon, chips: sortByRatio(chips), shotCells }
+	return { enemy, weapons, chips: sortByRatio(chips), shotCells }
 }
 
 /**
- * Meilleur plan de l'ennemi contre la case `target` : MAX sur ses cases de tir S (pas de somme entre cases).
- * Hypothèse « se déplace puis tire tout » : un plan = une case S, pas de tir-déplacement-tir. L'ennemi ne
- * peut pas se tenir sur la case X (je l'occupe si j'y vais). Consomme `budget.pairs` ; retourne null si le
- * garde-fou est atteint (calcul de la case abandonné).
+ * Meilleur plan de l'ennemi contre la case `target` : MAX sur ses cases de tir S (pas de somme entre cases)
+ * et sur ses armes (une seule arme par plan ; hors équipée, elle coûte `WEAPON_SWAP_TP` PT). Hypothèse « se
+ * déplace puis tire tout » : un plan = une case S, pas de tir-déplacement-tir. L'ennemi ne peut pas se tenir
+ * sur la case X (je l'occupe si j'y vais). Consomme `budget.pairs` ; retourne null si le garde-fou est
+ * atteint (calcul de la case abandonné).
  */
 function bestThreat(
 	prepared: PreparedEnemy,
@@ -276,8 +334,9 @@ function bestThreat(
 	provider: ShotCellsProvider,
 	budget: { pairs: number, max: number }
 ): EnemyThreat | null | "aborted" {
-	const { enemy, weapon, chips } = prepared
+	const { enemy, weapons, chips } = prepared
 	let best: ShotPlan = EMPTY_PLAN
+	let bestSwap = 0
 	let bestCell: Cell | null = null
 	for (const from of prepared.shotCells) {
 		if (budget.pairs >= budget.max) {
@@ -287,20 +346,28 @@ function bestThreat(
 		if (from.x === target.x && from.y === target.y) {
 			continue
 		}
-		const weaponOk = weapon !== null && provider.canHit(from, target, weapon.item)
+		const hitting = weapons.filter((entry) => provider.canHit(from, target, entry.candidate.item))
 		const usable: ShotCandidate[] = []
 		for (const chip of chips) {
 			if (provider.canHit(from, target, chip.item)) {
 				usable.push(chip)
 			}
 		}
-		if (!weaponOk && usable.length === 0) {
+		if (hitting.length === 0 && usable.length === 0) {
 			continue
 		}
-		const plan = planShots(enemy.tp, weaponOk ? weapon : null, usable)
-		if (plan.damage > best.damage) {
-			best = plan
-			bestCell = from
+		const options = hitting.length === 0
+			? [{ plan: planShots(enemy.tp, null, usable), swapTp: 0 }]
+			: hitting.map((entry) => ({
+				plan: planShots(enemy.tp - entry.swapTp, entry.candidate, usable),
+				swapTp: entry.swapTp
+			}))
+		for (const option of options) {
+			if (option.plan.damage > best.damage) {
+				best = option.plan
+				bestSwap = option.swapTp
+				bestCell = from
+			}
 		}
 	}
 	if (bestCell === null) {
@@ -313,7 +380,8 @@ function bestThreat(
 		shotCell: bestCell,
 		weapon: best.weapon,
 		weaponShots: best.weaponShots,
-		chips: best.chips
+		chips: best.chips,
+		swapTp: best.weapon === null ? 0 : bestSwap
 	}
 }
 

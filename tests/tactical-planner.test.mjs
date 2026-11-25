@@ -605,3 +605,66 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 	turn()
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
+
+test("killing the last enemy cancels its danger: finish it rather than shield and leave it alive", () => {
+	const w = world({ tp: 8, mp: 0, gun: item("gun", 4, 60), chips: [shield(2, 160)], danger: () => 200 })
+	const { plan } = w.evaluate()
+	assert.equal(plan.weaponShots, 2) // 120 dégâts moyens ≥ 100 PV × marge 1,1
+	assert.equal(plan.protection.length, 0)
+	assert.equal(plan.usefulDamage, 100)
+	assert.equal(plan.danger, 200) // danger brut conservé dans le plan
+})
+
+test("killing one of two enemies does not waive the danger", () => {
+	const w = world({ tp: 8, mp: 0, gun: item("gun", 4, 60), chips: [shield(2, 160)],
+		positions: [[3, 0], [3, 1]], danger: () => 200 })
+	const { plan } = w.evaluate()
+	assert.equal(plan.protection.length, 1)
+	assert.equal(plan.weaponShots, 1)
+})
+
+test("a kill needs a margin over the mean damage", () => {
+	const w = world({ tp: 8, mp: 0, gun: item("gun", 4, 52), chips: [shield(2, 160)], danger: () => 200 })
+	const { plan } = w.evaluate() // 104 < 100 × 1,1 : pas de meurtre crédité
+	assert.equal(plan.protection.length, 1)
+})
+
+test("a plan whose danger reaches my life loses to a survivable one, even with less damage", () => {
+	const w = world({ tp: 6, mp: 0, gun: item("gun", 2, 30), chips: [shield(2, 25)], danger: () => 120 })
+	const { plan } = w.evaluate()
+	// 3 tirs (90) à danger 120 ≥ 100 PV : létal ; bouclier + 2 tirs (60) à danger 95 : on survit.
+	assert.equal(plan.protection.length, 1)
+	assert.equal(plan.weaponShots, 2)
+})
+
+test("a plan is lethal only once the planned heal no longer covers the danger", () => {
+	const w = world({ tp: 6, mp: 0, gun: item("gun", 2, 30), life: 40,
+		chips: [chip("cure", 2, 0, { minRange: 0, features: [{ type: Effect.HEAL, minValue: 60, maxValue: 60 }] })],
+		danger: () => 80 })
+	const { plan } = w.evaluate()
+	// (voir aussi le test de seuil ci-dessous : le soin doit compter dans la létalité, pas seulement dans le score)
+	// Sans soin : 80 ≥ 40 PV. Avec le soin : 100 PV > 80, on joue le soin même si cela coûte un tir.
+	assert.equal(plan.protection.length, 1)
+})
+
+test("lethality threshold: danger == my life is lethal, one point less is not (shield costs a shot)", () => {
+	const setup = (danger) => world({ tp: 6, mp: 0, gun: item("gun", 2, 30), chips: [shield(2, 25)], danger: () => danger })
+	// 3 tirs (90) sans bouclier ; bouclier + 2 tirs (60), danger réduit de 25.
+	let { plan } = setup(100).evaluate() // 100 ≥ 100 PV : létal sans bouclier (90 − 100 − 1000) ; bouclier : 60 − 75
+	assert.equal(plan.protection.length, 1)
+	assert.equal(plan.weaponShots, 2)
+	;({ plan } = setup(99).evaluate()) // 99 < 100 PV : non létal, 90 − 99 = −9 bat 60 − 74 = −14
+	assert.equal(plan.protection.length, 0)
+	assert.equal(plan.weaponShots, 3)
+})
+
+test("the planned heal counts in the lethality threshold, not only in the score", () => {
+	// PV 50, soin 20 (70 PV), danger 60, tir 30/2 PT, soin 2 PT. Sans soin : létal (60 ≥ 50), 3 tirs.
+	// Avec soin : 60 < 70, non létal. Sans la pénalité létale, 3 tirs (90 − 60 = 30) battrait le soin (60 − 60 + 20 = 20).
+	const w = world({ tp: 6, mp: 0, gun: item("gun", 2, 30), life: 50,
+		chips: [chip("cure", 2, 0, { minRange: 0, features: [{ type: Effect.HEAL, minValue: 20, maxValue: 20 }] })],
+		danger: () => 60 })
+	const { plan } = w.evaluate()
+	assert.equal(plan.protection.length, 1)
+	assert.equal(plan.weaponShots, 2)
+})
