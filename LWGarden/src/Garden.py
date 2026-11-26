@@ -1,6 +1,7 @@
 import os, json, hashlib, sys
 import FightArchive
 import FightSummary
+import ReleaseFile
 from LWApi import LWApi
 from shutil import rmtree
 
@@ -134,6 +135,7 @@ def push_unattended(api=None, environ=None, config=None):
         print("PUSH failed: {0}".format(error))
         return 1
     record_publication(config, login, summary)
+    ReleaseFile.publish(api, config["AIs_folder"], login, environ)
     return 0
 
 
@@ -349,6 +351,7 @@ def main():
                     print("PUSH failed: {0}".format(error))
                 else:
                     record_publication(config, farmer["login"], summary)
+                    ReleaseFile.publish(api, config["AIs_folder"], farmer["login"])
             else:
                 print("PUSH cancelled.")
         elif selection == '6':
@@ -358,7 +361,9 @@ def main():
                 push_secondaries_then_reconnect(
                     api, principal, api_key, secondaries, config["AIs_folder"],
                     confirm_remote_deletions,
-                    on_published=lambda login, summary: record_publication(config, login, summary)
+                    on_published=lambda login, summary: (
+                        record_publication(config, login, summary),
+                        ReleaseFile.publish(api, config["AIs_folder"], login))
                 )
             else:
                 print("PUSH cancelled.")
@@ -417,6 +422,8 @@ def get_all_ais(api, root_folder: str):
 
     for ai in ai_tree["files"]:
         path = normalize_ai_path(ai["path"])
+        if path == ReleaseFile.RELEASE_FILE:
+            continue  # generated at each PUSH, never a source
         extension = os.path.splitext(path)[1].lower()
         local_path = path if extension in SUPPORTED_AI_SOURCE_EXTENSIONS else path + ".leek"
         destination = local_path_for_ai(root_folder, local_path)
@@ -490,7 +497,8 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
     remote_tree = read_remote_tree(api)
     existing_folders = {normalize_ai_path(path) for path in remote_tree["folders"]}
     existing_files = {normalize_ai_path(ai["path"]) for ai in remote_tree["files"]}
-    remote_only_files = sorted(existing_files - local_file_path_set)
+    remote_only_files = sorted(
+        existing_files - local_file_path_set - {ReleaseFile.RELEASE_FILE})
     remote_only_folders = sorted(
         existing_folders - local_folder_paths,
         key=lambda path: (path.count("/"), path),

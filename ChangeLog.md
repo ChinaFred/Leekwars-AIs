@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Version déployée lisible sur le site : chaque PUSH Garden écrit `DEPLOYED.ts` à la racine des IA (commit, branche, tag, résumé de la release).
 - 2026-11-26 — Archive des combats depuis GitHub : `Garden.py archive` enchaîne archive, export et résumé sans menu ; un workflow manuel committe `LWGarden/Data/`.
 - 2026-11-26 — Déploiement par tag : `Garden.py push` sans menu ni suppression distante, lancé par GitHub Actions sur un tag `leek-*` après les tests.
 - 2026-11-26 — Aide au dev : agents développeur, testeur, stratège, 4 skills et hooks Claude, agents Copilot générés, docs allégées, combats archivés suivis dans Git avec `resume.md`.

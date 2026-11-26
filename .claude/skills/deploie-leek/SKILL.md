@@ -34,6 +34,9 @@ lance le même workflow à la main (Actions > « Déploiement Leek Wars » > Run
 
 - Suis l'exécution du workflow et rapporte son résultat réel. Codes de sortie de `Garden.py push` : 1 échec du
   déploiement, 2 clé `LEEKWARS_API_KEY` absente ou refusée, 3 sources différentes du dernier commit.
+- Le workflow écrit aussi `DEPLOYED.ts` à la racine des IA sur Leek Wars (commit, branche, tag, résumé) :
+  c'est la référence pour savoir ce qui est déployé. Un avertissement « release file not updated » dans le
+  journal signifie que ce fichier n'est pas à jour : signale-le.
 - Un déploiement réussi ajoute un commit `chore(data): publication ...` sur la branche par défaut : fais un
   `git pull` avant de continuer à travailler.
 - Pour revenir en arrière : pose un tag `leek-*` sur le commit précédent.
