@@ -1,29 +1,70 @@
-# Instructions du dépôt Leek Wars
+<!-- Généré par `npm run agents:sync` depuis `CLAUDE.md` : ne pas modifier à la main. -->
 
-## Pas de fichiers de rapport (règle valable pour tous les agents)
+# Dépôt Leek Wars — IA Kassbi
 
-- Réponds dans la conversation : diagnostics, plans, audits, synthèses, résultats de tests, comptes rendus de validation, guides de déploiement. Ne les écris pas dans des fichiers.
-- Ne crée aucun fichier `.md` ou `.txt` de notes, rapport, résumé, audit, index, statut, « sign-off », guide ou journal de commandes (par ex. `*_REPORT`, `*_SUMMARY`, `FINAL_*`, `VALIDATION_*`, `00_READ_ME_FIRST`).
-- Ne redirige pas la sortie de commandes (`>`, `Tee-Object`, `Out-File`, `--output`) vers le dépôt (ex. `test-output.txt`, `test-results.txt`). Lis la sortie du terminal ; si un fichier temporaire est indispensable, place-le hors du dépôt et supprime-le.
-- Exception : l'utilisateur demande explicitement un fichier persistant. Dans ce cas, modifie d'abord un document existant ; sinon crée un seul fichier court sous `docs/` (jamais à la racine), sans dupliquer une analyse existante.
-- À la racine, seuls `README.md` et `ChangeLog.md` sont des documents. `ChangeLog.md` reçoit une entrée très succincte uniquement lors d'un commit explicitement demandé ; il reste référencé dans `README.md` et `LWGarden/README.md` (pas de copie sous `LWGarden/`).
-- Un agent qui en délègue un autre (y compris `explore`, `task`, `general-purpose`) recopie cette règle dans le prompt de délégation.
+IA de combat en TypeScript (`src/`), déployée et archivée par LWGarden (`LWGarden/`, Python).
+Vue d'ensemble : `README.md`. Stratégie en vigueur : `docs/strategies.md`. Versions : `ChangeLog.md`.
+
+## Qui fait quoi
+
+Choisis le plus petit circuit qui couvre la demande.
+
+| Besoin | Agent | Skill |
+|---|---|---|
+| Écrire ou corriger le code, réduire le coût en opérations | `developpeur` | `profil-ops` |
+| Valider un changement avant commit ou PUSH | `testeur` | `test-minimal` |
+| Comprendre pourquoi on perd, proposer des alternatives | `stratege` | `analyse-combats` |
+| Mettre à jour README, stratégie ou ChangeLog | celui qui fait le changement | `doc-light` |
+
+- Changement de code : `developpeur`, puis `testeur`. Le `stratege` n'intervient que si la décision tactique est en jeu.
+- Le `stratege` ne modifie rien : il remet un brief (3 failles au plus) que le `developpeur` implémente.
+- Ne présente jamais une validation non exécutée comme réussie, ni une hypothèse comme un fait.
+
+## Commandes
+
+- `npm test` : build puis toute la suite. `npm run test:only -- tests/x.test.mjs` : build puis tests ciblés.
+  Les tests importent `dist/` : un `node --test` direct peut tester du code périmé.
+- `npm run typecheck`.
+- `python -m unittest discover -s LWGarden/tests -p "test*.py"` si `LWGarden/` change.
+- `python LWGarden/src/FightSummary.py` : régénère `LWGarden/Data/resume.md` ; `--fight <id>` détaille un combat.
+- `npm run agents:sync` après toute modification de `CLAUDE.md` ou de `.claude/agents/`.
+
+## Règles du code
+
+- IA actives : `src/**/*.ts`. `src/_oldLeekScript/` est une archive : ne pas y toucher.
+- Tout `.ts` commence par `// @version:5.8` (version du langage, ne pas la changer) puis `// file version: N` ;
+  incrémente `N` dans chaque fichier modifié.
+- `types/leekwars.d.ts` est un sous-ensemble local de l'API du jeu : vérifie une fonction absente dans la
+  documentation officielle avant de l'utiliser.
+- Un changement de seuil, de condition ou d'ordre de planification met à jour `docs/strategies.md` et a un test
+  de régression qui échoue sans lui.
+
+## Documents et fichiers
+
+- Réponds dans la conversation : pas de fichier de rapport, de résumé, d'audit ou de sortie de tests, et aucune
+  redirection de sortie vers le dépôt. Un hook refuse tout nouveau `.md`/`.txt` hors `docs/`.
+- Trois documents seulement, avec un budget de taille vérifié au commit (`scripts/check-doc-budget.mjs`) :
+  `README.md`, `docs/strategies.md`, `ChangeLog.md` (une ligne par version, uniquement lors d'un commit demandé).
+- `LWGarden/Data/` (combats archivés et `resume.md`) est suivi par Git ; `Data/exports/` ne l'est pas.
 
 ## Sécurité
 
-- N'expose jamais de mots de passe, jetons ou secrets. N'ouvre pas `LWGarden/src/config.json` sauf nécessité stricte et n'en reproduis jamais le contenu.
+- N'expose jamais de mot de passe, jeton ou secret. N'ouvre pas `LWGarden/src/config.json`.
+- Ne pousse pas de code et ne déclenche pas de PUSH Garden sans demande explicite.
+- Déploiement sur Leek Wars : seulement quand l'utilisateur valide une version ou demande « déploie sur leek »,
+  par un tag `leek-*` (skill `deploie-leek`), jamais à chaque push.
 
-## Sources du dépôt
+## Commits
 
-- Les IA actives sont en TypeScript (`src/**/*.ts`) ; les `.leek` de `src/_oldLeekScript/` sont des archives ignorées par Git : ne pas les modifier.
-- Tout `.ts` commence par `// @version:5.8` (version du langage, ne pas la modifier pour marquer une révision) puis `// file version: N`. Incrémente `file version` dans chaque fichier touché.
-- Référence des stratégies : `docs/strategies.md`. Tout changement de seuil, de condition ou d'ordre de planification met ce fichier à jour et ajoute ou ajuste un test de régression.
-- `types/leekwars.d.ts` est un sous-ensemble local de l'API du jeu, pas une source exhaustive.
+Garden enregistre le message du commit publié comme « version de la stratégie » (voir `.gitmessage`).
 
-## Messages de commit
+- Sujet `type(portée): description` (72 caractères au plus), types `feat|fix|perf|refactor|docs|test|chore|build|ci|style`.
+- Si `src/**/*.ts` change (feat, fix, perf, refactor) : une ligne `Stratégie:` (effet attendu en combat, valeurs
+  avant/après, ou « aucun changement de comportement ») et une ligne `Tests:`.
+- Un commit = un seul changement de stratégie. Publie depuis un arbre propre.
 
-Garden enregistre le message du commit publié comme « version de la stratégie » et l'associe aux combats archivés pour l'analyse. Format (voir `.gitmessage`) :
+## Garder Claude et Copilot synchronisés
 
-- Sujet `type(portée): description` (≤ 72 caractères), types `feat|fix|perf|refactor|docs|test|chore|build|ci|style`, puis une ligne vide.
-- Si `src/**/*.ts` change (feat, fix, perf, refactor) : une ligne `Stratégie:` (effet attendu en combat, seuils, conditions ou ordre modifiés avec valeurs avant/après, ou « aucun changement de comportement ») et une ligne `Tests:`.
-- Un commit ne mélange pas plusieurs changements de stratégie : un message par version analysable. Publie (PUSH Garden) depuis un arbre propre.
+`CLAUDE.md` et `.claude/agents/*.md` sont la source. `.github/copilot-instructions.md` et
+`.github/agents/*.agent.md` sont générés par `npm run agents:sync` : ne les modifie pas à la main.
+Le hook Git `pre-commit` refuse un commit où ils divergent.

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Budget de taille des documents et synchronisation des agents Copilot avec la source Claude.
+root="$(dirname "$0")/.."
+node "$root/scripts/check-doc-budget.mjs" && node "$root/scripts/sync-agents.mjs" --check

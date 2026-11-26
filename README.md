@@ -1,89 +1,95 @@
 # LeekWars - Kassbi
 
-Ce dépôt contient les sources de l'IA Kassbi (`src/`) et LWGarden, l'outil
-Python de synchronisation et de déploiement vers Leek Wars. Garden prend en
-charge les sources LeekScript `.leek` et TypeScript `.ts`.
+Sources de l'IA **Kassbi** pour [Leek Wars](https://leekwars.com) (`src/`, TypeScript) et **LWGarden**, l'outil
+Python qui déploie les sources et archive les combats.
 
-## Utiliser LWGarden
+- Stratégie en vigueur : [docs/strategies.md](docs/strategies.md)
+- Versions : [ChangeLog.md](ChangeLog.md)
+- Déploiement et archive des combats : [LWGarden/README.md](LWGarden/README.md)
 
-Depuis la racine du dépôt, dans PowerShell :
+## Fonctionnement d'un tour
+
+Point d'entrée : `turn()` dans [`src/Main/Kassbi_Class.ts`](src/Main/Kassbi_Class.ts).
+
+1. **Contexte** : mémoire de l'adversaire, cases atteignables de chaque poireau, carte de danger de mes cases,
+   compteur de stagnation.
+2. **Planification** (`planAct`) : un plan conjoint attaque / protection / déplacement choisi par un score
+   dégâts − risque ; à défaut un plan B séquentiel borné en opérations.
+3. **Exécution** : le plan est affiché en entier avant la première action, puis chaque action est revérifiée
+   (PT, portée, cooldown) ; un échec arrête la séquence, sans second plan.
+4. **Autour du plan** : boosts de force et de PT, arme équipée au tour 1, puis ligne `Operations:` de fin de tour.
+
+Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.md](docs/strategies.md).
+
+## Structure du code
+
+| Dossier | Rôle |
+|---|---|
+| `src/Main/` | Points d'entrée déployés : `Kassbi_Class.ts` (IA de combat), `Kassbi_test.ts` (variante de test) |
+| `src/Brain/` | Scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
+| `src/Classes/Context/` | Ce que l'IA sait du combat : mémoire de l'adversaire, cases atteignables, carte de danger, stagnation, cibles |
+| `src/Classes/Items/` | Armes, puces et effets |
+| `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner`), plan B (`ReservePlan`), budget d'opérations, séquence historique |
+| `src/Classes/Strategy/` | Seuils par rôle (`Aggressive`, `Balanced`, `Defensive`) et comportements de déplacement |
+| `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, utilitaires |
+| `src/Tests/` | Scripts de test exécutés dans le jeu |
+| `tests/` | Tests Node (`*.test.mjs`) sur des mondes simulés ; ils importent `dist/` |
+| `types/` | `leekwars.d.ts` : sous-ensemble local de l'API du jeu |
+| `scripts/` | Outils du dépôt (contrôle du message de commit, synchronisation des agents) |
+| `LWGarden/` | Déploiement vers Leek Wars et archive des combats (Python) |
+
+Chaque fichier `.ts` commence par `// @version:5.8` (version du langage) puis `// file version: N`, à incrémenter
+à chaque modification. Les `.leek` de `src/_oldLeekScript/` sont des archives ignorées par Git.
+
+## Commandes
+
+Depuis la racine du dépôt :
+
+```powershell
+npm install
+npm run hooks:install                          # une fois : modèle et contrôle du message de commit
+npm test                                       # construit dist/ puis lance tous les tests
+npm run test:only -- tests/strategy.test.mjs   # construit puis lance les tests ciblés
+npm run typecheck
+python -m unittest discover -s LWGarden/tests -p "test*.py"   # tests de Garden
+```
+
+Garden (menu interactif : PULL, PUSH, archive des combats) :
 
 ```powershell
 python -m pip install -r LWGarden\src\requirements.txt
 python LWGarden\src\Garden.py
 ```
 
-Raccourci : le script [garden.cmd](garden.cmd) à la racine lance la même commande
-(`garden` dans cmd, `.\garden` dans PowerShell ; PowerShell n'exécute pas un script
-du dossier courant sans `.\`). Ajoutez la racine du dépôt à votre `PATH` pour taper
-`garden` depuis n'importe où. Les dépendances restent à installer une fois (commande ci-dessus).
+Raccourci Windows : [garden.cmd](garden.cmd) (`garden` dans cmd, `.\garden` dans PowerShell).
 
-La configuration, l'authentification, les options PULL/PUSH et les précautions
-de déploiement sont décrites dans [LWGarden/README.md](LWGarden/README.md).
-Le [journal des modifications](ChangeLog.md) récapitule les changements du dépôt.
-Le fichier local `LWGarden/src/config.json` est ignoré par Git ; ne commitez
-jamais de mot de passe ni de clé API.
+`LWGarden/src/config.json` contient vos identifiants : il est ignoré par Git. Ne commitez jamais de mot de passe
+ni de clé API.
 
-Les tests de l'outil se lancent depuis la racine :
+## Versions et combats
 
-```powershell
-python -m unittest discover -s LWGarden/tests -p "test*.py"
-```
+Garden enregistre le message du commit publié comme **version de la stratégie** et y rattache les combats archivés.
+Un commit qui modifie `src/**/*.ts` porte donc une ligne `Stratégie:` (effet attendu en combat, valeurs avant et
+après) et une ligne `Tests:` ; le hook `commit-msg` le vérifie (modèle : [.gitmessage](.gitmessage)).
 
-Garden archive aussi les combats et leurs logs de debug pour l'analyse par IA, en
-les rattachant à la version publiée (message du commit) : voir
-[LWGarden/README.md](LWGarden/README.md#archive-des-combats-et-versions). Pour que les
-messages de commit portent l'intention tactique, activez une fois le modèle et le
-contrôle de message (`Stratégie:` et `Tests:` requis quand `src/*.ts` change) :
+Déploiement depuis GitHub : un tag `leek-*` poussé sur un commit validé lance les tests puis
+`python LWGarden/src/Garden.py push` (compte principal, sans menu ni suppression distante) ; voir
+[LWGarden/README.md](LWGarden/README.md#déploiement-sans-menu).
 
-```powershell
-npm run hooks:install
-```
+Les combats archivés sont suivis dans Git sous `LWGarden/Data/`, avec un résumé par version dans
+`LWGarden/Data/resume.md` : c'est la matière de l'analyse des défaites.
 
-Le compilateur TypeScript local est épinglé à la version 5.8 :
+## Aide au développement
 
-```powershell
-npm install
-npm run typecheck
-npm test
-```
+Trois agents assistent le développement : un **développeur** (code et coût en opérations), un **testeur** (peu de
+tests, ciblés) et un **stratège** (analyse des combats archivés, alternatives proposées au développeur). Leurs
+règles, leurs skills et les hooks sont décrits dans [CLAUDE.md](CLAUDE.md) et `.claude/`.
 
-Les déclarations de `types/leekwars.d.ts` sont un sous-ensemble local des membres de l'API utilisés par les modules migrés, pas une définition complète de l'API du jeu.
+Les agents Copilot de `.github/agents/` sont générés à partir de `.claude/` : ne les modifiez pas à la main,
+lancez `npm run agents:sync`.
 
-## Architecture et usage du code
+## Documentation
 
-Les sources actives de l'IA sont dans `src/` (TypeScript, déployées par Garden) :
-
-| Dossier | Rôle |
-|---|---|
-| `src/Main/` | Points d'entrée du combat : `Kassbi_Class.ts` exporte `turn()` (appelé à chaque tour), `Kassbi_test.ts` est une variante d'essai (profil `AGGRESSIVE`, agressivité 75, sans repli). |
-| `src/Brain/` | Orchestration d'un tour : `planAct(me, profile?, context?)` évalue puis exécute un plan conjoint si les cartes du contexte sont complètes et actuelles ; sinon plan B borné `ReservePlan` (également sans contexte). `simpleActionSequence` est une séquence simple (avancer, tirer, s'éloigner) sans stratégie. |
-| `src/Classes/Strategy/` | Décisions tactiques (soin, bouclier, repli, choix d'arme) par stratégie `Aggressive`, `Balanced`, `Defensive`, et comportements de déplacement. |
-| `src/Classes/Plannification/` | `TacticalPlanner.ts` compare attaque + protection + déplacements et progression sans tir, sur un graphe atteignable et des tables d'attaque mémorisés ; un arrêt de recherche conserve un candidat complet déjà validé si disponible. `ReservePlan.ts` prépare avant toute action approche minimale → attaque/équipement → supports et alternatives → destination de repli ou absence motivée, en réutilisant dangers/cellules natives valides ; l'exécution contrôle les ressources réelles et les branches annoncées. Recherche tactique et plan B arrêtés à 80 % globaux (`SEARCH_GLOBAL_FRACTION`, 800 000 sur 1 000 000), la recherche tactique aussi à 30 % consommés depuis son entrée et le plan B à 3 % ; `ExecutionBudget.ts` garde séparément une marge résiduelle de 3 % + deux fois le plus gros segment d'exécution observé, sans garantie du coût des primitives opaques. `Plannification.ts` assure la compatibilité historique, explicitement conditionnelle si les API nécessaires manquent, avec le même garde d'exécution. |
-| `src/Classes/Context/`, `Items/` | Monde, coordonnées, armes, puces et effets. `EnemyMemory.ts` (instance `enemyMemory` exportée par `Kassbi_Class.ts`) mémorise items, cooldowns et coups observés ; ses cartes du tour sont transmises à `planAct`. `StagnationTracker.ts` (instance `stagnation` exportée par `Kassbi_Class.ts`) compte les tours consécutifs sans dégâts ni nouveau record de proximité, oscillations comprises, ennemis immobiles (seuil 2) et déclenche, dans `TacticalPlanner.ts`, une sortie de minimum local vers une case sûre qui raccourcit la distance de marche jusqu'à une zone de tir ; transmis dans le contexte de `planAct`. `ReachableCells.ts` calcule les cases atteignables (BFS borné par les PM, 4-connexité supposée), accessibles via `enemyMemory.getReachable(id)`. `ThreatMap.ts` (avec `ShotPlan.ts`, `LaunchPattern.ts`) estime le danger potentiel par case (arme équipée + puces prêtes, portée/lancer/LOS, tir après déplacement), accessible via `enemyMemory.getThreatMap()` ; construction groupée par paire de cases et par signature d'items, arrêtée (`truncated`) à 80 % des opérations (`SEARCH_GLOBAL_FRACTION`) ; modèle incomplet, jamais une garantie de sécurité. |
-| `src/Toolbox/` | Constantes, calculs, aides, débogage, répliques. `Logger.ts` : toute sortie texte passe par `log(texte, contexte)` (contextes `LOG_CONTEXT`, tous actifs par défaut, désactivables par poireau via `leekLogConfig.setEnabled(contexte, false)`) ; erreurs (`ERROR`) en rouge ; `Marker.ts` : seules sorties visuelles (`Debug.mark`/`markText`/`clearMarks`/`pause`), dont les zones accessibles et la zone de danger (contextes `ACCESSIBLE_ZONE` / `DANGER_ZONE`, actifs par défaut, avec pauses) ; voir « Journalisation par contexte » dans [docs/strategies.md](docs/strategies.md). |
-| `types/leekwars.d.ts` | Déclarations locales (sous-ensemble) de l'API du jeu utilisées pour le typage. |
-| `tests/` | Tests Node (`*.test.mjs`) exécutés sur le code compilé dans `dist/`. |
-
-Changer de stratégie : passer un `LeekProfile` à `planAct`.
-
-`Kassbi_Class.turn()` transmet `enemyMemory.getReachable(me.id)`, `enemyMemory.getThreatMap()` et le compteur `stagnation` dans le troisième argument `{ reachable, threat, stagnation }` de `planAct`. Les appels sans contexte, dont l'exemple ci-dessous, utilisent le plan B avec danger explicitement inconnu (aucun couvert garanti). Les formules du score, bornes et limites du modèle sont détaillées dans [docs/strategies.md](docs/strategies.md).
-
-```ts
-const profile = new LeekProfile()
-profile.setRole("DEFENSIVE")        // AGGRESSIVE | DEFENSIVE | BALANCED (ATTACKER = AGGRESSIVE)
-profile.setAggression(30)           // 0-100
-profile.setPreferredRange(3, 8)
-profile.setSupportOptions(true, true, true) // soin, bouclier, repli
-planAct(me, profile)
-```
-
-Par défaut, `turn()` utilise un profil `BALANCED` (agressivité 50, portée 3–8). Les seuils de chaque stratégie, l'ordre de planification et la façon de tester un changement sont décrits dans [docs/strategies.md](docs/strategies.md) ; ce fichier doit être mis à jour avec tout changement de seuil.
-
-## Conventions de fichiers
-
-Les anciens fichiers `.leek` sont archivés dans `src/_oldLeekScript/`, ignorés
-par Git et exclus du déploiement Garden. Les IA actives sont en TypeScript
-`.ts` : chaque fichier commence par `// @version:5.8` (version du langage,
-inchangée) puis `// file version: N`. Incrémentez `file version` à chaque
-modification du fichier.
+Trois documents, volontairement courts : ce README (fonctionnement et structure),
+[docs/strategies.md](docs/strategies.md) (stratégie en vigueur) et [ChangeLog.md](ChangeLog.md) (une ligne par
+version). Tout le reste est dans le code et dans `git log`.
