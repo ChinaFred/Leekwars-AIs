@@ -655,7 +655,9 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // Depuis qu'une puce offensive est créditée après déplacement (mesuré) : 0/38, 0/70, 2/64 : moins de « plus rapides »
 // parce que la référence sans la règle tire elle-même plus tôt (sur les 480 scénarios, aucun premier tir plus tardif
 // qu'avant, règle activée ou non). Départ 80 / ennemi 262 : règle désactivée 11, règle activée 8 (avant : 9).
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 38 }, 2: { slower: 0, faster: 70 }, 3: { slower: 2, faster: 64 } }
+// Avec en plus le terme N du score (valeur de la case finale au tour suivant, mesuré) : 0/50, 0/72, 0/66 ; plus aucun
+// scénario plus lent dans cette banque ; départ 80 / ennemi 262 inchangé (11 et 8).
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 50 }, 2: { slower: 0, faster: 72 }, 3: { slower: 0, faster: 66 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {

@@ -1,8 +1,7 @@
 # Stratégies de combat de Kassbi
 
-Stratégie **en vigueur**, sans historique. Le code fait foi ; les constantes citées sont suivies de leur fichier. Tout changement
-de seuil, de condition ou d'ordre de planification met ce fichier à jour (lignes concernées seulement) et ajoute ou ajuste un
-test de régression. L'historique est dans [`ChangeLog.md`](../ChangeLog.md) et `git log`.
+Stratégie **en vigueur**, sans historique. Le code fait foi ; les constantes citées sont suivies de leur fichier. Tout changement de seuil, de condition ou d'ordre de planification met ce fichier à jour (lignes concernées
+seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`ChangeLog.md`](../ChangeLog.md) et `git log`.
 
 ## Chaîne de décision
 
@@ -55,14 +54,15 @@ Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée
 | `p` | facteur de passivité (`riskFactor`, `StagnationTracker.ts`), de 1 à 0 : voir « Passivité » |
 | `G` | progrès sans tir = distance gagnée vers la cible (Manhattan, ou trajet futur) |
 | `F` | crédit des tours suivants d'un boost (voir « Boosts ») ; 0 sans boost |
+| `N` | valeur de la case finale au tour suivant = `NEXT_TURN_WEIGHT` (0,75) × `min(PV cible − U_max, dégâts moyens possibles au tour suivant depuis cette case)`, `U_max` = plus grand `U` qu'un plan quelconque peut infliger ce tour ; voir « Anticipation » |
 
-- **Offensif** : `U − R_c + w × H + F`. **Sans attaque** : `G − R_c + w × H + F`.
+- **Offensif** : `U − R_c + w × H + F + N`. **Sans attaque** : `G − R_c + w × H + F + N`.
 - **Coût de risque** `R_c = w × p × (D − C)`, plus `LETHAL_PENALTY` (1000) et le dépassement si `D − C ≥ m × (PV + H)` :
-  la survie prime sur les dégâts. `m` = 1, ou `PASSIVE_DANGER_LIFE_FRACTION` (0,75) dès que `p < 1`.
-- **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
+  la survie prime sur les dégâts (à ce seuil `N` = 0). `m` = 1, ou `PASSIVE_DANGER_LIFE_FRACTION` (0,75) dès que `p < 1`.
+- **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV) ; alors `N` = 0.
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
-Par défaut `w = 0,75`. Dégâts moyens ce tour contre menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
+Par défaut `w = 0,75`. Le score échange des dégâts moyens de ce tour et la valeur de la position au suivant contre une menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
 
 **Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours
 passifs, 0,5 au 3e, 0 au 4e (`PASSIVE_TURNS_AT_FULL_RISK`, `PASSIVE_RISK_STEP`). Un tour est **actif** si une de mes
@@ -71,15 +71,17 @@ adverse ; tir raté ou absorbé (0 PV), dégât d'allié ou de poison : tour pas
 à l'ennemi depuis la dernière mort d'un ennemi (approche) gèle le compteur. À `p < 1`, `m` garde le danger accepté sous
 75 % de mes PV (critiques × 1,3 non modélisés) ; `w × H` n'est pas réduit. Le plan B n'applique pas `p`.
 
-**Comportement configuré** (seuils du tableau « Seuils par stratégie », `vie` et distance à l'ennemi vivant le plus
-proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et
-que le seuil « Soin » ou « Soin si menace » est atteint ; un **bouclier**, que si le seuil « Bouclier » l'est ; sous
-le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la case finale pèse deux fois plus, donc
+**Comportement configuré** (seuils du tableau « Seuils par stratégie », `vie` et distance à l'ennemi vivant le plus proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et
+que le seuil « Soin » ou « Soin si menace » est atteint ; un **bouclier**, que si le seuil « Bouclier » l'est ; sous le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la case finale pèse deux fois plus, donc
 le plan préfère une case sûre et un recul après tir. `RETREAT_RISK_FACTOR` est heuristique, non calibré.
 
-**Anticipation** (un seul ennemi) : la distance de chaque destination à une case de tir ne départage que les
-égalités. **Trajet futur sans tir** : si aucun tir d'arme n'est possible ce tour, un BFS (160 cases, 8 pas, 8 lignes
-de vue, 2 % des opérations) cherche une case de tir et remplace `G` Manhattan par la distance de trajet.
+**Anticipation** (un seul ennemi, sinon `N` = 0). **`N`** (`nextTurn` dans le journal du plan) valorise la **position** finale, jamais des dégâts non infligés : il ne dépend que de la case finale et de l'arme en main à la fin du plan.
+`U_max` étant une constante du tour, renoncer à un tir coûte ses dégâts pleins, et si un plan peut prendre tous les PV de la cible ce tour `N` = 0 partout (classement identique à celui sans `N`). Cible supposée **immobile** ; un item est utilisable depuis une case
+si une case de sa liste native de tir est à au plus mes PM de marche (cases libres). Items : armes dont la liste a déjà été obtenue ce tour, puces offensives créditées ce tour (même règle que la recherche : voir « Cases de tir ») de cooldown de base 0 ou 1 ; aucun appel natif de plus.
+Dégâts : maximum exact (sac à dos des puces, une arme au plus, 1 PT si elle n'est pas en main à la fin du plan), PT et force du début de ce tour moins les boosts qui expirent, sans les boosts du plan (leur gain futur est `F`).
+Après un tir, la case finale maximise `N` − coût de risque parmi les cases atteignables avec les PM restants (sans `N` : la case de moindre danger). Allocation : 5 % des opérations (`NEXT_TURN_FRACTION`) ; dépassée, `N` = 0 pour **toutes** les cases, ligne `PLANNING`. Le plan B n'a pas `N`.
+La distance à une case de tir ne départage que les égalités. **Trajet futur sans tir** : si aucun tir d'arme n'est possible ce tour, un BFS
+(160 cases, 8 pas, 8 lignes de vue, 2 % des opérations) cherche une case de tir et remplace `G` Manhattan par la distance de trajet.
 
 ### Sortie de stagnation
 
@@ -107,8 +109,7 @@ Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqu�
 | Arrêt de la recherche (global) | 80 % du total, partagé avec le plan B et la carte de danger (`SEARCH_GLOBAL_FRACTION`) | `ExecutionBudget.ts` |
 | Garde d'exécution | continuer si `max − ops > 3 % × max + 2 × plus gros segment observé` (`TAIL_FRACTION`) | `ExecutionBudget.ts` |
 
-Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite
-sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
+Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 
 ## Plan B (`ReservePlan.ts`)
@@ -240,11 +241,10 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 - Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
   combat), poison, vol de vie, critiques (agilité / 1000, × 1,3 : absents du score, gain de l'agilité non mesuré), arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
-- Coûts en opérations estimés, non mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
-- Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant
-  les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces, détection `instanceof Chest`.
-- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, passivité et sa marge : non calibrés.
-- Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés
-  par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
+- Les coûts en opérations sont estimés, pas mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
+- Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces (`Effect.turns` = 1 : dernier tour), cooldown de base 1 = puce prête au tour suivant, détection `instanceof Chest`.
+- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, `NEXT_TURN_WEIGHT`, passivité et sa marge : non calibrés.
+- `N` : l'ennemi bouge en réalité (la promesse d'un tir peut ne pas être tenue) ; les items d'une case peuvent demander des cases de tir différentes ; un item hors de portée de ma zone ce tour, inabordable, en cooldown ou de cooldown de base > 1 n'est pas compté ; `U_max` (même réalisable seulement à fort danger) comprime `N` ; `N` et `F` s'additionnent sans plafond commun. Combat 54965081, tour 4 : à 0,75 le repli garde l'avantage (bascule mesurée entre 0,8 et 0,85).
+- Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
 - Boost de PM : danger des cases débloquées non regardé (si le plan refuse d'y aller, ses PT sont perdus ce tour) ; pas pour fuir.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API : les tests valident la logique, pas la force en combat.

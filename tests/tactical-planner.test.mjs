@@ -214,7 +214,7 @@ test("joint planning reserves PT for protection before exhausting the attack bud
 	assert.equal(plan.weaponShots, 1)
 	assert.equal(plan.protection.length, 1)
 	assert.equal(plan.danger, 40, "raw danger is retained")
-	assert.equal(plan.score, 5)
+	assert.equal(plan.score, 5 + 0.75 * 30) // + N : 2 tirs (30) possibles au tour suivant depuis cette case
 	executeTacticalPlan(w.me, plan)
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 	const forbidden = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40, ...shieldable })
@@ -631,7 +631,7 @@ test("profile role/aggression weights explicitly trade immediate damage against 
 		const w = world({ tp: 2, gun: item("gun", 2, 30), danger: () => 10 })
 		w.profile.setRole(role)
 		w.profile.setAggression(aggression)
-		assert.equal(w.evaluate().plan.score, 30 - weight * 10)
+		assert.equal(w.evaluate().plan.score, 30 - weight * 10 + 0.75 * 30) // + N : le même tir au tour suivant
 	}
 })
 
@@ -849,6 +849,40 @@ test("the planned heal counts in the lethality threshold, not only in the score"
 	assert.equal(plan.weaponShots, 2)
 })
 
+// --- N (valeur de la case finale au tour suivant) ne décote jamais les dégâts de ce tour ---------------------------
+
+test("N never defers a kill of the last enemy for a small heal", () => {
+	const w = world({ tp: 6, gun: item("gun", 2, 30), life: 100, maxLife: 300,
+		chips: [chip("cure", 2, 0, { minRange: 0, features: [{ type: Effect.HEAL, minValue: 10, maxValue: 10 }] })] })
+	w.enemies[0].life = 80
+	w.profile.setRole("AGGRESSIVE")
+	const { plan } = w.evaluate()
+	assert.deepEqual([plan.weaponShots, plan.protection.length], [3, 0])
+	assert.equal(plan.nextTurn, 0, "a kill is possible this turn: N is 0 for every plan")
+})
+
+test("N is the same for two plans ending on the same cell: a shield still costs the full shot it replaces", () => {
+	// 6 PT, 0 PM, danger 60, bouclier 15 pour 2 PT : 3 tirs (3d − 60) contre bouclier + 2 tirs (2d − 45), seuil d = 15
+	// comme sans N. Avec un N plafonné par les PV restants après CE plan, le bouclier gagnait jusqu'à d = 45.
+	for (const [damage, shots, protection] of [[14, 2, 1], [16, 3, 0]]) {
+		const { plan } = world({ tp: 6, mp: 0, gun: item("gun", 2, damage), chips: [shield(2, 15)], danger: () => 60, ...shieldable }).evaluate()
+		assert.deepEqual([plan.weaponShots, plan.protection.length], [shots, protection], `damage ${damage}`)
+		assert.ok(plan.nextTurn > 0, "N is credited, identically for both plans")
+	}
+})
+
+test("N never makes a plan abstain from a shot that takes all the target's life: same danger threshold as without N", () => {
+	// Tir de 40 sur une cible à 40 PV (pas la marge de coup fatal), possible seulement depuis x = 1 (danger D), AGGRESSIVE
+	// (w = 0,75) : tirer tant que 40 − 0,75 D > 0, soit D ≤ 53. Avec l'ancien N, l'abstention commençait à D = 14.
+	for (const [danger, shots] of [[53, 1], [54, 0]]) {
+		const w = world({ tp: 2, mp: 1, gun: item("gun", 2, 40, { maxRange: 1 }), positions: [[2, 0]],
+			cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? danger : 0 })
+		w.enemies[0].life = 40
+		w.profile.setRole("AGGRESSIVE")
+		assert.equal(w.evaluate().plan?.weaponShots ?? 0, shots, `danger ${danger}`)
+	}
+})
+
 // --- le comportement configuré décide du soin, du bouclier et du repli dans le plan conjoint -----------------------
 
 test("healing is a candidate only at the role threshold: at 82 % life DEFENSIVE heals, BALANCED and AGGRESSIVE do not", () => {
@@ -915,7 +949,7 @@ test("under the retreat threshold the danger weighs twice: the same shot is take
 		cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 25 : 0 })
 	const healthy = setup(100).evaluate().plan
 	assert.equal(healthy.weaponShots, 1)
-	assert.equal(healthy.score, 30 - 25) // w = 1
+	assert.equal(healthy.score, 30 - 25 + 0.75 * 30) // w = 1 ; + N : le même tir au tour suivant depuis x = 1
 	const wounded = setup(40).evaluate().plan // vie 0,40, ennemi à 2 cases : w = 2, 30 − 50 < 0
 	assert.equal(wounded?.weaponShots ?? 0, 0)
 	const forbidden = setup(40)
@@ -939,7 +973,8 @@ test("joint plan: the boost is a scored component, chosen when it brings more th
 	assert.deepEqual(plan.chips.map((c) => c.name), ["bolt"])
 	assert.equal(plan.weaponShots, 0)
 	assert.equal(plan.usefulDamage, 60)
-	assert.equal(plan.score, 75)
+	// + N : bolt + 1 tir sans boost au tour suivant (40), plafonné par les PV restants après le meilleur tour (100 − 60).
+	assert.equal(plan.score, 75 + 0.75 * 40)
 	assert.equal(plan.tpUsed, 6)
 	assert.deepEqual(w.events, [], "evaluation spends nothing")
 	executeTacticalPlan(w.me, plan)
@@ -956,7 +991,7 @@ test("joint plan: the boost is a scored component, chosen when it brings more th
 	assert.deepEqual([plan.weaponShots, plan.usefulDamage], [2, 20])
 	plan = fatal(100)
 	assert.deepEqual(plan.boost.chips.map((c) => c.name), ["protein"])
-	assert.deepEqual([plan.weaponShots, plan.usefulDamage, plan.score], [1, 15, 22.5])
+	assert.deepEqual([plan.weaponShots, plan.usefulDamage, plan.score], [1, 15, 22.5 + 0.75 * 20]) // + N : 2 tirs de base
 	// Sous 50 % de PV, un plan qui tire ne booste pas (MIN_LIFE_RATIO_FOR_BOOST).
 	assert.equal(setup({ life: 49 }).evaluate().plan.boost, undefined)
 	assert.notEqual(setup({ life: 50 }).evaluate().plan.boost, undefined)
@@ -976,7 +1011,8 @@ test("joint plan: a TP boost pays for an extra shot this turn; both boosts are o
 	assert.deepEqual(plan.boost, { chips: [w.me.chips[0]], tpGain: 3 })
 	assert.equal(plan.weaponShots, 2)
 	assert.equal(plan.tpUsed, 8) // 2 + 6 : PT dépensés, les 3 PT gagnés ne sont pas déduits
-	assert.equal(plan.score, 20 + 0.75 * 2 * 10) // 2 tours suivants à 9 PT (3 tirs) au lieu de 6 (2 tirs)
+	// 2 tours suivants à 9 PT (3 tirs) au lieu de 6 (2 tirs) ; + N : les 2 tirs de base du tour suivant (0,75 × 20).
+	assert.equal(plan.score, 20 + 0.75 * 2 * 10 + 0.75 * 20)
 	// motivation : 1 PT, +4 PT -> 9 PT ce tour : un 3e tir tout de suite.
 	w = world({ tp: 6, gun: item("gun", 3, 10), chips: [boost("motivation", 1, 32, 4, 1)] })
 	plan = w.evaluate().plan
