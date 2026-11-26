@@ -60,6 +60,7 @@ Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée
 - **Coût de risque** `R_c = w × p × (D − C)`, plus `LETHAL_PENALTY` (1000) et le dépassement si `D − C ≥ m × (PV + H)` :
   la survie prime sur les dégâts (à ce seuil `N` = 0). `m` = 1, ou `PASSIVE_DANGER_LIFE_FRACTION` (0,75) dès que `p < 1`.
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV) ; alors `N` = 0.
+- **Tour condamné** (`doomed`) : si le seuil de `LETHAL_PENALTY` est atteint sur la case de moindre danger avec **chaque** protection candidate (donc pour tout plan) : une cible tuée (dégâts moyens ≥ ses PV) passe avant le score, et `F` = 0 avec ou sans tir (un boost ne vaut que par les dégâts de ce tour). Soin, protection et case finale gardent le score ; ligne `doomed turn` (`PLANNING`). Si une protection ramène une case sous le seuil : règle normale.
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
 Par défaut `w = 0,75`. Le score échange des dégâts moyens de ce tour et la valeur de la position au suivant contre une menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
@@ -240,10 +241,9 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 - Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
 - Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
   combat), poison, vol de vie, critiques (agilité / 1000, × 1,3 : absents du score, gain de l'agilité non mesuré), arrondis du moteur, combos de buffs.
-- Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
 - Les coûts en opérations sont estimés, pas mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces (`Effect.turns` = 1 : dernier tour), cooldown de base 1 = puce prête au tour suivant, détection `instanceof Chest`.
-- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, `NEXT_TURN_WEIGHT`, passivité et sa marge : non calibrés.
+- Danger modélisé nul ≠ absence de menace (items ou PM adverses jamais observés) ; danger létal ≠ mort certaine. `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, `NEXT_TURN_WEIGHT`, passivité et sa marge : non calibrés. Tour condamné : estimation, pas une certitude (54969530 tour 8, 54969622 tour 7 : survie réelle avec soin + casque, plans inchangés) ; hors de ce cas, le boost sans tir reste plafonné à 0,75 × PV de la cible, plus haut qu'avec tir (`tests/doomed-turn-fights.test.mjs`).
 - `N` : l'ennemi bouge en réalité (la promesse d'un tir peut ne pas être tenue) ; les items d'une case peuvent demander des cases de tir différentes ; un item hors de portée de ma zone ce tour, inabordable, en cooldown ou de cooldown de base > 1 n'est pas compté ; `U_max` (même réalisable seulement à fort danger) comprime `N` ; `N` et `F` s'additionnent sans plafond commun. Combat 54965081, tour 4 : à 0,75 le repli garde l'avantage (bascule mesurée entre 0,8 et 0,85).
 - Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
 - Boost de PM : danger des cases débloquées non regardé (si le plan refuse d'y aller, ses PT sont perdus ce tour) ; pas pour fuir.
