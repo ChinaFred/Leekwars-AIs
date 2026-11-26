@@ -1,6 +1,7 @@
 """Local archive of fights, debug logs and publications, for later AI analysis.
 
-Layout under the data folder (git-ignored):
+Layout under the data folder (tracked by Git, except exports/ which duplicates fights/):
+    resume.md                    compact summary per version (FightSummary.py)
     publications.json            one record per Garden PUSH (version = commit)
     fights/<id>/fight.json       full fight as returned by fight/get
     fights/<id>/logs.json        debug logs as returned by fight/get-logs

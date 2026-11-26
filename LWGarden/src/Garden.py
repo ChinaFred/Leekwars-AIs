@@ -1,5 +1,6 @@
 import os, json, hashlib, sys
 import FightArchive
+import FightSummary
 from LWApi import LWApi
 from shutil import rmtree
 
@@ -122,6 +123,14 @@ def archive_recent_fights(api, config, farmer):
               .format(pruned["publications"], pruned["fights"]))
     print("Stored under " + config["data_folder"])
     return stats
+
+
+def write_fight_summary(config):
+    """Refresh the git-tracked summary of the archive (Data/resume.md)."""
+    try:
+        print("Summary: " + FightSummary.write_summary(config["data_folder"]))
+    except (OSError, ValueError, KeyError) as error:
+        print("Summary failed: {0}".format(error))
 
 
 def export_archived_fights(config, version_id=None):
@@ -265,9 +274,11 @@ def main():
                 print("PUSH cancelled.")
         elif selection == '7':
             archive_recent_fights(api, config, farmer)
+            write_fight_summary(config)
         elif selection == '8':
             version_id = input("Version id (empty = all retained versions): ").strip()
             export_archived_fights(config, version_id or None)
+            write_fight_summary(config)
         elif selection == '9':
             break
         else:

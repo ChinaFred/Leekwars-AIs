@@ -79,7 +79,11 @@ them.
 ## Archive des combats et versions
 
 Les options `7` et `8` constituent une base locale pour analyser les combats
-avec une IA. Tout est écrit sous `LWGarden/Data/` (ignoré par Git ; dossier
+avec une IA. Tout est écrit sous `LWGarden/Data/`, suivi par Git sauf `exports/` (qui duplique
+`fights/`) : committez-le après un archivage (`chore(data): ...`) pour que les
+agents d'analyse y aient accès. Les options `7` et `8` réécrivent aussi
+`Data/resume.md`, le résumé par version (victoires, défaites, pics d'ops) à lire
+en premier ; `python LWGarden/src/FightSummary.py --fight <id>` détaille un combat (dossier
 modifiable par `data_folder` dans `config.json`, relatif à `LWGarden/src`).
 
 - **Publication** : à chaque PUSH (options `5` et `6`) qui modifie le compte,

@@ -4,8 +4,13 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/*.test.mjs",
     "build": "tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "posttest": "node scripts/tests-state.mjs ok",
+    "test:only": "npm run build && node --test",
+    "posttest:only": "node scripts/tests-state.mjs ok",
+    "agents:sync": "node scripts/sync-agents.mjs",
+    "docs:check": "node scripts/check-doc-budget.mjs",
     "hooks:install": "git config core.hooksPath .githooks && git config commit.template .gitmessage"
   },
   "devDependencies": {
