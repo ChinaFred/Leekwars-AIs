@@ -2,6 +2,14 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 28942a4 — chore(merge): Master (boost d'agilité, tag du workflow) dans la branche
+Compte Kassbi, publié le 2026-11-26T21:15:47Z.
+Combats : 7 — 7 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 67 % (combat 54969294), médiane des pics 34 %.
+Ressources : 58 tours joués, 3 sans aucune action payante (5 %), 33 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 34 % inutilisés sur 575 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54969301 (2/8, victoire), 54969295 (1/9, victoire), 54969258 (0/7, victoire), 54969289 (0/5, victoire), 54969294 (0/6, victoire).
+
 ## 09838c1 — fix(tactique): historique des actions dans un fichier existant
 Compte Kassbi, publié le 2026-11-26T17:36:51Z.
 Stratégie : aucun changement de comportement par rapport à f418b84 (passivité tirée des dégâts mesurés de mes actions, poids du risque 1 / 0,5 / 0 à 2 / 3 / 4 tours passifs, marge de 0,75 x (PV + soin) à poids réduit, ligne [History] en fin de tour) ; seul l'emplacement du code change.
