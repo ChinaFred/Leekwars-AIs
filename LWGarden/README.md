@@ -90,6 +90,13 @@ Le workflow `.github/workflows/deploy-leek.yml` l'utilise : il se déclenche sur
 `Data/publications.json` sur la branche par défaut. Il lui faut le secret
 `LEEKWARS_API_KEY` du dépôt GitHub.
 
+De même, `python LWGarden/src/Garden.py archive` enchaîne sans question l'archive des
+combats récents, l'export de toutes les versions et `Data/resume.md` (options `7` et `8`,
+toujours ensemble ; l'option `7` du menu fait désormais de même). `Garden.py export`
+refait l'export et le résumé à partir des combats déjà archivés, sans connexion. Le
+workflow « Archive des combats » (`.github/workflows/archive-leek.yml`, lancement manuel)
+exécute `archive` puis committe `LWGarden/Data/` sur la branche par défaut.
+
 ```powershell
 git tag -a leek-20261126-1 -m "Déploiement : sortie de stagnation"
 git push origin leek-20261126-1

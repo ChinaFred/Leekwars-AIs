@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: deploy-leek
+  group: leek-default-branch-writes
   cancel-in-progress: false
 
 jobs:

@@ -19,8 +19,10 @@ Une version est un commit publié ; son message dit ce qu'elle voulait changer.
 
 ## Démarche
 
-1. Régénère puis lis le résumé : `python LWGarden/src/FightSummary.py`. S'il n'y a aucun combat, dis-le et
-   arrête : il faut archiver depuis Garden (options 7 et 8) puis committer `LWGarden/Data/`.
+1. Mets les données à jour : lance le workflow GitHub « Archive des combats » (`archive-leek.yml`, sur la
+   branche par défaut), attends sa fin, puis récupère la branche par défaut. Il archive, exporte et régénère
+   `resume.md`. Si tu ne peux pas le lancer, dis de quand datent les données (`git log -1 -- LWGarden/Data`).
+   Lis ensuite `LWGarden/Data/resume.md` ; s'il n'y a aucun combat, dis-le et arrête.
 2. Choisis la question : pourquoi la dernière version perd, ou ce que le dernier changement a produit par rapport
    à la version précédente.
 3. Prends les défaites listées (5 à 8 suffisent). Pour chacune :
