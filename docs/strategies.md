@@ -51,17 +51,24 @@ Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; seul 
 | `H` | soin crédité = `min(PV manquants, Σ soin moyen × (1 + sagesse/100))` |
 | `C` | crédit d'armure = `min(D, A + D × R/100)` (`A` bouclier absolu, `R` relatif plafonné à 100) |
 | `w` | poids du risque (`riskWeight`, commun au plan B) = facteur de rôle × `(1,5 − agressivité/100)` ; rôle : 0,75 `AGGRESSIVE`, 1 `BALANCED`, 1,25 `DEFENSIVE` ; × `RETREAT_RISK_FACTOR` (2) sous le seuil de repli du rôle |
+| `p` | facteur de passivité (`riskFactor`, `StagnationTracker.ts`), de 1 à 0 : voir « Passivité » |
 | `G` | progrès sans tir = distance gagnée vers la cible (Manhattan, ou trajet futur) |
 | `F` | crédit des tours suivants d'un boost (voir « Boosts ») ; 0 sans boost |
 
 - **Offensif** : `U − R_c + w × H + F`. **Sans attaque** : `G − R_c + w × H + F`.
-- **Coût de risque** `R_c = w × (D − C)`, plus `LETHAL_PENALTY` (1000) et le dépassement si `D − C ≥ PV + H` :
+- **Coût de risque** `R_c = w × p × (D − C)`, plus `LETHAL_PENALTY` (1000) et le dépassement si `D − C ≥ PV + H` :
   la survie prime sur les dégâts.
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
 Par défaut `w = 1`. Le score échange des dégâts moyens ce tour contre une menace potentielle au tour ennemi :
 ce n'est ni une probabilité de survie ni un minimax.
+
+**Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours
+passifs, 0,5 au 3e, 0 au 4e (`PASSIVE_TURNS_AT_FULL_RISK`, `PASSIVE_RISK_STEP`). Un tour passif est un tour sans
+dégât infligé ; un tour qui bat la plus petite distance à l'ennemi de tout le combat (approche) gèle le compteur ;
+seul un dégât infligé le remet à zéro (ni un tir prévu, ni un ennemi qui bouge). À `p = 0`, seul `LETHAL_PENALTY`
+écarte une case ; le crédit de soin `w × H` n'est pas réduit, le bouclier ne vaut plus rien. Le plan B n'applique pas `p`.
 
 **Comportement configuré** (seuils du tableau « Seuils par stratégie », `vie` et distance à l'ennemi vivant le plus
 proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et
@@ -84,7 +91,7 @@ distance Manhattan).
   **bloqué** (ni tir, ni déplacement, ni protection) ou sortie déjà engagée.
 - **Destination** : case atteignable dont la distance de **marche** vers une zone de tir est strictement plus courte
   (BFS inverse, 613 cases au plus, 2 % des opérations), même si Manhattan augmente, avec un danger ≤ celui de la case
-  actuelle. Aucune case plus dangereuse n'est jamais choisie ; sinon maintien, motivé dans le journal.
+  actuelle ; à `p = 0`, toute case de danger inférieur à mes PV. Sinon maintien, motivé dans le journal.
 - **Fin d'épisode** : dégât, record de proximité, tir réel prévu ou ennemi qui bouge. Les cases visitées pendant
   l'épisode ne sont pas revisitées pour progresser ; une retraite vers un danger strictement inférieur reste permise.
 - **Limites acceptées** : contre un ennemi qui alterne immobilité et fuite, le premier tir peut être retardé ;
@@ -235,7 +242,8 @@ Contextes utiles à l'analyse : `PLANNING` (plan avant exécution, replis `[Tact
   entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant
   les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces, détection `instanceof Chest`.
-- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR` et `FUTURE_TURN_WEIGHT` sont heuristiques, non calibrés en combat.
+- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT` et les deux constantes de passivité
+  sont heuristiques, non calibrés en combat.
 - Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés
   par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API : les tests valident la logique, pas la force en combat.

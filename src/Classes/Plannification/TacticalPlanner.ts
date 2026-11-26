@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 23
+// file version: 24
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -18,7 +18,7 @@ import { StagnationTracker, STAGNATION_TURNS } from "../Context/StagnationTracke
 export interface TacticalContext {
 	readonly reachable: ReachableCells | null
 	readonly threat: ThreatMap | null
-	/** Compteur de tours sans tir ni progrès (optionnel : sans lui, aucune sortie de stagnation). */
+	/** Compteur de stagnation et de passivité (optionnel : sans lui, ni sortie de stagnation ni baisse du poids du risque). */
 	readonly stagnation?: StagnationTracker
 }
 
@@ -450,6 +450,8 @@ interface StagnationInput {
 	skipped: Skipped
 	budget: Budget
 	visited: (cell: Cell) => boolean
+	/** Poids du risque annulé par la passivité : seul un danger qui atteint mes PV écarte une case. */
+	riskFree: boolean
 }
 
 /**
@@ -458,11 +460,13 @@ interface StagnationInput {
  * tir native d'une arme ou puce offensive, même si la distance Manhattan augmente (minimum local derrière un mur).
  * La sécurité reste prioritaire : seules les cases de danger ≤ celui de la case actuelle sont candidates (0 ici si
  * je suis sûr) et la marche doit diminuer strictement. Sinon : maintien, motivé dans le journal et dans la raison.
+ * Exception `riskFree` (poids du risque annulé par la passivité, comme dans le plan normal) : toute case dont le danger
+ * reste sous mes PV est candidate.
  * La route peut demander plusieurs tours : un déplacement de sortie qui ne bat pas le record de proximité ne remet
  * pas le compteur à zéro (voir `StagnationTracker`) et la cible est recalculée chaque tour.
  */
 function stagnationEscape(input: StagnationInput): TacticalPlan | null {
-	const { me, target, turns, weapons, attackChips, chipZones, entries, dangers, preparation, skipped, budget, visited } = input
+	const { me, target, turns, weapons, attackChips, chipZones, entries, dangers, preparation, skipped, budget, visited, riskFree } = input
 	const hold = (reason: string): null => {
 		skipped.noProgress = `stagnation: ${reason}`
 		log(() => `[Tactical] stagnation: ${turns} turns without shot or progress (threshold ${STAGNATION_TURNS}); ` +
@@ -526,14 +530,16 @@ function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 		budget.tick()
 		const distance = walk.get(key(entry.cell))
 		const danger = dangers.get(key(entry.cell))!
-		if (distance === undefined || distance >= origin || danger > ceiling || visited(entry.cell)) continue
+		if (distance === undefined || distance >= origin || visited(entry.cell) ||
+			(riskFree ? danger >= me.life : danger > ceiling)) continue
 		if (best === null || distance < best.walk ||
 			(distance === best.walk && (danger < best.danger || (danger === best.danger && entry.cost < best.cost)))) {
 			best = { cell: entry.cell, cost: entry.cost, walk: distance, danger }
 		}
 	}
 	if (best === null) {
-		return hold(`no cell with danger <= ${ceiling} closer by walking (walking distance ${origin})`)
+		return hold(`no cell with danger ${riskFree ? `< my life ${me.life}` : `<= ${ceiling}`} closer by walking ` +
+			`(walking distance ${origin})`)
 	}
 	const chosen = best
 	log(() => `[Tactical] stagnation: ${turns} turns without shot or progress (threshold ${STAGNATION_TURNS}); ` +
@@ -653,6 +659,14 @@ function evaluate(
 			closest.mp + (closest.weapon?.maxRange ?? 1)),
 		budget)
 	const weight = riskWeight(profile, strategy, lifeRatio, closestDistance)
+	// Passivité (voir `StagnationTracker.riskFactor`) : le danger pèse de moins en moins tant qu'aucun dégât n'est
+	// infligé, jusqu'à 0. `LETHAL_PENALTY` et le crédit de soin (`weight`) ne sont pas réduits.
+	const riskFactor = context?.stagnation?.riskFactor ?? 1
+	const risk = weight * riskFactor
+	if (riskFactor < 1) {
+		log(() => `[Tactical] passivity: ${context!.stagnation!.passiveTurns} turns without damage dealt; ` +
+			`risk weight ${weight} x ${riskFactor}`, LOG_CONTEXT.PLANNING)
+	}
 	// Boost : composante du plan. `boosts[0]` est toujours « aucun ». Un plan avec tir n'en lance pas sous
 	// `MIN_LIFE_RATIO_FOR_BOOST` de PV ; un plan sans tir seulement si l'ennemi peut être à portée au tour suivant.
 	const boosts = boostVariants(me)
@@ -690,7 +704,7 @@ function evaluate(
 	if (enemies.length && (hasAffordableWeapon || attackChips.length === 0)) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
-		const stay = -riskCost(me, weight, support[0]!, dangers.get(key(me.cell))!, false)
+		const stay = -riskCost(me, risk, support[0]!, dangers.get(key(me.cell))!, false)
 		// Seules les cases à 0 ou 1 PM sont des candidates précoces : filtrées une fois, pas une fois par protection.
 		const near = entries.map((entry, index) => ({ entry, index })).filter(({ entry }) => entry.cost <= 1)
 		const originDistance = distance(me.cell)
@@ -699,7 +713,7 @@ function evaluate(
 			const progress = originDistance - distance(entry.cell)
 			if (!profile.allowHiding && entry.cost > 0 && progress <= 0) continue
 			const danger = entryDanger[index]!
-			const score = progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal
+			const score = progress - riskCost(me, risk, protection, danger, false) + weight * protection.heal
 			if (score <= stay || (entry.cost === 0 && protection.chips.length === 0)) continue
 			if (!beats(budget.incumbent, score, danger, protection.cost, target, undefined, undefined, entry.cost)) continue
 			budget.incumbent = {
@@ -774,7 +788,7 @@ function evaluate(
 			const usefulDamage = Math.min(target.life, attack.damage)
 			const tpUsed = cost + equip + protection.cost
 			const score = usefulDamage -
-				riskCost(me, weight, protection, danger, killsLastEnemy(attack.damage, target, enemies.length)) +
+				riskCost(me, risk, protection, danger, killsLastEnemy(attack.damage, target, enemies.length)) +
 				weight * protection.heal
 			if (!beats(budget.incumbent, score, danger, tpUsed, target, undefined, undefined, shot.cost + ending.cost)) continue
 			budget.incumbent = {
@@ -932,7 +946,7 @@ function evaluate(
 			if (!profile.allowHiding && geometric[i]! <= 0 && !same(ending.cell, me.cell)) continue
 			const progress = progressOf[i]!
 			const danger = entryDanger[i]!
-			const score = progress - riskCost(me, weight, protection, danger, false) + weight * protection.heal + idle.credit
+			const score = progress - riskCost(me, risk, protection, danger, false) + weight * protection.heal + idle.credit
 			const futureRouteDistance = futureDistance?.[i]
 			const tpUsed = protection.cost + idle.variant.cost
 			if (!beats(progressPlan, score, danger, tpUsed, target, firingOf[i], futureRouteDistance, ending.cost)) continue
@@ -987,7 +1001,8 @@ function evaluate(
 		if (!blocked && !stagnation.escaping) return normal
 		const escape = stagnationEscape({
 			me, target: enemies[0]!, turns: stagnation.turns, weapons, attackChips, chipZones,
-			entries, dangers, preparation, skipped, budget, visited: (cell) => stagnation.visited(cell)
+			entries, dangers, preparation, skipped, budget, visited: (cell) => stagnation.visited(cell),
+			riskFree: risk === 0
 		})
 		if (escape) {
 			stagnation.commit(me.cell, escape.destination)
@@ -1088,7 +1103,7 @@ function evaluate(
 				if (attack.damage > 0) {
 					future = Math.min((option.target.life - usefulDamage) * FUTURE_TURN_WEIGHT, option.tables.future[v]!)
 				}
-				const score = usefulDamage - riskCost(me, weight, protection, finalDanger,
+				const score = usefulDamage - riskCost(me, risk, protection, finalDanger,
 					killsLastEnemy(attack.damage, option.target, enemies.length)) + weight * protection.heal + future
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, undefined,

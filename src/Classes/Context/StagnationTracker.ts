@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 
 /**
  * Nombre de tours consécutifs sans progrès réel à partir duquel la sortie de stagnation s'applique.
@@ -9,6 +9,14 @@
  * Combat 54940819 : 53 tours d'immobilité (T12 à T64) faute de cette règle.
  */
 export const STAGNATION_TURNS = 2
+
+/**
+ * Passivité : nombre de tours sans dégât infligé pendant lesquels le risque garde son poids plein, puis part du poids
+ * retirée à chaque tour passif de plus (2 et 0,5 : plein jusqu'à 2 tours, moitié au 3e, nul au 4e). Points de départ
+ * choisis sur les combats 54944456, 54944868 et 54946689 (refus de combat), non calibrés en combat.
+ */
+export const PASSIVE_TURNS_AT_FULL_RISK = 2
+export const PASSIVE_RISK_STEP = 0.5
 
 /**
  * Compteur de tours consécutifs SANS PROGRÈS RÉEL. Mémorisé entre les tours par `Kassbi_Class.ts` (même mécanisme
@@ -47,12 +55,27 @@ export class StagnationTracker {
 	private enemyKeySeen: string | null = null
 	private pendingKey: string | undefined = undefined
 	private stillTurns = 0
+	private passive = 0
+	private closest = Number.POSITIVE_INFINITY
 
 	/** Positions des ennemis vivants (clé), à fournir juste avant `observe` du même tour. */
 	noteEnemyPositions(key: string): void { this.pendingKey = key }
 
 	/** Tours consécutifs sans progrès réel, vus au début du tour courant. */
 	get turns(): number { return this.count }
+
+	/**
+	 * Tours passifs : tours observés sans dégât infligé, hors tours d'approche (distance à l'ennemi le plus proche
+	 * strictement inférieure au minimum de TOUT le combat : le compteur est alors gelé, pas remis à zéro). Seul un dégât
+	 * infligé le remet à zéro : ni un tir prévu, ni un rapprochement suivi d'un recul, ni un ennemi qui bouge. Une
+	 * « danse » (les deux poireaux oscillent sans se toucher) compte donc comme l'immobilité.
+	 */
+	get passiveTurns(): number { return this.passive }
+
+	/** Facteur appliqué au poids du risque du plan conjoint : 1 jusqu'à `PASSIVE_TURNS_AT_FULL_RISK`, puis décroît jusqu'à 0. */
+	get riskFactor(): number {
+		return Math.max(0, Math.min(1, 1 - PASSIVE_RISK_STEP * (this.passive - PASSIVE_TURNS_AT_FULL_RISK)))
+	}
 
 	/**
 	 * Stagnation à traiter : au moins `STAGNATION_TURNS` tours sans progrès réel ET ennemis immobiles pendant tout ce
@@ -90,7 +113,10 @@ export class StagnationTracker {
 				this.visitedCells.clear()
 				this.record = enemyDistance
 			} else this.count++
+			if (damaged) this.passive = 0
+			else if (enemyDistance >= this.closest) this.passive++
 		} else this.record = enemyDistance
+		this.closest = Math.min(this.closest, enemyDistance)
 		this.enemyKeySeen = enemyKey ?? null
 		this.turnSeen = turn
 		this.enemyLifeSeen = enemyLife
