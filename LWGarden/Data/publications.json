@@ -93,5 +93,24 @@
    "deleted_files": 0,
    "deleted_folders": 0
   }
+ },
+ {
+  "id": "9fa57c2",
+  "account": "Kassbi",
+  "published_at": 1795729911,
+  "published_at_iso": "2026-11-26T21:51:51Z",
+  "commit": "9fa57c27b31f5a6514507f08e9ce13956a6305aa",
+  "committed_at": 1795729850,
+  "subject": "fix(tactique): tour condamné sans boost crédité, kill prioritaire",
+  "message": "fix(tactique): tour condamné sans boost crédité, kill prioritaire\n\nPourquoi : dans les trois défaites de la version 28942a4, les tours où tous les plans sont jugés létaux\ndépensent leurs PT en boosts de durée sans tir (54969530 tour 10 : protein + cure, 0 dégât ; 54969527\ntour 6 : motivation + protein + 1 tir de neutrino ; 54969622 tour 8 : protein seule).\nStratégie: tour condamné = seuil létal atteint sur la case de moindre danger avec chaque protection candidate ; alors une cible tuée (dégâts moyens ≥ ses PV) passe avant le score et le crédit futur F des boosts vaut 0 avec ou sans tir (avant : F jusqu'à 0,75 × PV de la cible). Soin, protection et case finale inchangés ; hors tour condamné, aucun changement. Rejeux : 54969530 T10 cure + rock (31,2 attendus au lieu de 0), 54969527 T6 protein + rock (65,85 au lieu de 42,75), 54969622 T8 repli seul ; 54969530 T8 et 54969622 T7 identiques.\nTests: tests/doomed-turn-fights.test.mjs (7 rejeux, 6 échouent sans le changement) ; npm test, npm run typecheck, npm run docs:check.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bg7gFVfYRcLaxU2QC",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 1,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
  }
 ]
