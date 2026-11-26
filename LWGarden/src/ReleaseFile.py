@@ -16,6 +16,13 @@ TRAILERS = ("co-authored-by:", "claude-session:", "signed-off-by:")
 DEFAULT_BRANCHES = ("master", "main")
 
 
+def is_release_file(path):
+    """True for the release file at the root of the remote tree, however the editor
+    spelled it when it was created by hand (`deployed.ts`, `DEPLOYED`...)."""
+    name = str(path).replace("\\", "/").strip("/").lower()
+    return name in (RELEASE_FILE.lower(), os.path.splitext(RELEASE_FILE)[0].lower())
+
+
 def _git_lines(folder, *args):
     try:
         output = FightArchive._git(folder, *args)
@@ -107,8 +114,9 @@ def publish(api, source_folder, account, environ=None, now=None):
         files = tree.get("files") if isinstance(tree, dict) else None
         if not isinstance(files, list):
             raise RuntimeError("could not read the remote AI tree")
-        path = RELEASE_FILE
-        if not any(ai.get("path", "").strip("/") == RELEASE_FILE for ai in files):
+        path = next((ai["path"].strip("/") for ai in files
+                     if is_release_file(ai.get("path", ""))), None)
+        if path is None:
             created = api.create_ai("", RELEASE_FILE, version=4)
             if not created.ok:
                 raise RuntimeError("could not create it ({0}); create an AI named {1} at the "

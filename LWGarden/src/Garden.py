@@ -422,7 +422,7 @@ def get_all_ais(api, root_folder: str):
 
     for ai in ai_tree["files"]:
         path = normalize_ai_path(ai["path"])
-        if path == ReleaseFile.RELEASE_FILE:
+        if ReleaseFile.is_release_file(path):
             continue  # generated at each PUSH, never a source
         extension = os.path.splitext(path)[1].lower()
         local_path = path if extension in SUPPORTED_AI_SOURCE_EXTENSIONS else path + ".leek"
@@ -498,7 +498,8 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
     existing_folders = {normalize_ai_path(path) for path in remote_tree["folders"]}
     existing_files = {normalize_ai_path(ai["path"]) for ai in remote_tree["files"]}
     remote_only_files = sorted(
-        existing_files - local_file_path_set - {ReleaseFile.RELEASE_FILE})
+        path for path in existing_files - local_file_path_set
+        if not ReleaseFile.is_release_file(path))
     remote_only_folders = sorted(
         existing_folders - local_folder_paths,
         key=lambda path: (path.count("/"), path),
