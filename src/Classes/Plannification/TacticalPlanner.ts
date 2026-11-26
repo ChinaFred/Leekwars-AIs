@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 26
+// file version: 27
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
-import { ShotCandidate, baseMeanDamage, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
+import { ShotCandidate, baseMeanDamage, chipUsesOf, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import {
@@ -167,8 +167,9 @@ function attackChoices(
 }
 
 /**
- * Sac à dos borné : chaque puce au plus une fois, tous les nombres de tirs permis.
- * Une entrée par coût EXACT ; aucune comparaison gloutonne dégâts/PT.
+ * Sac à dos borné : chaque puce au plus `uses` fois (1 avec un cooldown de base, voir `chipUsesOf`), tous les
+ * nombres de tirs permis. Une entrée par coût EXACT ; aucune comparaison gloutonne dégâts/PT. Une puce lancée
+ * N fois figure N fois dans `chips` ; elle coûte au plus floor(PT / coût) passes sur la table.
  */
 function attacks(
 	tp: number, weapon: ShotCandidate | null, chips: readonly ShotCandidate[], target: Entity, budget: Budget
@@ -186,20 +187,26 @@ function attacks(
 		}
 	}
 	for (const chip of chips) {
-		const next = states.slice()
 		const impact = netDamage(chip, target)
-		for (let cost = 0; cost + chip.cost <= tp; cost++) {
-			budget.tick()
-			const state = states[cost]
-			if (state === undefined) continue
-			const damage = state.damage + impact
-			if (damage > (next[cost + chip.cost]?.damage ?? -1)) {
-				next[cost + chip.cost] = {
-					damage, weaponShots: state.weaponShots, chips: [...state.chips, chip.item as Chip]
+		const casts = Math.min(chip.uses, Math.floor(tp / chip.cost))
+		for (let cast = 0; cast < casts; cast++) {
+			const next = states.slice()
+			let improved = false
+			for (let cost = 0; cost + chip.cost <= tp; cost++) {
+				budget.tick()
+				const state = states[cost]
+				if (state === undefined) continue
+				const damage = state.damage + impact
+				if (damage > (next[cost + chip.cost]?.damage ?? -1)) {
+					next[cost + chip.cost] = {
+						damage, weaponShots: state.weaponShots, chips: [...state.chips, chip.item as Chip]
+					}
+					improved = true
 				}
 			}
+			if (!improved) break
+			states = next
 		}
-		states = next
 	}
 	return states
 }
@@ -1211,17 +1218,21 @@ function execute(me: Me, plan: TacticalPlan): void {
 		if (!same(me.cell, plan.shotCell)) { interrupted("shot cell not reached"); return }
 	}
 	if (!currentState()) { interrupted("enemy positions/turn changed after approach; stop"); return }
-	const used = new Set<Chip>()
+	// Lancers déjà tentés par puce : une puce sans cooldown de base peut être relancée (`chipUsesOf`), les autres non.
+	const casts = new Map<Chip, number>()
 	const cast = (chip: Chip, target: Entity, name: string): void => {
 		if (!available()) return
-		if (me.life > 0 && target.life > 0 && !used.has(chip) && me.chips.includes(chip) &&
-			chip.currentCooldown === 0 && maxUsesOf(chip) > 0 && me.tp >= chip.cost &&
+		if (me.life > 0 && target.life > 0 && (casts.get(chip) ?? 0) < chipUsesOf(chip) && me.chips.includes(chip) &&
+			chip.currentCooldown === 0 && me.tp >= chip.cost &&
 			me.canUseChip(chip, target)) {
-			used.add(chip)
+			casts.set(chip, (casts.get(chip) ?? 0) + 1)
 			phase(me, name, () => ({ chip: chip.name, target: target.id, tpCost: chip.cost }))
 			if (!available()) return
 			const result = track(me, chip, target, () => me.useChip(chip, target))
-			if (!(result > 0)) interrupted(`chip refused: ${chip.name}, result ${result}`)
+			if (!(result > 0)) {
+				casts.set(chip, Infinity) // refus natif : aucun autre lancer de cette puce n'est tenté
+				interrupted(`chip refused: ${chip.name}, result ${result}`)
+			}
 		} else interrupted(`chip unavailable: ${chip.name}`)
 	}
 	// Boost avant tout le reste : les PT et la force qu'il donne servent aux actions suivantes du même plan.

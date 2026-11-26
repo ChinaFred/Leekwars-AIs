@@ -182,15 +182,19 @@ const done = () => { delete globalThis.System }
 // (avant : aucun boost dans le plan, score 2/3/1/1 aux tours 3-4, deux tirs de shotgun ou repli + helmet au tour 5,
 // neutrino + rock au tour 6). À pleine vie, helmet n'est plus candidat ; protein (+90 force, 2 tours) et motivation
 // (+2 PT, 3 tours) sont crédités de leurs tours suivants. Les optimisations d'opérations ne changent aucune décision.
+// Relevées de nouveau quand la carte de danger a compté plusieurs fois les puces sans cooldown de l'ennemi (shock, ice),
+// avec le maximum exact arme + puces : tour 6, danger 90,88 -> 92,16 (score 46,62 -> 45,34), décision inchangée ; tour 5,
+// danger de la case 217 : 124,5 -> 154,38. À 4 PM le tir est gardé (score 13 -> -16,88) ; à 5 PM la DÉCISION CHANGE :
+// avant, neutrino depuis 217 (score 13) ; maintenant protein seul et repli en 74 (danger 59,76, score -8,46).
 const EXPECTED = {
 	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.3, tpUsed: 3, boost: ["protein"] },
 	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 54.3, tpUsed: 3, boost: ["protein"] },
 	"4PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
 	"5PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
-	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
-	"5PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
-	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 90.88, score: 46.62, tpUsed: 12, boost: ["motivation", "protein"] },
-	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 90.88, score: 46.62, tpUsed: 12, boost: ["motivation", "protein"] }
+	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 154.38, score: -16.88, tpUsed: 12, boost: ["motivation", "protein"] },
+	"5PM T5 164/218": { destination: 74, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 59.76, score: -8.46, tpUsed: 3, boost: ["protein"] },
+	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 45.34, tpUsed: 12, boost: ["motivation", "protein"] },
+	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 45.34, tpUsed: 12, boost: ["motivation", "protein"] }
 }
 
 test("combat 54942202 at 4 and 5 MP: the tactical decisions are exactly the recorded ones (boost in the plan)", () => {

@@ -38,8 +38,8 @@ chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par z
 aucune case de ma zone n'est à portée de Manhattan de la cible n'appelle pas le fournisseur natif. Une puce
 offensive n'est créditée que si `me.canUseChip` est vrai depuis la case actuelle.
 
-**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs →
-déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait.
+**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs → déplacement
+final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce offensive au cooldown de base nul (`Chip.cooldown`, `chipUsesOf`) est planifiée et relancée tant que `maxUses` et les PT le permettent ; sinon 1 fois.
 
 ### Score et compromis explicite
 
@@ -118,7 +118,7 @@ Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou 
 1. Bornes `RESERVE_LIMITS` : 4 ennemis, 4 armes (équipée d'abord), 8 puces, BFS de 500 cases, liste native de
    613 cases. Recherche limitée à **3 %** des opérations depuis son entrée et aux 80 % globaux.
 2. Attaque : **coût d'approche minimal** ; à coût égal, maximiser `min(PV cible, dégâts × tirs) − w × danger`.
-   Un seul item offensif ; une puce offensive seulement si elle est utilisable depuis la case actuelle.
+   Un seul item offensif ; une puce offensive seulement si elle est utilisable depuis la case actuelle (relancée tant que les PT le permettent si son cooldown de base est nul).
    Boost décidé ensuite, avant l'exécution, annoncé dans le plan et lancé avant l'attaque (voir « Boosts »).
 3. Sans attaque : progression ou couvert si `G − w × danger` bat le score de rester ; danger inconnu → seul un
    progrès strictement positif.
@@ -212,7 +212,7 @@ Pour chaque case que je peux atteindre : somme, sur les ennemis, de leurs meille
   une arme par plan, 4 au plus par ennemi (`MAX_THREAT_WEAPONS`).
 - **Dégâts** : moyenne des effets `DAMAGE` × (1 + force/100) ; tirs = `floor(PT / coût)` plafonné par `maxUses`.
   Valeur brute : sans critique, ni mes boucliers, ni ma résistance.
-- **Puces** : offensives, prêtes selon la mémoire, chacune une fois ; ajoutées si leur ratio dégâts/PT bat l'arme.
+- **Puces** : offensives, prêtes selon la mémoire ; cooldown de base nul : autant de fois que PT et `maxUses` le permettent, sinon une fois. Maximum exact des dégâts arme + puces dans les PT (`planShots`) ; le plan « puces seules » (sans PT de changement d'arme) concourt toujours.
 - **Boosts adverses** : jusqu'à 3 puces de force ou de PT (`MAX_THREAT_BOOSTS`) lancées avant de tirer.
 - **Portée** : l'ennemi se déplace (PM maximaux vus) puis tire ; distance, motif de lancer, puis ligne de vue si
   l'item l'exige. La valeur d'une case est le maximum sur ses cases de tir.
@@ -237,7 +237,7 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 
 ## Limites connues
 
-- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir.
+- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage.
 - Non simulés : zones d'effet, poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
 - Les coûts en opérations sont estimés, pas mesurés sur le moteur ; une primitive native peut franchir un plafond

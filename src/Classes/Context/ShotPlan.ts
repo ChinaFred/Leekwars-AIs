@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
@@ -135,6 +135,16 @@ export function maxUsesOf(item: ShotItem): number {
 	return Math.floor(maxUses)
 }
 
+/**
+ * Lancers d'une puce dans un même tour : `maxUsesOf` si son cooldown de BASE (`Chip.cooldown`, distinct de
+ * `currentCooldown`) vaut 0 ; sinon 1 (0 si `maxUses` vaut 0). Cooldown de base inconnu (absent, non numérique)
+ * ou infini (< 0) : 1, lecture prudente. Combat 54965081 : l'ennemi lance deux fois la même puce dans un tour.
+ */
+export function chipUsesOf(chip: Chip): number {
+	const limit = maxUsesOf(chip)
+	return chip.cooldown === 0 ? limit : Math.min(1, limit)
+}
+
 /** Un item offensif prêt à être planifié (valeurs déjà calculées une fois par ennemi). */
 export interface ShotCandidate {
 	readonly item: ShotItem
@@ -143,7 +153,7 @@ export interface ShotCandidate {
 	readonly damage: number
 	/** Coût en PT (> 0 et fini). */
 	readonly cost: number
-	/** Utilisations maximales dans un plan : arme = `maxUsesOf` ; puce = 1 (0 si `maxUses` vaut 0). */
+	/** Utilisations maximales dans un plan : arme = `maxUsesOf` ; puce = `chipUsesOf`. Peut valoir Infinity. */
 	readonly uses: number
 	/** Dégâts par PT. */
 	readonly ratio: number
@@ -151,9 +161,8 @@ export interface ShotCandidate {
 
 /**
  * Candidat offensif, ou null s'il n'a aucun dégât, un coût invalide (≤ 0 ou non fini : évite les divisions
- * par zéro et les tirs infinis) ou aucune utilisation permise. Une puce n'est utilisée qu'une fois par plan
- * (hypothèse : lecture prudente de « une puce n'est utilisée qu'une fois par tour »), quel que soit son
- * cooldown ; `maxUses` = 0 l'exclut.
+ * par zéro et les tirs infinis) ou aucune utilisation permise. Une puce sans cooldown de base est utilisable
+ * plusieurs fois par plan, les autres une seule (`chipUsesOf`) ; `maxUses` = 0 l'exclut.
  */
 export function toCandidate(item: ShotItem, isChip: boolean, strength: number): ShotCandidate | null {
 	const damage = meanDamage(item, strength)
@@ -161,8 +170,7 @@ export function toCandidate(item: ShotItem, isChip: boolean, strength: number): 
 	if (!(damage > 0) || !Number.isFinite(cost) || cost <= 0) {
 		return null
 	}
-	const limit = maxUsesOf(item)
-	const uses = isChip ? Math.min(1, limit) : limit
+	const uses = isChip ? chipUsesOf(item as Chip) : maxUsesOf(item)
 	if (uses <= 0) {
 		return null
 	}
@@ -183,6 +191,7 @@ export interface ShotPlan {
 	readonly damage: number
 	readonly weapon: Weapon | null
 	readonly weaponShots: number
+	/** Une entrée par lancer : une puce sans cooldown peut y figurer plusieurs fois. */
 	readonly chips: readonly Chip[]
 	/** PT dépensés par le plan. */
 	readonly tpUsed: number
@@ -190,64 +199,87 @@ export interface ShotPlan {
 
 export const EMPTY_PLAN: ShotPlan = { damage: 0, weapon: null, weaponShots: 0, chips: [], tpUsed: 0 }
 
-function weaponShotsWith(tp: number, weapon: ShotCandidate): number {
-	return Math.min(Math.floor(tp / weapon.cost), weapon.uses)
+/** État du sac à dos pour un coût EXACT : dégâts, tirs d'arme, et dernier groupe de lancers d'une puce (chaîné). */
+interface ShotState {
+	readonly damage: number
+	readonly shots: number
+	readonly chip: Chip | null
+	readonly casts: number
+	readonly previous: ShotState | null
 }
 
 /**
  * Meilleur plan pour `tp` PT avec les seuls items UTILISABLES depuis la case de tir considérée.
  *
- * - `weapon` : l'arme équipée si elle touche la cible depuis cette case, sinon null.
- * - `chips` : puces offensives prêtes qui touchent la cible depuis cette case, DÉJÀ triées par `sortByRatio`.
+ * - `weapon` : l'arme si elle touche la cible depuis cette case, sinon null.
+ * - `chips` : puces offensives prêtes qui touchent la cible depuis cette case.
  *
- * Plan « arme seule » : floor(tp / coût) tirs plafonnés par `uses`. Plan « avec puces » : si l'arme est
- * utilisable, seules les puces dont dégâts/PT > dégâts/PT de l'arme sont retenues ; elles sont prises dans
- * l'ordre (dégâts/PT décroissant) tant qu'elles tiennent dans les PT restants (glouton, pas d'optimum
- * exact), chacune au plus une fois ; les PT restants financent des tirs d'arme (si utilisable). Le
- * meilleur des deux plans est renvoyé (à égalité : arme seule), donc jamais moins que l'arme seule.
+ * Maximum EXACT des dégâts (sac à dos borné sur les PT, une entrée par coût exact) : tirs d'arme ≤ `uses`,
+ * lancers de chaque puce ≤ `uses` (1 avec un cooldown de base, voir `chipUsesOf`). Jamais moins que l'arme seule
+ * ni qu'une puce de chaque. À dégâts égaux : le moins de PT, puis l'arme et les premières puces de la liste.
+ * Un item au coût non entier est ignoré (les coûts du jeu sont entiers). Coût : Σ puces PT × lancers possibles.
  */
 export function planShots(tp: number, weapon: ShotCandidate | null, chips: readonly ShotCandidate[]): ShotPlan {
 	const budget = Number.isFinite(tp) && tp > 0 ? Math.floor(tp) : 0
-	let weaponOnly = EMPTY_PLAN
-	if (weapon !== null) {
-		const shots = weaponShotsWith(budget, weapon)
-		if (shots > 0) {
-			weaponOnly = {
-				damage: shots * weapon.damage,
-				weapon: weapon.item as Weapon,
-				weaponShots: shots,
-				chips: [],
-				tpUsed: shots * weapon.cost
-			}
+	let states: Array<ShotState | undefined> = new Array(budget + 1)
+	states[0] = { damage: 0, shots: 0, chip: null, casts: 0, previous: null }
+	if (weapon !== null && Number.isInteger(weapon.cost)) {
+		const limit = Math.min(Math.floor(budget / weapon.cost), weapon.uses)
+		for (let shots = 1; shots <= limit; shots++) {
+			states[shots * weapon.cost] = { damage: shots * weapon.damage, shots, chip: null, casts: 0, previous: null }
 		}
 	}
-
-	let remaining = budget
-	let chipDamage = 0
-	const picked: Chip[] = []
 	for (const chip of chips) {
-		if (weapon !== null && !(chip.ratio > weapon.ratio)) {
+		const cost = chip.cost
+		if (!Number.isInteger(cost) || cost > budget) {
 			continue
 		}
-		if (chip.cost <= remaining) {
-			picked.push(chip.item as Chip)
-			chipDamage += chip.damage
-			remaining -= chip.cost
+		const limit = Math.min(Math.floor(budget / cost), chip.uses)
+		const next = states.slice()
+		for (let spent = cost; spent <= budget; spent++) {
+			let best = states[spent]
+			for (let casts = 1; casts <= limit && casts * cost <= spent; casts++) {
+				const previous = states[spent - casts * cost]
+				if (previous === undefined) {
+					continue
+				}
+				const damage = previous.damage + casts * chip.damage
+				if (best === undefined || damage > best.damage) {
+					best = { damage, shots: previous.shots, chip: chip.item as Chip, casts, previous }
+				}
+			}
+			next[spent] = best
+		}
+		states = next
+	}
+	let best = states[0]!
+	let tpUsed = 0
+	for (let spent = 1; spent <= budget; spent++) {
+		const state = states[spent]
+		if (state !== undefined && state.damage > best.damage) {
+			best = state
+			tpUsed = spent
 		}
 	}
-	if (picked.length === 0) {
-		return weaponOnly
+	if (!(best.damage > 0)) {
+		return EMPTY_PLAN
 	}
-	const shots = weapon === null ? 0 : weaponShotsWith(remaining, weapon)
-	const combinedDamage = chipDamage + (weapon === null ? 0 : shots * weapon.damage)
-	if (combinedDamage > weaponOnly.damage) {
-		return {
-			damage: combinedDamage,
-			weapon: shots > 0 && weapon !== null ? (weapon.item as Weapon) : null,
-			weaponShots: shots,
-			chips: picked,
-			tpUsed: budget - remaining + (weapon === null ? 0 : shots * weapon.cost)
+	const groups: ShotState[] = []
+	for (let state: ShotState | null = best; state !== null; state = state.previous) {
+		groups.push(state)
+	}
+	const picked: Chip[] = []
+	for (let i = groups.length - 1; i >= 0; i--) {
+		const group = groups[i]!
+		for (let cast = 0; cast < group.casts && group.chip !== null; cast++) {
+			picked.push(group.chip)
 		}
 	}
-	return weaponOnly
+	return {
+		damage: best.damage,
+		weapon: best.shots > 0 && weapon !== null ? (weapon.item as Weapon) : null,
+		weaponShots: best.shots,
+		chips: picked,
+		tpUsed
+	}
 }
