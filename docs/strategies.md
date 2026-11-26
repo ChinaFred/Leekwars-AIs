@@ -19,7 +19,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 4. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
    (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
-Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, boosts de force et de PT compris ; hors du
+Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, boosts de force, de PT et d'agilité compris ; hors du
 plan, `turn()` ne lance que le boost de PM (il en change les entrées). Exécution commencée, aucun second plan : un échec l'arrête.
 
 **Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ;
@@ -38,7 +38,7 @@ pas d'appel natif si aucune case de ma zone n'est à portée de Manhattan de la 
 leurs cases atteignables (déplacement puis tir). Puce écartée si `me.canUseChip` la refuse alors que ma case est dans sa liste
 (restriction inconnue) ; jamais tirée d'une case de sa zone d'effet si un effet peut toucher le lanceur (`selfHitRadius`).
 
-**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs → déplacement
+**Ordre exécuté** : approche → boost (PT, force, agilité) → protection → équipement → puces offensives → tirs → déplacement
 final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce offensive au cooldown de base nul (`Chip.cooldown`, `chipUsesOf`) est planifiée et relancée tant que `maxUses` et les PT le permettent ; sinon 1 fois.
 Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
 
@@ -133,7 +133,7 @@ Passé 80 % d'opérations au départ, le plan B tourne en mode dégradé (8 prem
 Une puce est un boost de force (`BUFF_STRENGTH`, ou effet 38), de PT (`BUFF_TP`, 32) ou de PM (`BUFF_MP`, 31) : au plus une
 par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Force et PT : **composante du plan**, PT d'abord.
 
-- **Plan conjoint** : 4 variantes au plus (aucun, PT, force, les deux). PT du plan = PT − coûts + PT gagnés
+- **Plan conjoint** : 4 variantes au plus (aucun, PT, force, les deux ; une seule sans boost prêt). PT du plan = PT − coûts + PT gagnés
   (partie entière du gain moyen) ; dégâts calculés avec la force boostée : le gain de ce tour est dans `U`.
   `F` = `FUTURE_TURN_WEIGHT` (0,75) × (durée − 1) tours pleins de l'arme du plan (force : gain % des dégâts de base ;
   PT : tirs entiers en plus), plafonné par 0,75 × les PV restants de la cible : un boost ne bat jamais le coup fatal.
@@ -141,7 +141,7 @@ par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Fo
   `F > 0` (durée ≥ 2) et si l'ennemi le plus proche est à portée max de mes armes + 2 × mes PM + ses PM.
 - **Plan B** : avec un tir d'arme, gain net du modèle à une arme (`boostNetDamage`, `tpBoostNetDamage`) > 0 et PV ≥ 50 % ;
   les tirs prévus sont réduits d'autant. Sinon, règle « sans tir » avec les PT que ni l'attaque ni les supports n'emploient.
-- Sans boost de force ou de PT prêt, la recherche ne fait aucun travail de plus (une seule variante).
+- **Agilité, boost de remplissage** (`withAgilityFill`, `pickAgilityBoost` ; `BUFF_AGILITY` ou effet 41, dont Étirement) : ajouté au plan conjoint **retenu**, hors score et hors recherche, si les PT que le plan n'emploie pas (PT − dépensés, sans les PT attendus d'un boost de PT ; − 1 PT gardé pour l'arme du tour 1) couvrent son coût, sans effet d'agilité actif, gain ≥ 1, `canUseChip` sur moi, et si le plan attaque ce tour ou (durée ≥ 2 et ennemi à la portée « sans tir » ci-dessus). Lancé après PT et force, avant protection et tirs ; pas de seuil de PV ; jamais en plan B.
 - **Boost de PM** (`decideMpBoost`, avant le plan ; gain = partie entière ≥ 1), si tout est vrai : PV ≥ 50 % ; cases du tour
   non tronquées, sans case de tir native d'une arme ou puce offensive prête payable ; zone à PM + gain non tronquée, ≤ 113 cases
   (sinon plan B), avec une case de tir d'une arme payable après le boost (+ 1 PT si non équipée) ; opérations < 80 %.
@@ -239,7 +239,7 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 
 - Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
 - Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
-  combat), poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
+  combat), poison, vol de vie, critiques (agilité / 1000, × 1,3 : absents du score, gain de l'agilité non mesuré), arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
 - Les coûts en opérations sont estimés, pas mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces (`Effect.turns` = 1 : dernier tour), cooldown de base 1 = puce prête au tour suivant, détection `instanceof Chest`.

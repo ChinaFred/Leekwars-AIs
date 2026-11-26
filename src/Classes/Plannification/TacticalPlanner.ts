@@ -10,8 +10,8 @@ import {
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import {
-	BoostOption, FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST, boostReach, pickBoost, pickTpBoost, strengthBoostFutureDamage,
-	tpBoostFutureDamage
+	BoostOption, FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST, boostReach, pickAgilityBoost, pickBoost, pickTpBoost,
+	strengthBoostFutureDamage, tpBoostFutureDamage
 } from "../../Brain/StrengthBoost.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
@@ -49,7 +49,7 @@ export interface TacticalPlan {
 	readonly weaponShots: number
 	readonly chips: readonly Chip[]
 	readonly protection: readonly Chip[]
-	/** Boosts lancés avant la protection (PT puis force) ; `tpGain` : PT que le plan compte recevoir du boost de PT. */
+	/** Boosts lancés avant la protection (PT, force, puis agilité de remplissage) ; `tpGain` : PT que le plan compte recevoir du boost de PT. */
 	readonly boost?: { readonly chips: readonly Chip[]; readonly tpGain: number }
 	/** PT dépensés, boosts compris (les PT gagnés ne sont pas déduits). */
 	readonly tpUsed: number
@@ -765,6 +765,45 @@ function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 }
 
 /**
+ * Boost d'agilité « de remplissage », ajouté au plan RETENU (après la recherche : ni score, ni comparaison, ni
+ * variante de plus). Lancé seulement avec les PT que le plan n'emploie pas (PT − `tpUsed`, SANS les PT attendus d'un
+ * boost de PT : s'ils n'arrivent pas, aucun tir prévu n'est perdu), moins 1 PT gardé pour `equipOpeningWeapon` au
+ * tour 1 si le plan n'équipe pas d'arme : il ne prend jamais de PT à un tir, une protection ou un autre boost.
+ * Facultatif : toute erreur rend le plan inchangé. Il doit pouvoir servir : le plan attaque ce tour (les critiques des tirs en
+ * profitent, il est lancé avant), ou l'effet couvre le tour suivant (durée ≥ 2) et l'ennemi le plus proche est à
+ * portée `boostReach` (critère du boost « sans tir »). Pas de seuil de PV : ces PT seraient perdus.
+ */
+function withAgilityFill(me: Me, plan: TacticalPlan, enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }>): TacticalPlan {
+	try {
+		return agilityFill(me, plan, enemies)
+	} catch {
+		return plan
+	}
+}
+
+function agilityFill(me: Me, plan: TacticalPlan, enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }>): TacticalPlan {
+	if (typeof me.canUseChip !== "function") return plan
+	const reserve = Fight.turn === 1 && me.weapon === null && plan.weapon === null && (me.weapons ?? []).length > 0 ? 1 : 0
+	const option = pickAgilityBoost(me, me.tp - plan.tpUsed - reserve)
+	if (option === null) return plan
+	if (plan.weaponShots === 0 && plan.chips.length === 0) {
+		if (option.turns < 2) return plan
+		let closest: Entity | null = null
+		let closestDistance = Infinity
+		for (const { enemy, cell } of enemies) {
+			const range = Math.abs(me.cell.x - cell.x) + Math.abs(me.cell.y - cell.y)
+			if (range < closestDistance) { closest = enemy; closestDistance = range }
+		}
+		if (closest === null || closestDistance > boostReach(me, closest)) return plan
+	}
+	if (!me.canUseChip(option.chip, me)) return plan
+	return {
+		...plan, tpUsed: plan.tpUsed + option.chip.cost,
+		boost: { chips: [...(plan.boost?.chips ?? []), option.chip], tpGain: plan.boost?.tpGain ?? 0 }
+	}
+}
+
+/**
  * Phase pure côté combat : aucun PT/PM dépensé. Une carte complète reste une estimation incomplète
  * des menaces (voir strategies.md), jamais une preuve de sécurité ou de meurtre.
  */
@@ -781,7 +820,7 @@ export function evaluateTacticalPlans(
 		same(me.cell, preparation.origin) && me.mp === preparation.mp && me.tp === preparation.tp &&
 		preparation.enemies.every(({ enemy, cell }) => same(enemy.cell, cell))
 	const stamp = (plan: TacticalPlan | null): TacticalPlan | null => plan && {
-		...plan, state: { turn: preparation.turn, enemies: preparation.enemies }
+		...withAgilityFill(me, plan, preparation.enemies), state: { turn: preparation.turn, enemies: preparation.enemies }
 	}
 	try {
 		const skipped: Skipped = { refused: 0, noProgress: null }
@@ -1548,7 +1587,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 			}
 		} else interrupted(`chip unavailable: ${chip.name}`)
 	}
-	// Boost avant tout le reste : les PT et la force qu'il donne servent aux actions suivantes du même plan.
+	// Boost avant tout le reste : les PT, la force et l'agilité (critiques) qu'il donne servent aux actions suivantes du même plan.
 	for (const chip of plan.boost?.chips ?? []) cast(chip, me, "boost")
 	for (const chip of plan.protection) cast(chip, me, "protection")
 	if (!available()) return

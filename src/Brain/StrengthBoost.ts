@@ -1,8 +1,11 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
+	agilityBoostOf,
+	agilityBoostTurns,
 	baseMeanDamage,
+	isAgilityBoostType,
 	isMpBoostType,
 	isStrengthBoostType,
 	isTpBoostType,
@@ -121,6 +124,34 @@ export function pickMpBoost(me: Me, tp: number): BoostOption | null {
 		}
 		if (best === null || gain > best.gain) {
 			best = { chip, gain, turns: mpBoostTurns(chip) }
+		}
+	}
+	return best
+}
+
+/** Un boost d'agilité est-il déjà actif sur moi (effet d'agilité non expiré) ? */
+export function hasActiveAgilityBoost(me: Me): boolean {
+	return (me.effects ?? []).some((effect) => isAgilityBoostType(effect.type) && effect.turns > 0)
+}
+
+/**
+ * Le boost d'agilité prêt au plus grand gain, abordable avec `tp` PT ; null sinon, ou si un boost d'agilité est actif.
+ * `gain` = agilité entière (partie entière du gain moyen). Valeur attendue faible : + gain / 1000 de chance de critique,
+ * soit + gain × 0,03 % de dégâts moyens (critique × 1,3) ; le plan ne le lance qu'avec des PT sans emploi.
+ */
+export function pickAgilityBoost(me: Me, tp: number): BoostOption | null {
+	let best: BoostOption | null = null
+	if (hasActiveAgilityBoost(me)) {
+		return best
+	}
+	for (const chip of me.chips ?? []) {
+		const gain = Math.floor(agilityBoostOf(chip, me.science ?? 0))
+		if (!(gain >= 1) || !Number.isInteger(chip.cost) || chip.cost <= 0 || chip.cost > tp ||
+			chip.currentCooldown !== 0) {
+			continue
+		}
+		if (best === null || gain > best.gain) {
+			best = { chip, gain, turns: agilityBoostTurns(chip) }
 		}
 	}
 	return best

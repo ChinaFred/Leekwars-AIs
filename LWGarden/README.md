@@ -85,8 +85,9 @@ ne supprime jamais rien côté serveur, refuse des sources différentes du derni
 enregistre la publication. Codes de sortie : `0` déployé ou déjà à jour, `1` échec,
 `2` clé absente ou refusée, `3` sources modifiées.
 
-Le workflow `.github/workflows/deploy-leek.yml` l'utilise : il se déclenche sur un tag
-`leek-*` (ou à la main dans l'onglet Actions), lance les tests, déploie, puis committe
+Le workflow `.github/workflows/deploy-leek.yml` l'utilise : il se déclenche à la main dans
+l'onglet Actions (ou sur un tag `leek-*` poussé), lance les tests, déploie, pose le tag
+`leek-AAAAMMJJ-HHMM` du déploiement s'il a été lancé à la main, puis committe
 `Data/publications.json` sur la branche par défaut. Il lui faut le secret
 `LEEKWARS_API_KEY` du dépôt GitHub.
 
