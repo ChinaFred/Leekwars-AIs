@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
@@ -124,6 +124,48 @@ export function mpBoostTurns(chip: Chip): number {
 	let turns = 0
 	for (const feature of chip.features ?? []) {
 		if (isMpBoostType(feature.type)) {
+			turns = Math.max(turns, Number.isFinite(feature.turns) ? feature.turns : 0)
+		}
+	}
+	return turns
+}
+
+/**
+ * Identifiant officiel de l'effet « agilité brute » (TYPE_RAW_BUFF_AGILITY = 41, `Effect.java` du générateur ;
+ * c'est l'effet de la puce Étirement) si l'API ne le nomme pas.
+ */
+const RAW_BUFF_AGILITY_ID = 41
+
+/** La feature est-elle un boost d'agilité (`BUFF_AGILITY`, amplifié par la science, ou `RAW_BUFF_AGILITY`, non amplifiable) ? */
+export function isAgilityBoostType(type: number): boolean {
+	return type === Effect.BUFF_AGILITY || type === (Effect.RAW_BUFF_AGILITY ?? RAW_BUFF_AGILITY_ID)
+}
+
+/**
+ * Agilité supplémentaire qu'apporte une puce de boost d'agilité lancée sur soi : moyenne des features `BUFF_AGILITY`
+ * (× (1 + science / 100)) et `RAW_BUFF_AGILITY`. 0 si la puce ne donne pas d'agilité. Moteur officiel : chance de
+ * critique = agilité / 1000, un critique multiplie l'effet par 1,3 (`CRITICAL_FACTOR`).
+ */
+export function agilityBoostOf(chip: Chip, science: number): number {
+	const raw = Effect.RAW_BUFF_AGILITY ?? RAW_BUFF_AGILITY_ID
+	const amplifier = 1 + (Number.isFinite(science) && science > 0 ? science : 0) / 100
+	let gain = 0
+	for (const feature of chip.features ?? []) {
+		const mean = (feature.minValue + feature.maxValue) / 2
+		if (feature.type === Effect.BUFF_AGILITY) {
+			gain += mean * amplifier
+		} else if (feature.type === raw) {
+			gain += mean
+		}
+	}
+	return gain > 0 ? gain : 0
+}
+
+/** Durée en tours (la plus longue) des features de boost d'agilité d'une puce ; 0 si elle n'en a pas. */
+export function agilityBoostTurns(chip: Chip): number {
+	let turns = 0
+	for (const feature of chip.features ?? []) {
+		if (isAgilityBoostType(feature.type)) {
 			turns = Math.max(turns, Number.isFinite(feature.turns) ? feature.turns : 0)
 		}
 	}
