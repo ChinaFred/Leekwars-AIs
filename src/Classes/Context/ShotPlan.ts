@@ -91,6 +91,45 @@ export function tpBoostOf(chip: Chip, science: number): number {
 	return gain > 0 ? gain : 0
 }
 
+/** Identifiant officiel de l'effet « PM bruts » (TYPE_RAW_BUFF_MP = 31, `Effect.java` du générateur) si l'API ne le nomme pas. */
+const RAW_BUFF_MP_ID = 31
+
+/** La feature est-elle un boost de PM (`BUFF_MP`, amplifié par la science, ou `RAW_BUFF_MP`, non amplifiable) ? */
+export function isMpBoostType(type: number): boolean {
+	return type === Effect.BUFF_MP || type === (Effect.RAW_BUFF_MP ?? RAW_BUFF_MP_ID)
+}
+
+/**
+ * PM supplémentaires qu'apporte une puce de boost de PM lancée sur soi : moyenne des features `BUFF_MP`
+ * (× (1 + science / 100)) et `RAW_BUFF_MP`. 0 si la puce ne donne pas de PM. Le moteur arrondit au plus proche ;
+ * l'appelant prend la partie entière (sous-estimation prudente).
+ */
+export function mpBoostOf(chip: Chip, science: number): number {
+	const raw = Effect.RAW_BUFF_MP ?? RAW_BUFF_MP_ID
+	const amplifier = 1 + (Number.isFinite(science) && science > 0 ? science : 0) / 100
+	let gain = 0
+	for (const feature of chip.features ?? []) {
+		const mean = (feature.minValue + feature.maxValue) / 2
+		if (feature.type === Effect.BUFF_MP) {
+			gain += mean * amplifier
+		} else if (feature.type === raw) {
+			gain += mean
+		}
+	}
+	return gain > 0 ? gain : 0
+}
+
+/** Durée en tours (la plus longue) des features de boost de PM d'une puce ; 0 si elle n'en a pas. */
+export function mpBoostTurns(chip: Chip): number {
+	let turns = 0
+	for (const feature of chip.features ?? []) {
+		if (isMpBoostType(feature.type)) {
+			turns = Math.max(turns, Number.isFinite(feature.turns) ? feature.turns : 0)
+		}
+	}
+	return turns
+}
+
 /** Durée en tours (la plus longue) des features de boost de PT d'une puce ; 0 si elle n'en a pas. */
 export function tpBoostTurns(chip: Chip): number {
 	let turns = 0

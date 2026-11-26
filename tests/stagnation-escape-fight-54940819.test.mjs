@@ -151,7 +151,7 @@ test("safety first: no escape into a cell more dangerous than the current one, a
 	assert.ok(plan === null || tolerated.threat.dangerAt(plan.destination) <= 30)
 })
 
-test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not reset), crosses the danger frontier at 16 (nil risk weight), shoots at 17", () => {
+test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not reset), crosses the danger frontier at 16 (nil risk weight) and shoots there", () => {
 	const tracker = new StagnationTracker()
 	seen(tracker, 11, KASSBI_BEFORE)
 	let position = KASSBI_STUCK
@@ -173,9 +173,10 @@ test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not re
 	assert.ok(walks[2] < walks[1] && walks[3] < walks[2], "each escape shortens the walking distance")
 	assert.equal(walks[3], 4, "81: 4 PM from the ice firing cells, whose danger is modeled 114-162")
 	// Avant la baisse du poids du risque : maintien en 81 jusqu'à la fin (refus de combat). Tour 16 : 4 tours passifs,
-	// poids nul, la sortie franchit la frontière (danger sous mes 339 PV) ; tour 17 : premier tir.
+	// poids nul, la frontière est franchie (danger sous mes 339 PV). Depuis qu'une puce est créditée après déplacement,
+	// ce tour-là est un plan de tir (4 PM jusqu'à 48 puis ice) ; avant, sortie au tour 16 et premier tir au tour 17.
 	assert.ok(trace[4].walk < 4 && trace[4].danger > 0 && trace[4].danger < 339, `turn 16 enters the non-lethal danger zone: ${JSON.stringify(trace[4])}`)
-	assert.equal(trace.find(({ shot }) => shot)?.turn, 17, "first shot planned at turn 17")
+	assert.equal(trace.find(({ shot }) => shot)?.turn, 16, "first shot planned at turn 16")
 })
 
 test("a 187 <-> 133 oscillation through the full planAct (tactical then reserve) reaches the threshold and is broken", () => {
@@ -201,6 +202,17 @@ test("a 187 <-> 133 oscillation through the full planAct (tactical then reserve)
 	assert.equal(new Set(tail).size, 1, `no more oscillation, tail ${tail}`)
 })
 
+// RÉGRESSION (Testeur) : une case de tir de PUCE atteignable (ice depuis 432, tir décliné : trop dangereux) coupait le
+// trajet futur vers les cases de tir d'ARME ; la progression retombait sur Manhattan et le plan retenu était vide (432>432).
+test("a reachable but declined chip shot keeps the safe advance along the future weapon route (432 -> 379)", () => {
+	const w = world({ turn: 2, k: 432, e: 262, enemyLife: 60 })
+	const { plan } = quiet(() => w.evaluate())
+	assert.deepEqual([plan.destination.id, plan.afterMp, plan.danger, plan.chips.length, plan.weaponShots], [379, 3, 0, 0, 0])
+	assert.equal(plan.progressModel, "future firing route")
+	quiet(() => executeTacticalPlan(w.me, plan))
+	assert.deepEqual(w.me.events, ["move:379"])
+})
+
 test("a shot resets the counter: the rule stays off after damage was dealt", () => {
 	const tracker = stalled(2)
 	seen(tracker, 15, KASSBI_STUCK, 38) // dv3 a perdu des PV
@@ -216,7 +228,9 @@ test("an enemy in a firing zone resets the counter and the normal attack is unch
 	assert.equal(tracker.active, true)
 	const w = world({ turn: 7, k: 310, e: 262, enemyLife: 195, stagnation: tracker })
 	const result = w.evaluate()
-	assert.equal(result.plan.weaponShots, 2, "same two-shot attack as the real turn 7 (approach 364, retreat 346)")
+	// Tour 7 réel : deux tirs (82,5). rock (2-6, hors de portée de 310) est désormais créditée depuis 364 : un tir + rock (83,6).
+	assert.deepEqual([result.plan.weaponShots, result.plan.chips.map((chip) => chip.name)], [1, ["rock"]],
+		"same approach 364 and retreat 346 as the real turn 7")
 	assert.equal(result.plan.shotCell.id, 364)
 	assert.equal(result.plan.progressModel, undefined)
 	assert.equal(tracker.turns, 0, "offense available: stagnation counter reset")
@@ -310,11 +324,15 @@ test("property: over a fixed sample of starts and four static enemy positions, t
 
 test("an offense that is only AVAILABLE (never played: too dangerous) resets nothing and the rule is not engaged while the normal plan moves", () => {
 	const tracker = new StagnationTracker()
-	const d = distance(cells[411], cells[568])
+	const d = distance(cells[378], cells[568])
 	for (let turn = 1; turn <= 4; turn++) tracker.observe(turn, 60, d)
 	assert.equal(tracker.turns, 3)
-	const at411 = quiet(() => world({ turn: 5, k: 411, e: 568, stagnation: tracker }).evaluate())
-	assert.ok(!(at411.plan && at411.plan.weaponShots > 0), "no shot is played from 411")
+	// 378 : une case de tir de ice est à 3 pas, mais toute autre case que 378 est à danger 200 (aucun retour possible avec
+	// 4 PM). Le cas d'origine (411) n'est plus « non joué » : ice est créditée depuis 428, avec retour en 411.
+	const unplayed = quiet(() => world({ turn: 5, k: 378, e: 568, stagnation: tracker,
+		dangerOverride: (cell) => cell.id === 378 ? null : 200 }).evaluate())
+	assert.deepEqual([unplayed.plan?.weaponShots ?? 0, unplayed.plan?.chips.length ?? 0, unplayed.plan?.afterMp ?? 0], [0, 0, 0],
+		"no shot is played from 378")
 	assert.equal(tracker.turns, 3, "offense available but unplayed: the counter is NOT reset")
 	assert.equal(tracker.escaping, false)
 	const at378 = quiet(() => world({ turn: 5, k: 378, e: 568, stagnation: tracker }).evaluate())
@@ -433,7 +451,7 @@ function turnsToFirstShotVsFleeing(k0, e0, stagnationOn, flee = fleeStep, active
 test("against a fleeing enemy the engaged escape is lifted when no safe closer cell exists: no later first shot", () => {
 	const without = turnsToFirstShotVsFleeing(40, 310, false)
 	const withRule = turnsToFirstShotVsFleeing(40, 310, true)
-	assert.equal(without, 15, "reference: the rule off shoots at turn 15")
+	assert.equal(without, 9, "reference: the rule off shoots at turn 9 (15 before chips were credited after a move)")
 	assert.ok(withRule <= without, `${withRule} turn(s) with the rule, ${without} without`)
 })
 
@@ -587,7 +605,7 @@ test("episode-wide guard: with the engagement already lifted, the normal plan is
 	for (let t = 5; t <= 9; t++) seen(tracker, t, 310, 195, 262)
 	tracker.commit(cells[364], cells[346])
 	const shot = quiet(() => world({ turn: 7, k: 310, e: 262, enemyLife: 195, stagnation: tracker }).evaluate())
-	assert.equal(shot.plan.weaponShots, 2)
+	assert.deepEqual([shot.plan.weaponShots, shot.plan.chips.map((chip) => chip.name)], [1, ["rock"]])
 	assert.equal(shot.plan.shotCell.id, 364)
 })
 
@@ -634,7 +652,10 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // Banque : 16 départs x 5 ennemis (568, 262, 17, 310, 2) x compteur neuf/actif = 160 scénarios par alternance.
 // Depuis la baisse du poids du risque avec la passivité (mesuré) : 0/56, 4/88, 2/98 (avant : 0/0, 18/20, 16/22), et le
 // départ 80 / ennemi 262 tire au tour 9 (avant : jamais en 30 tours).
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 56 }, 2: { slower: 4, faster: 88 }, 3: { slower: 2, faster: 98 } }
+// Depuis qu'une puce offensive est créditée après déplacement (mesuré) : 0/38, 0/70, 2/64 : moins de « plus rapides »
+// parce que la référence sans la règle tire elle-même plus tôt (sur les 480 scénarios, aucun premier tir plus tardif
+// qu'avant, règle activée ou non). Départ 80 / ennemi 262 : règle désactivée 11, règle activée 8 (avant : 9).
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 38 }, 2: { slower: 0, faster: 70 }, 3: { slower: 2, faster: 64 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {
@@ -653,7 +674,7 @@ test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns
 	}
 	const alternating = () => { let calls = 0; return (k, e) => ++calls % 3 === 0 ? fleeStep(k, e) : e }
 	assert.equal(turnsToFirstShotVsFleeing(80, 262, false, alternating(), false), 11, "reference: rule off shoots at turn 11")
-	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 9, "rule on: first shot at turn 9")
+	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 8, "rule on: first shot at turn 8")
 })
 
 // LIMITE ACCEPTÉE D1 (caractérisation ; la production n'est pas modifiée). La garde « case visitée » ne vit que dans le
@@ -857,13 +878,19 @@ function refusal({ k, e = OPEN_ENEMY, passiveTurns, inner, outer, life }) {
 		dangerOverride: (cell) => distance(cell, cells[e]) < d ? inner : outer }).evaluate()).plan
 }
 
-test("combat refusal: the risk weight drops with passive turns (advance by the 4th, shot retained), a lethal danger stays refused", () => {
-	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 52,5 sur toutes les cases plus proches, aucun tir.
-	for (const passiveTurns of [0, 2, 3]) {
-		assert.equal(refusal({ k: 274, passiveTurns, inner: 52.5, outer: 0 }), null, `${passiveTurns} passive turn(s): hold`)
+test("combat refusal: the risk weight drops with passive turns (advance by the 3rd, shot retained), a lethal danger stays refused", () => {
+	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 52,5 sur toutes les cases plus proches. Seule ice (0-8)
+	// atteint la cible, depuis une case à 4 PM : 19,8 de dégâts contre 52,5 de danger. Le tir est connu mais décliné : le plan
+	// retenu est le maintien sur place sans action (avant le crédit des puces après déplacement : plan nul).
+	const shape = (plan) => plan && [plan.beforeMp + plan.afterMp, plan.weaponShots, plan.chips.map((chip) => chip.name), plan.tpUsed]
+	for (const passiveTurns of [0, 2]) {
+		assert.deepEqual(shape(refusal({ k: 274, passiveTurns, inner: 52.5, outer: 0 })), [0, 0, [], 0], `${passiveTurns} passive turn(s): hold`)
 	}
+	// Puces sans cooldown lancées plusieurs fois : deux ice (39,6) battent le danger à poids réduit dès le 3e tour passif
+	// (avant : une seule ice, 19,8, maintien jusqu'au 4e tour).
+	assert.deepEqual(shape(refusal({ k: 274, passiveTurns: 3, inner: 52.5, outer: 0 })), [4, 0, ["ice", "ice"], 8], "3rd passive turn: advance and cast ice twice")
 	const advance = refusal({ k: 274, passiveTurns: 4, inner: 52.5, outer: 0 })
-	assert.ok(advance && advance.afterMp > 0, "4th passive turn: the plan moves")
+	assert.deepEqual(shape(advance), [4, 0, ["ice", "ice"], 8], "4th passive turn: the plan moves 4 MP and casts ice twice on arrival")
 	assert.equal(distance(advance.destination, cells[OPEN_ENEMY]), 7, "from distance 11 to 7 (4 MP)")
 	assert.equal(advance.danger, 52.5)
 	// Type 54946689 T10 : blessé (200/339), distance 9, case à danger 39,4, cases de tir à danger 150 : `bandage` seul.
@@ -888,17 +915,18 @@ test("combat refusal: the risk weight drops with passive turns (advance by the 4
 // la passivité réduit le poids du risque, le danger accepté reste sous 75 % de mes PV : 339 PV -> seuil 254,25.
 test("life margin: at a reduced risk weight a modeled danger at or above 75 % of my life is refused; full weight unchanged", () => {
 	assert.equal(PASSIVE_DANGER_LIFE_FRACTION, 0.75)
-	// Avance sans tir (type 54944456), poids nul : 254 accepté, 255 refusé.
+	// Avance de 4 PM puis ice (type 54944456), poids nul : 254 accepté, 255 refusé (maintien sur place, danger 0).
 	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 254, outer: 0 })?.danger, 254)
-	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 255, outer: 0 }), null)
-	// Tir (tour 7 du combat : deux tirs depuis 364), ma case et les autres à 250 : `[tirs, danger]` du plan retenu.
+	const refused = refusal({ k: 274, passiveTurns: 4, inner: 255, outer: 0 })
+	assert.deepEqual([refused.destination.id, refused.danger, refused.chips.length, refused.tpUsed], [274, 0, 0, 0])
+	// Tir (tour 7 du combat : un tir et rock depuis 364), ma case et les autres à 250 : `[tirs, danger]` du plan retenu.
 	const shot = (passiveTurns, inner) => {
 		const plan = refusal({ k: 310, e: 262, passiveTurns, inner, outer: 250 })
 		return [plan.weaponShots, plan.danger]
 	}
-	for (const passiveTurns of [0, 2]) assert.deepEqual(shot(passiveTurns, 260), [2, 260], "full weight: only my life (339) is the limit")
+	for (const passiveTurns of [0, 2]) assert.deepEqual(shot(passiveTurns, 260), [1, 260], "full weight: only my life (339) is the limit")
 	for (const passiveTurns of [3, 4]) {
-		assert.deepEqual(shot(passiveTurns, 254), [2, 254], `${passiveTurns} passive turns: just under the margin`)
+		assert.deepEqual(shot(passiveTurns, 254), [1, 254], `${passiveTurns} passive turns: just under the margin`)
 		assert.deepEqual(shot(passiveTurns, 255), [0, 250], `${passiveTurns} passive turns: just above the margin`)
 	}
 	// Sortie de stagnation à poids nul : même marge.

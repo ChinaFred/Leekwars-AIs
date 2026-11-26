@@ -1,15 +1,22 @@
 // @version:5.8
-// file version: 3
+// file version: 4
+import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	baseMeanDamage,
+	isMpBoostType,
 	isStrengthBoostType,
 	isTpBoostType,
 	maxUsesOf,
+	mpBoostOf,
+	mpBoostTurns,
 	strengthBoostOf,
 	strengthBoostTurns,
+	toCandidate,
 	tpBoostOf,
 	tpBoostTurns
 } from "../Classes/Context/ShotPlan.js"
+import { WEAPON_SWAP_TP } from "../Classes/Context/ThreatMap.js"
+import { SEARCH_GLOBAL_FRACTION } from "../Classes/Plannification/ExecutionBudget.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
 /** Part créditée des tours futurs couverts par le boost (le contact avec l'ennemi n'est pas garanti). */
@@ -90,6 +97,167 @@ export function pickTpBoost(me: Me, tp: number): BoostOption | null {
 		}
 	}
 	return best
+}
+
+/** Un boost de PM est-il déjà actif sur moi (effet de PM non expiré) ? */
+export function hasActiveMpBoost(me: Me): boolean {
+	return (me.effects ?? []).some((effect) => isMpBoostType(effect.type) && effect.turns > 0)
+}
+
+/**
+ * Le boost de PM prêt au plus grand gain, abordable avec `tp` PT ; null sinon, ou si un boost de PM est actif.
+ * `gain` = PM entiers (partie entière du gain moyen ; le moteur arrondit au plus proche : sous-estimation prudente).
+ */
+export function pickMpBoost(me: Me, tp: number): BoostOption | null {
+	let best: BoostOption | null = null
+	if (hasActiveMpBoost(me)) {
+		return best
+	}
+	for (const chip of me.chips ?? []) {
+		const gain = Math.floor(mpBoostOf(chip, me.science ?? 0))
+		if (!(gain >= 1) || !Number.isInteger(chip.cost) || chip.cost <= 0 || chip.cost > tp ||
+			chip.currentCooldown !== 0) {
+			continue
+		}
+		if (best === null || gain > best.gain) {
+			best = { chip, gain, turns: mpBoostTurns(chip) }
+		}
+	}
+	return best
+}
+
+/** Décision du boost de PM d'avant plan : `option` null = ne pas lancer ; `reason` vide = aucune puce de PM prête. */
+export interface MpBoostDecision {
+	readonly option: BoostOption | null
+	readonly reason: string
+}
+
+/** Même garde que les recherches (plan conjoint, plan B, carte de danger) : rien ne démarre passé 80 % des opérations. */
+function hasSearchRoom(): boolean {
+	return typeof System === "undefined" || !Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
+		System.operations < System.maxOperations * SEARCH_GLOBAL_FRACTION
+}
+
+/** Une case de `zone` est-elle à portée de Manhattan [min, max] de `target` ? Sinon la liste native est inutile. */
+function mayReach(zone: ReachableCells, target: Entity, item: Weapon | Chip): boolean {
+	if (!Number.isFinite(item.maxRange)) {
+		return true
+	}
+	const minRange = Number.isFinite(item.minRange) ? item.minRange : 0
+	for (const { cell } of zone.entries()) {
+		const range = Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
+		if (range >= minRange && range <= item.maxRange) {
+			return true
+		}
+	}
+	return false
+}
+
+/**
+ * Faut-il lancer un boost de PM AVANT le plan du tour ? Oui seulement si toutes ces conditions sont vraies :
+ * une puce de PM est prête (`pickMpBoost`) et utilisable sur moi ; PV ≥ `MIN_LIFE_RATIO_FOR_BOOST` ; mes cases
+ * atteignables (`reachable`) sont celles du tour, non tronquées ; aucune n'est une case de tir (listes natives
+ * `Fight.weaponCells` / `me.chipCells`) d'une arme ou d'une puce offensive prête que je peux payer, contre un
+ * ennemi de `enemies` ; avec PM + gain la zone n'est pas tronquée, compte au plus `cellLimit` cases (au-delà le
+ * plan conjoint se replierait sur le plan B) et contient une case de tir d'une ARME encore payable après le boost
+ * (+ `WEAPON_SWAP_TP` si elle n'est pas équipée). Les puces offensives ne comptent pas dans ce second test : les
+ * plans ne créditent une puce que si elle est utilisable depuis la case actuelle, donc pas depuis une case débloquée.
+ *
+ * Le danger des cases débloquées n'est pas regardé : si le plan refuse d'y aller, les PT du boost sont perdus ce tour.
+ * Coût : un parcours en largeur de plus, puis une liste native par couple (ennemi, item) dont la portée de Manhattan
+ * touche la zone ; aucune liste si l'arme équipée tire déjà d'ici ou si rien n'est à portée de la zone boostée.
+ * Non mesuré sur le moteur. Garde : rien ne démarre passé `SEARCH_GLOBAL_FRACTION` des opérations.
+ */
+export function decideMpBoost(
+	me: Me, reachable: ReachableCells | null, enemies: readonly Entity[], cellLimit: number
+): MpBoostDecision {
+	const no = (reason: string): MpBoostDecision => ({ option: null, reason })
+	const option = pickMpBoost(me, me.tp)
+	if (option === null) {
+		return no("")
+	}
+	if (!(me.maxLife > 0) || me.life / me.maxLife < MIN_LIFE_RATIO_FOR_BOOST) {
+		return no("life below 50 %")
+	}
+	if (typeof Field === "undefined" || typeof Field.cellFromXY !== "function" ||
+		typeof Fight.weaponCells !== "function" || typeof me.chipCells !== "function" ||
+		typeof me.canUseChip !== "function" || typeof me.canUseWeapon !== "function") {
+		return no("native firing cells unavailable")
+	}
+	if (reachable === null || reachable.truncated || !reachable.isUpToDate(me.id, me.cell, me.mp, Fight.turn)) {
+		return no("reachable cells unavailable")
+	}
+	const targets = enemies.filter((enemy) => enemy.life > 0)
+	if (targets.length === 0) {
+		return no("no enemy")
+	}
+	const tpAfter = me.tp - option.chip.cost
+	const weapons = [...new Set(me.weapon ? [me.weapon, ...(me.weapons ?? [])] : me.weapons ?? [])]
+		.filter((weapon) => toCandidate(weapon, false, me.strength) !== null)
+		.map((weapon) => ({ weapon, cost: weapon.cost + (weapon === me.weapon ? 0 : WEAPON_SWAP_TP) }))
+		.filter(({ cost }) => cost <= me.tp)
+	if (!weapons.some(({ cost }) => cost <= tpAfter)) {
+		return no("no weapon shot affordable after the boost")
+	}
+	if (!hasSearchRoom()) {
+		return no("operations budget")
+	}
+	if (!me.canUseChip(option.chip, me)) {
+		return no("chip not usable on me")
+	}
+	const equipped = me.weapon
+	if (equipped && weapons.some(({ weapon }) => weapon === equipped) &&
+		targets.some((target) => me.canUseWeapon(target))) {
+		return no(`shot already possible: ${equipped.name}`)
+	}
+	const boostedMp = me.mp + option.gain
+	const boosted = computeReachableCells(me, boostedMp, Fight.turn)
+	if (boosted.truncated || boosted.size > cellLimit) {
+		return no(`${boosted.size}${boosted.truncated ? "+" : ""} cells with ${boostedMp} MP > ${cellLimit}`)
+	}
+	const chips = [...new Set(me.chips ?? [])].filter((chip) => chip.currentCooldown === 0 &&
+		Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= me.tp && toCandidate(chip, true, me.strength) !== null)
+	const reaches = (zone: ReachableCells, cells: readonly Cell[]): boolean => cells.some((cell) => zone.canReach(cell))
+	let unlocked: string | null = null
+	for (const target of targets) {
+		for (const chip of chips) {
+			if (!mayReach(reachable, target, chip)) {
+				continue
+			}
+			if (!hasSearchRoom()) {
+				return no("operations budget")
+			}
+			if (reaches(reachable, me.chipCells(chip, target))) {
+				return no(`shot already possible: ${chip.name}`)
+			}
+		}
+		for (const { weapon, cost } of weapons) {
+			// La zone boostée contient la zone du tour : hors de portée de l'une, hors de portée des deux.
+			if (!mayReach(boosted, target, weapon)) {
+				continue
+			}
+			if (!hasSearchRoom()) {
+				return no("operations budget")
+			}
+			const cells = Fight.weaponCells(target, weapon)
+			if (reaches(reachable, cells)) {
+				return no(`shot already possible: ${weapon.name}`)
+			}
+			if (unlocked === null && cost <= tpAfter && reaches(boosted, cells)) {
+				unlocked = `${weapon.name} on ${target.name}`
+			}
+		}
+	}
+	if (unlocked === null) {
+		return no(`no firing cell within ${boostedMp} MP`)
+	}
+	if (!hasSearchRoom()) {
+		return no("operations budget")
+	}
+	return {
+		option,
+		reason: `no firing cell in ${reachable.size} cells with ${me.mp} MP; ${boosted.size} cells with ${boostedMp} MP reach ${unlocked}`
+	}
 }
 
 /**

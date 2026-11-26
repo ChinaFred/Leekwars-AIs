@@ -142,7 +142,7 @@ test("future route continues below 2% synthetic ops and falls back at and above 
 test("synthetic reachable input exercises the 160-cell exploration cap", () => {
 	// Deliberately nonphysical seeds expose the defensive cap: a real BFS with
 	// a radius of eight has at most 145 cells, and the planner accepts at most
-	// 85 initially reachable cells. These seeds do not represent a combat map.
+	// 113 initially reachable cells. These seeds do not represent a combat map.
 	for (const available of [79, 80, 81]) {
 		delete globalThis.System
 		globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4 }

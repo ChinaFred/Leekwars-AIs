@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { evaluateTacticalPlans, executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { evaluateTacticalPlans, executeTacticalPlan, TACTICAL_LIMITS } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS } from "../dist/Classes/Context/ThreatMap.js"
@@ -182,6 +182,8 @@ const done = () => { delete globalThis.System }
 // (avant : aucun boost dans le plan, score 2/3/1/1 aux tours 3-4, deux tirs de shotgun ou repli + helmet au tour 5,
 // neutrino + rock au tour 6). À pleine vie, helmet n'est plus candidat ; protein (+90 force, 2 tours) et motivation
 // (+2 PT, 3 tours) sont crédités de leurs tours suivants. Les optimisations d'opérations ne changent aucune décision.
+// Tour 4 relevé de nouveau quand une puce offensive est devenue créditée après déplacement (avant : protein seul, score
+// 52,3, sans quitter 164 avant le tir) : aller-retour vers une case de tir de ice (4 PM, case 130) ou de rock (5 PM, case 148).
 // Relevées de nouveau quand la carte de danger a compté plusieurs fois les puces sans cooldown de l'ennemi (shock, ice),
 // avec le maximum exact arme + puces : tour 6, danger 90,88 -> 92,16 (score 46,62 -> 45,34), décision inchangée ; tour 5,
 // danger de la case 217 : 124,5 -> 154,38. À 4 PM le tir est gardé (score 13 -> -16,88) ; à 5 PM la DÉCISION CHANGE :
@@ -189,8 +191,8 @@ const done = () => { delete globalThis.System }
 const EXPECTED = {
 	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.3, tpUsed: 3, boost: ["protein"] },
 	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 54.3, tpUsed: 3, boost: ["protein"] },
-	"4PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
-	"5PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
+	"4PM T4 164/255": { destination: 147, shotCell: 130, weapon: null, weaponShots: 0, chips: ["ice"], protection: [], danger: 0, score: 87.3, tpUsed: 7, boost: ["protein"] },
+	"5PM T4 164/255": { destination: 147, shotCell: 148, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 0, score: 128.3, tpUsed: 8, boost: ["protein"] },
 	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 154.38, score: -16.88, tpUsed: 12, boost: ["motivation", "protein"] },
 	"5PM T5 164/218": { destination: 74, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 59.76, score: -8.46, tpUsed: 3, boost: ["protein"] },
 	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 45.34, tpUsed: 12, boost: ["motivation", "protein"] },
@@ -305,7 +307,7 @@ test("the grouped threat-map provider path gives the same map, pairs and line-of
 	} finally { done() }
 })
 
-test("budget guards degrade cleanly as the MP grow on an open arena: known reason at 7 MP, pairs bounded, no exception", () => {
+test("budget guards on an open arena: 7 MP (113 cells) stays in the joint plan, 8 MP falls back with a known reason, pairs bounded", () => {
 	try {
 		const sizes = []
 		for (const mp of [4, 5, 6, 7, 8]) {
@@ -314,10 +316,18 @@ test("budget guards degrade cleanly as the MP grow on an open arena: known reaso
 			sizes.push(w.context.reachable.size)
 			assert.ok(map.pairsEvaluated <= MAX_THREAT_PAIRS, `${mp} MP: ${map.pairsEvaluated} pairs`)
 			const result = w.evaluate()
-			if (w.context.reachable.size > 85) assert.equal(result.reason, "cells/PT bound", `${mp} MP`)
-			else assert.notEqual(result.reason, "cells/PT bound", `${mp} MP`)
-			assert.ok(result.reason === "complete search" || result.plan === null, `${mp} MP: ${result.reason}`)
+			// Jusqu'à 7 PM (5 PM + bottes) : carte de danger complète et recherche conjointe menée à son terme.
+			if (mp <= 7) {
+				assert.equal(map.truncated, false, `${mp} MP`)
+				assert.equal(result.reason, "complete search", `${mp} MP`)
+				assert.ok(result.plan, `${mp} MP`)
+			} else {
+				assert.ok(w.context.reachable.size > TACTICAL_LIMITS.cells, `${mp} MP`)
+				assert.equal(result.reason, "cells/PT bound", `${mp} MP`)
+				assert.equal(result.plan, null, `${mp} MP`)
+			}
 		}
+		assert.equal(TACTICAL_LIMITS.cells, 113)
 		// Un losange complet : 2 mp² + 2 mp + 1 cases (41, 61, 85, 113, 145) tant que la carte ne le coupe pas.
 		assert.deepEqual(sizes, [41, 61, 85, 113, 145])
 	} finally { done() }

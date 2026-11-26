@@ -9,7 +9,7 @@ import { initLeekLogging, LogConfig } from "../dist/Toolbox/Logger.js"
 // Combat 54939649, tour 5 (déployé : 22612f3). Kassbi en 446 (4 PM, 10 PT, 339 PV), asdfgleek en 362 (pistolet :
 // portée 1-7, 3 PM, 3 tirs de ~49). Le journal de combat montre `fallback: operations reserve` aux tours 4 et 5 : la
 // recherche tactique, arrêtée à 150 000 des 1 000 000 d'ops, laissait au plan B une attaque à danger 147 alors que la
-// recherche complète choisit la case sûre 394 sans tirer. Carte, obstacles, ligne de vue et distances : règles du
+// recherche complète choisit une case sûre (394 sans tirer ; 409 après ice depuis 463, voir SAFE_CELL). Carte, obstacles, ligne de vue et distances : règles du
 // générateur officiel (Map.java/Cell.java), reconstruites ici ; objets : API officielle (relevés le 2026-11-25).
 // Les coûts en opérations sont SYNTHÉTIQUES (aucune mesure moteur).
 
@@ -20,7 +20,9 @@ const OBSTACLES = {
 	360: 2, 363: 2, 371: 2, 375: 1, 385: 1, 386: 1, 397: 1, 403: 1, 416: 2, 436: 1, 444: 1, 468: 1, 472: 1, 490: 1,
 	515: 1, 523: 1, 546: 1, 547: 2, 556: 2, 563: 1, 575: 2, 605: 1, 612: 1
 }
-const KASSBI_CELL = 446, ENEMY_CELL = 362, SAFE_CELL = 394
+// Case finale sûre du plan complet. 394 (sans tir) tant qu'une puce n'était créditée que depuis la case actuelle ; depuis
+// qu'elle l'est après déplacement : 1 PM vers 463, ice (hors de portée de 446), repli de 3 PM en 409, danger 0 aussi.
+const KASSBI_CELL = 446, ENEMY_CELL = 362, SAFE_CELL = 409, ICE_CELL = 463
 
 const rows = WIDTH * 2 - 1
 const cells = []
@@ -154,7 +156,7 @@ function turn5({ startOps = 100000, searchCost = 0, withSystem = true, stagnatio
 	} finally { delete globalThis.System }
 }
 
-test("turn 5 with the stagnation counter below its threshold: same retreat to 394 (the rule changes nothing)", () => {
+test("turn 5 with the stagnation counter below its threshold: same safe retreat to 409 (the rule changes nothing)", () => {
 	const tracker = new StagnationTracker()
 	tracker.observe(4, 199, distance(cells[463], cells[310])) // tour 4 réel : distance 9
 	tracker.observe(5, 199, distance(cells[KASSBI_CELL], cells[ENEMY_CELL])) // tour 5 : 7, nouveau record
@@ -167,7 +169,7 @@ test("turn 5 with the stagnation counter below its threshold: same retreat to 39
 	assert.equal(result.plan.stagnation, undefined)
 })
 
-test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search retreats to 394 without shooting", () => {
+test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search casts ice twice from 463 and retreats to 409", () => {
 	const { plan, memory, me } = turn5({ withSystem: false })
 	const threat = memory.getThreatMap()
 	assert.equal(threat.dangerAt(me.cell), 147, "three pistol shots on the current cell")
@@ -175,7 +177,7 @@ test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete se
 	assert.deepEqual(safe, [374, 376, 392, 393, 394, 409, 479, 514])
 	assert.equal(threat.dangerAt(cells[464]), 147, "the shot cell of the real fight is fully exposed")
 	assert.equal(plan.destination.id, SAFE_CELL)
-	assert.equal(plan.weaponShots, 0)
+	assert.deepEqual([plan.shotCell.id, plan.chips.map(chip => chip.name), plan.weaponShots], [ICE_CELL, ["ice", "ice"], 0])
 	assert.equal(plan.danger, 0)
 	assert.ok(plan.score > 0)
 })

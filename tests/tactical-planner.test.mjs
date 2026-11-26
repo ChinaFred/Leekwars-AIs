@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import {
-	evaluateTacticalPlans, executeTacticalPlan, riskWeight, RETREAT_RISK_FACTOR, TACTICAL_LIMITS
+	evaluateTacticalPlans, executeTacticalPlan, riskWeight, RETREAT_RISK_FACTOR, selfHitRadius, TACTICAL_LIMITS
 } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { createStrategy } from "../dist/Classes/LeekProfile.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
@@ -437,13 +437,78 @@ test("unexpected tactical API exceptions log a fallback and run legacy planning 
 		"the current fallback log intentionally hides the underlying exception detail")
 })
 
-test("target-restricted offensive chips are rejected before a plan can consume movement", () => {
+test("a target restriction is rejected in range; out of range it is only caught on arrival, after the move", () => {
 	const restricted = chip("enemy-forbidden", 2, 60, { maxRange: 2 })
+	// À portée (ma case est dans la liste native) : le refus n'est pas géométrique, la puce est écartée sans rien dépenser.
+	const near = world({ tp: 2, mp: 1, gun: null, chips: [restricted], positions: [[2, 0]] })
+	near.me.denyChips = true
+	const refused = near.evaluate()
+	assert.deepEqual([refused.plan, refused.reason], [null, "offensive chip refused at current cell"])
+	// Hors de portée : rien ne distingue cette restriction de la géométrie. Le plan se déplace, puis le contrôle natif
+	// de l'exécution refuse la puce : aucun PT dépensé, refus journalisé.
 	const w = world({ tp: 2, mp: 1, gun: null, chips: [restricted] })
 	w.me.denyChips = true
 	assert.equal(w.me.canUseChip(restricted, w.enemies[0]), false)
-	const result = w.evaluate()
-	assert.equal(result.plan, null, "geometric chip cells alone do not prove target legality")
+	const plan = w.evaluate().plan
+	assert.deepEqual([plan.shotCell.x, plan.chips], [1, [restricted]])
+	const messages = [], original = console.log
+	try { console.log = (message) => messages.push(String(message)); executeTacticalPlan(w.me, plan) } finally { console.log = original }
+	assert.deepEqual(w.events, ["move:1,0:1"])
+	assert.equal(w.me.tp, 2)
+	assert.ok(messages.some((m) => m.includes("[Tactical] execution: chip unavailable: enemy-forbidden")))
+})
+
+// Éclair (données officielles) : lancer en ligne (launchType 1), portée 2-5, 4 PT. Ennemi en (3,1) : ma case (0,0) n'est
+// pas alignée ; (0,1) l'est, à 1 PM. Ce test échoue si une puce n'est créditée que depuis la case actuelle.
+const lightning = (options = {}) => chip("lightning", 4, 40, { launchType: 1, minRange: 2, maxRange: 5, ...options })
+test("line chip: not castable from my cell, an aligned cell is reachable -> move, then cast", () => {
+	const w = world({ tp: 4, mp: 2, gun: null, chips: [lightning()], positions: [[3, 1]] })
+	assert.equal(w.me.canUseChip(w.me.chips[0], w.enemies[0]), false, "not aligned")
+	const plan = w.evaluate().plan
+	assert.deepEqual([plan.shotCell.x, plan.shotCell.y, plan.beforeMp, plan.chips.map((c) => c.name)], [0, 1, 1, ["lightning"]])
+	executeTacticalPlan(w.me, plan)
+	assert.deepEqual(w.events.slice(0, 2), ["move:0,1:1", "chip:lightning:2"])
+	assert.equal(w.enemies[0].life, 60)
+})
+
+test("line weapon: not usable from my cell, an aligned cell is reachable -> move, then shoot", () => {
+	const laser = item("laser", 3, 20, { launchType: 1, minRange: 2, maxRange: 5 })
+	const w = world({ tp: 6, mp: 2, gun: laser, positions: [[3, 1]] })
+	assert.equal(w.me.canUseWeapon(w.enemies[0]), false, "not aligned")
+	const plan = w.evaluate().plan
+	assert.deepEqual([plan.shotCell.x, plan.shotCell.y, plan.beforeMp, plan.weaponShots], [0, 1, 1, 2])
+	executeTacticalPlan(w.me, plan)
+	assert.deepEqual(w.events.slice(0, 3), ["move:0,1:1", "shoot:2", "shoot:2"])
+})
+
+test("line chip refused on arrival: logged, the planned weapon shot and the final move still run", () => {
+	const laser = item("laser", 3, 20, { launchType: 1, minRange: 2, maxRange: 5 })
+	const w = world({ tp: 7, mp: 2, gun: laser, chips: [lightning()], positions: [[3, 1]],
+		danger: (cell) => cell.x === 0 && cell.y === 0 ? 0 : 5 })
+	const plan = w.evaluate().plan
+	assert.deepEqual([plan.shotCell.y, plan.destination.y, plan.weaponShots, plan.chips.map((c) => c.name)], [1, 0, 1, ["lightning"]])
+	w.me.afterMove = () => { w.me.denyChips = true }
+	const messages = [], original = console.log
+	try { console.log = (message) => messages.push(String(message)); executeTacticalPlan(w.me, plan) } finally { console.log = original }
+	assert.deepEqual(w.events, ["move:0,1:1", "shoot:2", "move:0,0:1"])
+	assert.equal(w.me.tp, 4, "the 4 PT of the refused chip are not spent, and not re-planned")
+	assert.ok(messages.some((m) => m.includes("[Tactical] execution: chip unavailable: lightning")))
+})
+
+test("area chips: no shot cell inside the effect zone unless every effect excludes the caster", () => {
+	const feature = (targets) => [{ type: Effect.DAMAGE, minValue: 40, maxValue: 40, targets }]
+	assert.equal(selfHitRadius({ area: 4, features: feature(27) }), 0, "Lightning: circle 2, caster excluded (no bit 4)")
+	assert.equal(selfHitRadius({ area: 4, features: feature(31) }), 2)
+	assert.equal(selfHitRadius({ area: 4, features: feature(undefined) }), 2, "unreadable targets: caster assumed hit")
+	assert.deepEqual([1, 2, 3, 5, 13, undefined].map((area) => selfHitRadius({ area, features: feature(31) })), [0, 0, 1, 3, 0, 0])
+	// Ennemi à 2 cases : ma case est dans le cercle de rayon 2. (-1,0) est à 3 : recul d'une case, puis tir.
+	const blast = (targets) => world({ tp: 4, mp: 1, gun: null, positions: [[2, 0]],
+		chips: [chip("blast", 4, 40, { minRange: 2, maxRange: 5, area: 4, features: feature(targets) })] })
+	const far = blast(31)
+	const plan = far.evaluate().plan
+	assert.deepEqual([plan.shotCell.x, plan.chips.map((c) => c.name)], [-1, ["blast"]])
+	const safe = blast(27).evaluate().plan
+	assert.deepEqual([safe.shotCell.x, safe.beforeMp, safe.chips.map((c) => c.name)], [0, 0, ["blast"]])
 })
 
 test("execution rechecks failed equipment, cooldown/LOS/TP, and stops firing at a dead target", () => {
