@@ -95,13 +95,32 @@ function entity(id, mp, extra = {}) {
 const reach = (ent, mp, ignore) => computeReachableCells(ent, mp, 1, { ignoreEntityId: ignore })
 
 // --- implémentation de référence naïve ---------------------------------------------
-// MAX sur : cases de tir S × armes × combinaisons de boosts, via `planShots` (aucun cache, aucun pré-rejet de
+// MAX sur : cases de tir S × armes × combinaisons de boosts, via `exactDamage` (indépendant de `planShots`, aucun cache, aucun pré-rejet de
 // portée, `canHit` pour chaque item et chaque configuration). Elle applique seulement les trois élagages
 // DOCUMENTÉS de la carte (jamais exacts à 100 %, voir docs/strategies.md) : au plus MAX_THREAT_WEAPONS armes,
 // une arme dominée écartée, une configuration de boosts dominée (plus de PT pour moins de force) écartée.
 
 // `prune: false` : aucune configuration écartée par dominance (énumération complète des sous-ensembles de boosts,
 // force et PT) — le MAX doit être identique, la dominance n'étant qu'un élagage.
+// Maximum des dégâts dans `tp` PT, écrit sans `planShots` : récursion sur les items (nombre d'usages de chacun,
+// borné par `uses`), mémoïsée par (item, PT restants). Sert d'oracle aux plans de tir de la carte.
+function exactDamage(tp, items) {
+	const memo = new Map()
+	const visit = (index, remaining) => {
+		if (index === items.length) return 0
+		const key = index * 4096 + remaining
+		if (memo.has(key)) return memo.get(key)
+		const { damage, cost, uses } = items[index]
+		let best = 0
+		for (let count = 0; count <= uses && count * cost <= remaining; count++) {
+			best = Math.max(best, count * damage + visit(index + 1, remaining - count * cost))
+		}
+		memo.set(key, best)
+		return best
+	}
+	return visit(0, Math.max(0, Math.floor(tp)))
+}
+
 function naiveBest(enemy, target, provider, counter, { prune = true, maskCap = Infinity } = {}) {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
 	const candidates = []
@@ -179,10 +198,9 @@ function naiveBest(enemy, target, provider, counter, { prune = true, maskCap = I
 			const hitting = weapons.filter((f) => { counter.n++; return provider.canHit(from, target, f.candidate.item) })
 			const usable = chips.filter((c) => { counter.n++; return provider.canHit(from, target, c.item) })
 			if (hitting.length === 0 && usable.length === 0) continue
-			const plans = hitting.length === 0
-				? [planShots(tpLeft, null, usable)]
-				: hitting.map((f) => planShots(tpLeft - f.swap, f.candidate, usable))
-			for (const plan of plans) best = Math.max(best, plan.damage)
+			// Puces seules toujours essayées : un plan sans tir d'arme ne paie pas le changement d'arme.
+			for (const f of hitting) best = Math.max(best, exactDamage(tpLeft - f.swap, [f.candidate, ...usable]))
+			best = Math.max(best, exactDamage(tpLeft, usable))
 		}
 	}
 	return best
@@ -364,9 +382,9 @@ test("bounds: more than 30 offensive chips and more than 4 weapons never throw a
 	const grid = makeGrid(21, 21)
 	const me = grid.place(entity(1, 0), grid.cells.get("10,10"))
 	const foe = grid.place(entity(2, 0), grid.cells.get("7,10"))
-	// 35 chips of cost 1 with strictly decreasing damage: with 12 PT the 12 best are taken.
+	// 35 chips of cost 1 with strictly decreasing damage: with 12 PT the 12 best are taken (cooldown: one cast each).
 	const chips = Array.from({ length: 35 }, (_, i) => ({
-		id: 7000 + i, name: "c", cost: 1, minRange: 1, maxRange: 8, needsLos: false, cooldown: 0, features: [{ type: 1, minValue: 100 - i, maxValue: 100 - i }]
+		id: 7000 + i, name: "c", cost: 1, minRange: 1, maxRange: 8, needsLos: false, cooldown: 1, features: [{ type: 1, minValue: 100 - i, maxValue: 100 - i }]
 	}))
 	const input = { id: 2, name: "e2", strength: 0, tp: 12, weapon: null, otherWeapons: [], chips, reachable: reach(foe, 0, me.id) }
 	const map = buildThreatMap(me, computeReachableCells(me, 0, 1), [input], 1)

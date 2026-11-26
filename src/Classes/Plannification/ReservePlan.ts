@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
@@ -33,6 +33,8 @@ interface Shot {
 	target: Entity
 	weapon: Weapon | null
 	chip: Chip | null
+	/** Lancers prévus de `chip` (0 pour une arme) : plusieurs seulement sans cooldown de base (`chipUsesOf`). */
+	casts: number
 	cell: Cell
 	cost: number
 	damage: number
@@ -278,7 +280,7 @@ export function executeReservePlan(
 				const currentPermission = reusable?.currentWeapons.get(target)?.get(weapon)
 				if (currentPermission === true ||
 					(!cachedCells && currentPermission === undefined && searchBudget() && me.canUseWeapon(target, weapon))) {
-					consider({ target, weapon, chip: null, cell: me.cell, cost: 0, damage })
+					consider({ target, weapon, chip: null, casts: 0, cell: me.cell, cost: 0, damage })
 				}
 				// À 0 PM, le contrôle natif courant suffit ; aucun fournisseur hypothétique nécessaire.
 				if (!reachable || me.mp <= 0 || !potentiallyReachable || (!cachedCells && !searchBudget())) continue
@@ -290,7 +292,7 @@ export function executeReservePlan(
 					for (let i = 0; i < Math.min(cells.length, RESERVE_LIMITS.lateCells) && budget(); i++) {
 						const cell = cells[i]!
 						const cost = reachable.costTo(cell)
-						if (cost !== null) consider({ target, weapon, chip: null, cell, cost, damage })
+						if (cost !== null) consider({ target, weapon, chip: null, casts: 0, cell, cost, damage })
 					}
 					continue
 				}
@@ -302,7 +304,7 @@ export function executeReservePlan(
 				for (const cell of cells) {
 					if (++scanned % 64 === 0 && !searchBudget()) break
 					const cost = reachable.costTo(cell)
-					if (cost !== null) consider({ target, weapon, chip: null, cell, cost, damage })
+					if (cost !== null) consider({ target, weapon, chip: null, casts: 0, cell, cost, damage })
 				}
 			}
 			for (const chip of chips) {
@@ -311,8 +313,11 @@ export function executeReservePlan(
 				if (mayReach(target, chip.maxRange)) attackMayBeReachable = true
 				if (!searchBudget() || !me.canUseChip(chip, target)) continue
 				// Restrictions hypothétiques non vérifiées : puces uniquement depuis la case actuelle.
-				consider({ target, weapon: null, chip, cell: me.cell, cost: 0,
-					damage: Math.min(target.life, candidate.damage) })
+				// Jamais plus de lancers que le coup fatal : les PT restants vont au soin ou au bouclier.
+				const casts = Math.min(candidate.uses, Math.floor(me.tp / candidate.cost),
+					Math.max(1, Math.ceil(target.life / candidate.damage)))
+				consider({ target, weapon: null, chip, casts, cell: me.cell, cost: 0,
+					damage: Math.min(target.life, candidate.damage * casts) })
 			}
 		}
 		// TS ne suit pas les affectations faites par consider().
@@ -379,7 +384,7 @@ export function executeReservePlan(
 		}
 		const shotsAtMost = shot?.weapon
 			? Math.min(maxUsesOf(shot.weapon), Math.floor((boostedTp - equipTp) / shot.weapon.cost), 30) : 0
-		const attackTp = shot?.weapon ? shotsAtMost * shot.weapon.cost : shot?.chip?.cost ?? 0
+		const attackTp = shot?.weapon ? shotsAtMost * shot.weapon.cost : shot?.chip ? shot.casts * shot.chip.cost : 0
 		const actionCell = shot?.cell ?? progressDecision?.cell ?? origin
 		const approachMp = shot?.cost ?? progressDecision?.cost ?? 0
 		const remainingMp = Math.max(0, initialMp - approachMp)
@@ -482,7 +487,7 @@ export function executeReservePlan(
 				} : null,
 				attack: shot ? { weapon: shot.weapon?.name ?? null, equipTp, weaponShotsAtMost: shotsAtMost,
 					weaponTpAtMost: shot.weapon ? shotsAtMost * shot.weapon.cost : 0,
-					chip: shot.chip ? { name: shot.chip.name, cost: shot.chip.cost } : null,
+					chip: shot.chip ? { name: shot.chip.name, cost: shot.chip.cost, castsAtMost: shot.casts } : null,
 					condition: "recheck real position, target, equipment, PT and native permission after approach" } : null,
 				boost: boostPlan.map((chip) => ({ chip: chip.name, tpCost: chip.cost })),
 				protection: supportSteps.filter((step) => step.selected).map((step) => ({
@@ -599,14 +604,17 @@ export function executeReservePlan(
 			if (!budget()) { message("attack: hard operations reserve; stop"); return true }
 			const weapon = shot.weapon
 			let attacks = 0
-			if (shot.chip && me.life > 0 && shot.target.life > 0 &&
-				shot.chip.currentCooldown === 0 && me.tp >= shot.chip.cost &&
-				me.canUseChip(shot.chip, shot.target)) {
-				phase(me, "offensive chip", () => ({ chip: shot.chip!.name, target: shot.target.id, tpCost: shot.chip!.cost }))
+			for (let i = 0; shot.chip && i < shot.casts; i++) {
+				if (!budget()) { message("offensive chip: hard operations reserve; stop"); return true }
+				if (me.life <= 0 || shot.target.life <= 0 || shot.chip.currentCooldown !== 0 ||
+					me.tp < shot.chip.cost || !me.canUseChip(shot.chip, shot.target)) break
+				phase(me, "offensive chip", () => ({
+					chip: shot.chip!.name, target: shot.target.id, cast: i + 1, atMost: shot.casts, tpCost: shot.chip!.cost
+				}))
 				if (!budget()) { message("offensive chip: hard operations reserve; stop"); return true }
 				const result = track(me, shot.chip, shot.target, () => me.useChip(shot.chip!, shot.target))
-				if (result > 0) attacks++
-				else message(() => `attack chip refused: ${shot.chip!.name}; result ${result}`)
+				if (!(result > 0)) { message(() => `attack chip refused: ${shot.chip!.name}; result ${result}`); break }
+				attacks++
 			}
 			if (weapon && weapon === me.weapon) {
 				const count = Math.min(shotsAtMost, maxUsesOf(weapon), Math.floor(me.tp / weapon.cost))

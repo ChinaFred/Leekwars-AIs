@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
@@ -164,7 +164,10 @@ export interface ThreatEnemy {
 	 * Absent = aucune. L'arme équipée peut y figurer : elle est ignorée.
 	 */
 	readonly otherWeapons?: readonly Weapon[]
-	/** Puces connues et PRÊTES (cooldown déjà filtré par l'appelant) ; seules celles avec dégâts comptent. */
+	/**
+	 * Puces connues et PRÊTES (cooldown déjà filtré par l'appelant) ; seules celles avec dégâts comptent. Une puce
+	 * sans cooldown de base compte autant de fois que ses PT et `maxUses` le permettent (`chipUsesOf`).
+	 */
 	readonly chips: readonly Chip[]
 	/**
 	 * Puces de boost de force ou de PT PRÊTES (cooldown déjà filtré) : l'ennemi peut en lancer sur lui avant de
@@ -583,7 +586,8 @@ function planFor(
 
 /**
  * Meilleur plan d'une paire (S, X) d'après `prepared.hits` (items qui touchent depuis S) : le premier maximum
- * strictement positif dans l'ordre configurations, armes, puce(s) seule(s) ; null si aucun plan ne fait de dégâts.
+ * strictement positif dans l'ordre configurations, armes, puces seules (toujours essayées) ; null si aucun plan
+ * ne fait de dégâts.
  */
 function pairOutcome(prepared: PreparedEnemy): PairOutcome | null {
 	const { variants, hits } = prepared
@@ -599,12 +603,10 @@ function pairOutcome(prepared: PreparedEnemy): PairOutcome | null {
 				mask |= 1 << c
 			}
 		}
-		let weaponHit = false
 		for (let w = 0; w < variant.weapons.length; w++) {
 			if (!hits[variant.weapons[w]!.index]) {
 				continue
 			}
-			weaponHit = true
 			const plan = planFor(prepared, v, w, mask)
 			if (plan.damage > best.damage) {
 				best = plan
@@ -613,7 +615,9 @@ function pairOutcome(prepared: PreparedEnemy): PairOutcome | null {
 				found = true
 			}
 		}
-		if (!weaponHit && mask !== 0) {
+		// Puces seules, même si une arme touche : un plan qui ne tire pas à l'arme ne paie pas son changement
+		// (`WEAPON_SWAP_TP`, déduit du budget de `planShots` dès que l'arme est proposée).
+		if (mask !== 0) {
 			const plan = planFor(prepared, v, -1, mask)
 			if (plan.damage > best.damage) {
 				best = plan

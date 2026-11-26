@@ -242,9 +242,9 @@ test("an enemy that cannot reach me from anywhere gives 0", () => {
 
 // --- puces ---------------------------------------------------------------------
 
-test("an advantageous chip is used once, then the weapon shoots with the remaining TP", () => {
+test("an advantageous chip with a cooldown is used once, then the weapon shoots with the remaining TP", () => {
 	const gun = weapon({ min: 10, max: 20, cost: 3 }) // 5 dégâts/PT
-	const strike = chip({ id: 11, name: "strike", cost: 4, min: 25, max: 35 }) // 30, 7,5/PT
+	const strike = chip({ id: 11, name: "strike", cost: 4, min: 25, max: 35, cooldown: 1 }) // 30, 7,5/PT
 	const { breakdown } = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [strike], tp: 10 })
 	assert.equal(breakdown[0].damage, 60) // 30 + floor(6/3) = 2 tirs × 15
 	assert.equal(breakdown[0].weaponShots, 2)
@@ -252,51 +252,94 @@ test("an advantageous chip is used once, then the weapon shoots with the remaini
 	assert.equal(breakdown[0].weapon, gun)
 })
 
-test("a chip is not repeated even with TP for it twice, and maxUses of the weapon caps the remaining shots", () => {
+test("a chip with a cooldown is not repeated even with TP for it twice, and maxUses of the weapon caps the remaining shots", () => {
 	const gun = weapon({ min: 10, max: 20, cost: 3, maxUses: 1 })
-	const strike = chip({ id: 11, name: "strike", cost: 2, min: 28, max: 32 }) // 30, 15/PT
+	const strike = chip({ id: 11, name: "strike", cost: 2, min: 28, max: 32, cooldown: 1 }) // 30, 15/PT
 	const { breakdown } = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [strike], tp: 10 })
 	assert.equal(breakdown[0].damage, 45) // 30 + 1 tir (maxUses) × 15
 	assert.equal(breakdown[0].weaponShots, 1)
 })
 
-test("a chip that is not better per TP than the weapon is ignored", () => {
-	const gun = weapon({ min: 10, max: 20, cost: 3 }) // 5/PT
-	const weak = chip({ id: 12, name: "weak", cost: 2, min: 6, max: 10 }) // 8 → 4/PT
-	const equal = chip({ id: 13, name: "equal", cost: 3, min: 15, max: 15 }) // 5/PT : pas strictement meilleur
-	const { breakdown } = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [weak, equal], tp: 10 })
-	assert.equal(breakdown[0].damage, 45)
-	assert.deepEqual(breakdown[0].chips, [])
-	assert.equal(breakdown[0].weaponShots, 3)
+// Combat 54965081, tour 4 : l'ennemi lance deux fois la même puce sans cooldown (143 dégâts pour un danger annoncé de 71,1).
+test("fight 54965081: an enemy chip without base cooldown counts as many times as TP and maxUses allow, others once", () => {
+	const cases = [
+		["no cooldown: floor(10 / 3) casts", { cooldown: 0 }, 3],
+		["no cooldown, maxUses 2", { cooldown: 0, maxUses: 2 }, 2],
+		["cooldown 2", { cooldown: 2 }, 1],
+		["infinite cooldown (-1)", { cooldown: -1 }, 1],
+		["unknown base cooldown (field absent)", {}, 1]
+	]
+	for (const [name, options, casts] of cases) {
+		const spark = chip({ id: 40, name: "spark", cost: 3, min: 20, max: 20, ...options })
+		if (!("cooldown" in options)) delete spark.cooldown
+		const { breakdown } = dangerOf(makeGrid(21, 21), { chips: [spark], tp: 10 })
+		assert.equal(breakdown[0].damage, 20 * casts, name)
+		assert.deepEqual(breakdown[0].chips, Array(casts).fill(spark), name)
+	}
+	// Avec une arme moins rentable par PT : 3 lancers (60) puis plus assez de PT pour tirer, mieux que l'arme seule (45).
+	const spark = chip({ id: 41, name: "spark", cost: 3, min: 20, max: 20, cooldown: 0 })
+	const armed = dangerOf(makeGrid(21, 21), { weaponItem: weapon({ min: 10, max: 20, cost: 3 }), chips: [spark], tp: 10 })
+	assert.equal(armed.breakdown[0].damage, 60)
+	assert.equal(armed.breakdown[0].weaponShots, 0)
 })
 
-test("the damage-per-TP filter is strict and applies chip by chip: a weaker or equal chip never takes TP from the weapon", () => {
+test("a chips-only plan does not pay the swap of a weapon it does not fire", () => {
+	const spark = chip({ id: 42, name: "spark", cost: 2, min: 30, max: 30, cooldown: 0 }) // 15/PT
+	const spare = weapon({ id: 2, name: "spare", cost: 5, min: 20, max: 20 }) // 4/PT, non équipée : 1 PT de changement
+	const { breakdown } = dangerOf(makeGrid(21, 21), { otherWeapons: [spare], chips: [spark], tp: 10 })
+	assert.equal(breakdown[0].damage, 150) // 5 lancers ; 4 seulement (120) si le changement d'arme était payé
+	assert.deepEqual([breakdown[0].weapon, breakdown[0].swapTp], [null, 0])
+})
+
+// Le glouton « tous les lancers de la puce au meilleur ratio d'abord » annonçait 90 et 82 : moins que le plan
+// « chaque puce une fois » (99 et 91). Le maximum exact sur les PT donne 99 et 100.
+test("exact maximum over TP: repeated casts never hide a better mix with the weapon or another chip", () => {
+	const cannon = weapon({ min: 69, max: 69, cost: 7 })
+	const zap = chip({ id: 44, name: "zap", cost: 3, min: 30, max: 30, cooldown: 0 })
+	const mixed = dangerOf(makeGrid(21, 21), { weaponItem: cannon, chips: [zap], tp: 10 }).breakdown[0]
+	assert.deepEqual([mixed.damage, mixed.weaponShots, mixed.chips.length], [99, 1, 1]) // 69 + 30, pas 3 × 30
+	const a = chip({ id: 45, name: "a", cost: 4, min: 41, max: 41, cooldown: 0 }) // 10,25/PT
+	const b = chip({ id: 46, name: "b", cost: 5, min: 50, max: 50, cooldown: 0 }) // 10/PT
+	const chipsOnly = dangerOf(makeGrid(21, 21), { chips: [a, b], tp: 10 }).breakdown[0]
+	assert.equal(chipsOnly.damage, 100) // 2 × b, pas 2 × a (82)
+	assert.deepEqual(chipsOnly.chips, [b, b])
+})
+
+test("a chip weaker per TP than the weapon only takes the TP the weapon cannot use", () => {
+	const gun = weapon({ min: 10, max: 20, cost: 3 }) // 5/PT
+	const weak = chip({ id: 12, name: "weak", cost: 2, min: 6, max: 10, cooldown: 1 }) // 8 → 4/PT
+	const nine = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [weak], tp: 10 }).breakdown[0]
+	assert.deepEqual([nine.damage, nine.weaponShots, nine.chips.length], [45, 3, 0]) // 2 tirs + puce = 38
+	const eleven = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [weak], tp: 11 }).breakdown[0]
+	assert.deepEqual([eleven.damage, eleven.weaponShots, eleven.chips.length], [53, 3, 1])
+})
+
+test("no damage-per-TP filter: a chip is kept exactly when it raises the total, whatever its ratio against the weapon", () => {
 	const gun = weapon({ min: 10, max: 20, cost: 3 }) // 15 par tir, 5/PT
-	// 9/PT et 2/PT : sans filtre, la puce faible (4 PT) retirerait un tir d'arme -> 18 + 8 + 15 = 41 au lieu de 48
-	const good = chip({ id: 21, name: "good", cost: 2, min: 18, max: 18 })
-	const weak = chip({ id: 22, name: "weak", cost: 4, min: 8, max: 8 })
+	// 9/PT et 2/PT : la puce faible (4 PT) retirerait un tir d'arme -> 18 + 8 + 15 = 41 au lieu de 48
+	const good = chip({ id: 21, name: "good", cost: 2, min: 18, max: 18, cooldown: 1 })
+	const weak = chip({ id: 22, name: "weak", cost: 4, min: 8, max: 8, cooldown: 1 })
 	const mixed = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [good, weak], tp: 10 })
 	assert.deepEqual(mixed.breakdown[0].chips.map((c) => c.name), ["good"])
 	assert.equal(mixed.breakdown[0].damage, 48) // 18 + floor(8 / 3) = 2 tirs × 15
 	assert.equal(mixed.breakdown[0].weaponShots, 2)
 
-	// ratio exactement égal (5/PT) : écarté (comparaison stricte), même si ses 1 PT récupéreraient un tir d'arme
-	// (avec la puce : 5 + 3 tirs × 15 = 50 ; sans : 3 tirs = 45, 1 PT perdu)
-	const equal = chip({ id: 23, name: "equal", cost: 1, min: 5, max: 5 })
+	// ratio exactement égal (5/PT) : retenue, son PT est celui que l'arme perd (5 + 3 tirs × 15 = 50 ; sans : 45).
+	// L'ancien filtre strict « ratio > arme » l'écartait et annonçait 45.
+	const equal = chip({ id: 23, name: "equal", cost: 1, min: 5, max: 5, cooldown: 1 })
 	const tie = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [equal], tp: 10 })
-	assert.equal(tie.breakdown[0].damage, 45)
-	assert.deepEqual(tie.breakdown[0].chips, [])
-	// un peu mieux par PT (> 5) : retenue
-	const better = chip({ id: 24, name: "better", cost: 1, min: 6, max: 6 })
+	assert.equal(tie.breakdown[0].damage, 50)
+	assert.deepEqual(tie.breakdown[0].chips, [equal])
+	const better = chip({ id: 24, name: "better", cost: 1, min: 6, max: 6, cooldown: 1 })
 	const win = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [better], tp: 10 })
 	assert.equal(win.breakdown[0].damage, 51) // 6 + 3 tirs × 15
 	assert.deepEqual(win.breakdown[0].chips.map((c) => c.name), ["better"])
 })
 
-test("several chips: sorted by damage per TP, greedy under the TP constraint, then weapon shots", () => {
+test("several chips and the weapon share the TP: best total, chips listed in damage-per-TP order", () => {
 	const gun = weapon({ min: 10, max: 20, cost: 3 })
-	const heavy = chip({ id: 14, name: "heavy", cost: 4, min: 25, max: 35 }) // 30, 7,5/PT
-	const light = chip({ id: 15, name: "light", cost: 2, min: 18, max: 18 }) // 18, 9/PT
+	const heavy = chip({ id: 14, name: "heavy", cost: 4, min: 25, max: 35, cooldown: 1 }) // 30, 7,5/PT
+	const light = chip({ id: 15, name: "light", cost: 2, min: 18, max: 18, cooldown: 1 }) // 18, 9/PT
 	const tooCostly = chip({ id: 16, name: "costly", cost: 12, min: 200, max: 200 }) // > PT
 	const { breakdown } = dangerOf(makeGrid(21, 21), { weaponItem: gun, chips: [heavy, light, tooCostly], tp: 10 })
 	assert.deepEqual(breakdown[0].chips.map((c) => c.name), ["light", "heavy"])
@@ -319,11 +362,11 @@ test("the weapon-only plan is kept when it beats the chip plan (TP rounding)", (
 
 test("a chip usable from the shot cell while the weapon is not: chip only, even if its ratio is lower", () => {
 	const shortGun = weapon({ min: 10, max: 20, cost: 3, minRange: 1, maxRange: 2 })
-	const sniper = chip({ id: 18, name: "sniper", cost: 4, min: 20, max: 20, minRange: 1, maxRange: 8 }) // 5/PT
-	const meh = chip({ id: 19, name: "meh", cost: 4, min: 4, max: 4, minRange: 1, maxRange: 8 }) // 1/PT
+	const sniper = chip({ id: 18, name: "sniper", cost: 4, min: 20, max: 20, minRange: 1, maxRange: 8, cooldown: 1 }) // 5/PT
+	const meh = chip({ id: 19, name: "meh", cost: 4, min: 4, max: 4, minRange: 1, maxRange: 8, cooldown: 1 }) // 1/PT
 	// ennemi à 3 cases de moi : hors de portée de l'arme
 	const { breakdown } = dangerOf(makeGrid(21, 21), { weaponItem: shortGun, chips: [sniper], tp: 10 }, [10, 10], [7, 10])
-	assert.equal(breakdown[0].damage, 20) // une seule utilisation de la puce
+	assert.equal(breakdown[0].damage, 20) // une seule utilisation de la puce (cooldown)
 	assert.equal(breakdown[0].weapon, null)
 	assert.equal(breakdown[0].weaponShots, 0)
 	assert.deepEqual(breakdown[0].chips, [sniper])
@@ -395,7 +438,7 @@ test("line of sight blocks only needsLos items; the cache shares one call betwee
 	assert.equal(stopped.map.lineOfSightCalls, 1)
 
 	// puce sans needsLos : seule elle touche à travers l'obstacle
-	const mixed = blocked({ needsLos: true }, [chip({ id: 30, name: "through", needsLos: false })])
+	const mixed = blocked({ needsLos: true }, [chip({ id: 30, name: "through", needsLos: false, cooldown: 1 })])
 	assert.deepEqual(mixed.map.breakdownAt({ x: 9, y: 10 })[0].chips.map((c) => c.name), ["through"])
 	// deux items needsLos sur la même paire : une seule ligne de vue
 	const shared = blocked({ needsLos: true }, [chip({ id: 31, name: "sight", needsLos: true })])
@@ -1140,7 +1183,9 @@ async function runTurnCapturingLogs(turn) {
 
 test("turn() builds the threat map, logs one short [Threat] line before TURN END, and plays exactly as with an unarmed enemy", async () => {
 	// tours distincts : le module garde `enemyMemory` (et mes cases atteignables) d'un test à l'autre
-	const { turn, enemyMemory } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const unarmed = makeCombatWorld({ enemy: 120, ally: 121 }, { ...armedGun(), features: [] }, 10)
 	const unarmedLines = await runTurnCapturingLogs(turn)
 	const unarmedActions = [...unarmed.actions]
@@ -1166,7 +1211,9 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 })
 
 test("turn() still plays and logs reachable cells when the threat map fails, and reports the error", async () => {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 130, ally: 131 }, armedGun({ needsLos: true }), 12)
 	globalThis.Field.lineOfSight = () => { throw new Error("los down") }
 	debugLogs.length = 0
@@ -1181,7 +1228,9 @@ test("turn() still plays and logs reachable cells when the threat map fails, and
 })
 
 test("turn() logs 'unavailable' when my reachable cells could not be computed", async () => {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 140, ally: 141 }, armedGun(), 13)
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	const lines = await runTurnCapturingLogs(turn)

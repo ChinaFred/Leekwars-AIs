@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 20
+// file version: 21
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { logChipInventory } from "../Brain/StrengthBoost.js"
@@ -27,7 +27,7 @@ initLeekLogging(leekLogConfig)
  * repli. Effets détaillés : `docs/strategies.md`.
  */
 export const leekProfile = new LeekProfile()
-leekProfile.setRole("BALANCED")
+leekProfile.setRole("AGGRESSIVE")
 leekProfile.setAggression(50)
 leekProfile.setPreferredRange(3, 8)
 leekProfile.setSupportOptions(true, true, true)
