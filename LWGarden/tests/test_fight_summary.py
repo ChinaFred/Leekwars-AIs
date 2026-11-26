@@ -39,5 +39,32 @@ class SummaryTests(unittest.TestCase):
         self.assertIn("- 2 : 9 tours · vs Rival · pic ops 85 %", text)
 
 
+class TimelineTests(unittest.TestCase):
+    def test_turns_report_distance_unused_resources_and_questionable_retreat(self):
+        fight = {"data": {
+            "leeks": [{"id": 0, "farmer": 7, "team": 1, "name": "Kassbi", "cellPos": 35},
+                      {"id": 1, "farmer": 8, "team": 2, "name": "Rival", "cellPos": 125}],
+            "actions": [
+                [0],
+                [7, 0], [10, 0, 71, [53, 71]], [16, 125, 1], [101, 1, 40, 0], [8, 0, 10, 5],
+                [7, 1], [10, 1, 143, [143]], [8, 1, 10, 4],
+                [6, 2],
+                [7, 0], [10, 0, 53, [53]], [8, 0, 10, 5],
+            ]}}
+        logs = {"7": {"1": [[0, 1, "Enemy: Rival, HP: 1/1, Distance: 5"], [0, 4, [35], "ff", 1]],
+                      "5": [[0, 1, "=== KASSBI TURN END ==="], [0, 1, "Operations: 50/100 (50.0%)"]]}}
+
+        first, second = FightSummary.timeline(fight, logs, 7)
+
+        self.assertEqual((first["distance_start"], first["distance_end"]), (5, 3))
+        self.assertEqual((first["mp_used"], first["mp_total"], first["shots"], first["dealt"]),
+                         (2, 5, 1, 40))
+        self.assertEqual((first["flags"], first["operations"]), (["PM inutilisés"], 50.0))
+        self.assertEqual(first["logs"], ["Enemy: Rival, HP: 1/1, Distance: 5"])
+        self.assertEqual(second["enemy_shift"], 1)
+        self.assertEqual(second["flags"], ["aucune action payante : PT tous perdus", "PM inutilisés",
+                                           "recule alors que l'ennemi s'éloignait"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,10 +7,14 @@ Compte Kassbi, publié le 2026-11-26T10:44:25Z.
 Stratégie : aucun changement de comportement.
 Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
 Ops : pic maximal 39 % (combat 54953080), médiane des pics 39 %.
+Ressources : 64 tours joués, 6 sans aucune action payante (9 %), 46 % des PM inutilisés, 0 tours interrompus ou en erreur.
+Combats les plus gaspilleurs (tours sans action payante) : 54953080 (6/64, nul).
 
 ## unknown-version — version inconnue
 Combats : 128 — 92 victoires, 23 défaites, 13 nuls (72 % de victoires), 0 sans logs.
 Ops : pic maximal 98 % (combat 54942202), médiane des pics 43 %.
+Ressources : 1787 tours joués, 751 sans aucune action payante (42 %), 57 % des PM inutilisés, 11 tours interrompus ou en erreur.
+Combats les plus gaspilleurs (tours sans action payante) : 54941300 (11/12, défaite), 54931868 (5/7, victoire), 54941022 (42/64, nul), 54941210 (42/64, nul), 54941603 (42/64, nul).
 
 Défaites :
 - 54932341 : 11 tours · vs EnSahWolf · pic ops 62 %

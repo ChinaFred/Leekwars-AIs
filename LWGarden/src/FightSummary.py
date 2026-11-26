@@ -3,6 +3,8 @@
 Written by Garden after options 7 and 8, or on demand:
     python LWGarden/src/FightSummary.py                 rewrite Data/resume.md
     python LWGarden/src/FightSummary.py --fight 123     one fight: result, ops per turn
+    python LWGarden/src/FightSummary.py --fight 123 --turns   turn by turn: distance, MP and
+                                                        paid actions used, damage, decisions logged
     python LWGarden/src/FightSummary.py --fight 123 --grep PLANNING   matching log lines
 
 The summary is the entry point of the analysis: read it first, then open only the
@@ -10,6 +12,7 @@ fights it points to.
 """
 
 import argparse
+import json
 import os
 import re
 import statistics
@@ -65,6 +68,162 @@ def opponents(fight, farmer_id):
     return []
 
 
+MAP_WIDTH = 18
+ACTION_NEW_TURN, ACTION_LEEK_TURN, ACTION_END_TURN = 6, 7, 8
+ACTION_MOVE, ACTION_DEAD, ACTION_USE_CHIP, ACTION_SET_WEAPON, ACTION_USE_WEAPON = 10, 11, 12, 13, 16
+ACTION_LOST_LIFE, ACTION_AI_ERROR = 101, 1002
+LOG_TEXT_TYPES = (1, 2, 3)
+# Lines repeated every turn that carry no decision.
+LOG_NOISE = ("Accessible zone", "Danger zone", "[Reachable]", "===", "\n===", "Enemy HP",
+             "[Chips]", "[Speech]", "Operations:")
+PLAN_LINE = re.compile(r"^\[(Tactical|Reserve)\] plan before execution (\{.*)$", re.DOTALL)
+PLAN_KEYS = ("tp", "tpAvailable", "mp", "mpAvailable", "weapon", "chips", "protection", "attack",
+             "usefulDamage", "danger", "score", "searchStatus")
+MAX_LOG_LINE = 240
+
+
+def cell_distance(first, second):
+    """Number of moves between two cells of the diamond map (ids differ by 17 or 18 per step)."""
+    def position(cell):
+        row, column = divmod(cell, 2 * MAP_WIDTH - 1)
+        x, y = (2 * column, 2 * row) if column < MAP_WIDTH else (2 * (column - MAP_WIDTH) + 1, 2 * row + 1)
+        return (x + y) // 2, (y - x) // 2
+    (x1, y1), (x2, y2) = position(first), position(second)
+    return abs(x1 - x2) + abs(y1 - y2)
+
+
+def _compact_log(text):
+    plan = PLAN_LINE.match(text)
+    if plan:
+        try:
+            payload = json.loads(plan.group(2))
+            kept = {key: payload[key] for key in PLAN_KEYS if payload.get(key) not in (None, [], {})}
+            return "[{0}] plan {1}".format(plan.group(1), json.dumps(kept, ensure_ascii=False))
+        except ValueError:
+            pass
+    text = " ".join(text.split())
+    return text if len(text) <= MAX_LOG_LINE else text[:MAX_LOG_LINE] + "…"
+
+
+def _turn_logs(logs):
+    """{action index: [text lines]} for our leeks, without map marks."""
+    by_index = {}
+    for farmer_logs in (logs.values() if isinstance(logs, dict) else []):
+        if not isinstance(farmer_logs, dict):
+            continue
+        for index, entries in farmer_logs.items():
+            for entry in entries if isinstance(entries, list) else []:
+                if (isinstance(entry, list) and len(entry) > 2 and entry[1] in LOG_TEXT_TYPES
+                        and isinstance(entry[2], str)):
+                    by_index.setdefault(FightArchive._as_int(index), []).append(entry[2])
+    return by_index
+
+
+def timeline(fight, logs, farmer_id):
+    """One record per turn of each of our leeks: what was available, used and decided.
+
+    MP used is exact (path lengths). TP is not in the archive: `paid_actions` counts the
+    weapon shots, chips and weapon changes, and a turn with none wasted all its TP.
+    """
+    data = fight.get("data") if isinstance(fight.get("data"), dict) else {}
+    leeks = {leek["id"]: leek for leek in data.get("leeks") or [] if isinstance(leek, dict)}
+    farmer_id = FightArchive._as_int(farmer_id)
+    mine = {i for i, leek in leeks.items() if FightArchive._as_int(leek.get("farmer")) == farmer_id}
+    my_teams = {leeks[i].get("team") for i in mine}
+    cells = {i: leek.get("cellPos") for i, leek in leeks.items()}
+    alive = set(leeks)
+    logs_by_index = _turn_logs(logs)
+
+    def nearest_enemy(leek):
+        distances = [cell_distance(cells[leek], cells[other]) for other in alive
+                     if leeks[other].get("team") not in my_teams
+                     and cells.get(other) is not None and cells.get(leek) is not None]
+        return min(distances) if distances else None
+
+    turns, current, actor, turn_number = [], None, None, 1
+    last_enemy_shift = {}
+    for index, action in enumerate(data.get("actions") or []):
+        if not isinstance(action, list) or not action:
+            continue
+        kind = action[0]
+        if kind == ACTION_NEW_TURN and len(action) > 1:
+            turn_number = action[1]
+        elif kind == ACTION_LEEK_TURN and len(action) > 1:
+            actor = action[1]
+            if actor in mine:
+                current = {"turn": turn_number, "leek": leeks[actor].get("name"), "start": index,
+                           "distance_start": nearest_enemy(actor), "mp_total": None, "tp_total": None,
+                           "mp_used": 0, "shots": 0, "chips": 0, "weapon_changes": 0,
+                           "dealt": 0, "taken": 0, "error": False, "complete": False,
+                           "enemy_shift": last_enemy_shift.get(actor), "logs": []}
+                turns.append(current)
+            else:
+                current = None
+                before = {leek: nearest_enemy(leek) for leek in mine & alive}
+        elif kind == ACTION_MOVE and len(action) > 3:
+            cells[action[1]] = action[2]
+            if current is not None and action[1] == actor:
+                current["mp_used"] += len(action[3])
+        elif kind == ACTION_DEAD and len(action) > 1:
+            alive.discard(action[1])
+        elif kind == ACTION_LOST_LIFE and len(action) > 2:
+            if action[1] in mine:
+                if turns:
+                    turns[-1]["taken"] += action[2]
+            elif current is not None:
+                current["dealt"] += action[2]
+        elif current is not None and kind == ACTION_USE_WEAPON:
+            current["shots"] += 1
+        elif current is not None and kind == ACTION_USE_CHIP:
+            current["chips"] += 1
+        elif current is not None and kind == ACTION_SET_WEAPON:
+            current["weapon_changes"] += 1
+        elif current is not None and kind == ACTION_AI_ERROR:
+            current["error"] = True
+        elif kind == ACTION_END_TURN and len(action) > 3:
+            if current is not None and action[1] == actor:
+                current.update(end=index, tp_total=action[2], mp_total=action[3],
+                               distance_end=nearest_enemy(actor))
+            elif actor not in mine:
+                for leek, distance in before.items():
+                    after = nearest_enemy(leek) if leek in alive else None
+                    if distance is not None and after is not None:
+                        last_enemy_shift[leek] = after - distance
+    for turn in turns:
+        end = turn.get("end", turn["start"] + 1)
+        lines = [text for index in sorted(i for i in logs_by_index if i is not None)
+                 if turn["start"] <= index <= end + 1 for text in logs_by_index[index]]
+        turn["complete"] = any("TURN END" in text for text in lines) or not lines
+        operations = turn_operations(lines)
+        turn["operations"] = operations[-1] if operations else None
+        turn["logs"] = [_compact_log(text) for text in lines
+                        if not text.strip().startswith(LOG_NOISE)]
+        turn["paid_actions"] = turn["shots"] + turn["chips"] + turn["weapon_changes"]
+        turn.setdefault("distance_end", None)
+        own_shift = (turn["distance_end"] - turn["distance_start"]
+                     if None not in (turn["distance_end"], turn["distance_start"]) else None)
+        turn["flags"] = [flag for flag, raised in (
+            ("tour interrompu ou erreur d'IA", turn["error"] or not turn["complete"]),
+            ("aucune action payante : PT tous perdus", turn["paid_actions"] == 0),
+            ("PM inutilisés", turn["mp_total"] is not None and turn["mp_used"] < turn["mp_total"]),
+            ("recule alors que l'ennemi s'éloignait",
+             own_shift is not None and own_shift > 0 and (turn["enemy_shift"] or 0) > 0),
+        ) if raised]
+    return turns
+
+
+def waste(turns):
+    """Aggregate of a list of turns, for the summary."""
+    counted = [turn for turn in turns if turn["mp_total"]]
+    return {
+        "turns": len(turns),
+        "idle": sum(1 for turn in turns if turn["paid_actions"] == 0),
+        "broken": sum(1 for turn in turns if turn["error"] or not turn["complete"]),
+        "mp_unused": sum(turn["mp_total"] - turn["mp_used"] for turn in counted),
+        "mp_total": sum(turn["mp_total"] for turn in counted),
+    }
+
+
 def describe_fight(data_dir, meta):
     folder = FightArchive._fight_folder(
         data_dir, meta["fight_id"], meta.get("farmer_id"), meta["account"])
@@ -82,6 +241,7 @@ def describe_fight(data_dir, meta):
         "has_logs": meta.get("logs_status") == "ok",
         "operations": operations,
         "peak": max(operations) if operations else None,
+        "turn_records": timeline(fight, logs, meta.get("farmer_id")),
     }
 
 
@@ -146,6 +306,20 @@ def render(groups):
             worst = max((f for f in fights if f["peak"] is not None), key=lambda f: f["peak"])
             lines.append("Ops : pic maximal {0:.0f} % (combat {1}), médiane des pics {2:.0f} %.".format(
                 worst["peak"], worst["fight_id"], statistics.median(peaks)))
+        totals = waste([turn for f in fights for turn in f["turn_records"]])
+        if totals["turns"]:
+            lines.append("Ressources : {0} tours joués, {1} sans aucune action payante ({2:.0f} %), "
+                         "{3:.0f} % des PM inutilisés, {4} tours interrompus ou en erreur.".format(
+                             totals["turns"], totals["idle"], 100.0 * totals["idle"] / totals["turns"],
+                             100.0 * totals["mp_unused"] / totals["mp_total"] if totals["mp_total"] else 0,
+                             totals["broken"]))
+            worst = sorted((f for f in fights if f["turn_records"]), reverse=True,
+                           key=lambda f: waste(f["turn_records"])["idle"] / len(f["turn_records"]))[:5]
+            lines.append("Combats les plus gaspilleurs (tours sans action payante) : " + ", ".join(
+                "{0} ({1}/{2}, {3})".format(
+                    f["fight_id"], waste(f["turn_records"])["idle"], len(f["turn_records"]),
+                    {"win": "victoire", "loss": "défaite", "draw": "nul"}.get(f["outcome"], "?"))
+                for f in worst) + ".")
         losses = [f for f in fights if f["outcome"] == "loss"]
         if losses:
             lines += ["", "Défaites :"] + [_loss_line(f) for f in losses[-MAX_LISTED_LOSSES:]]
@@ -163,7 +337,7 @@ def write_summary(data_dir):
     return path
 
 
-def print_fight(data_dir, fight_id, pattern=None):
+def print_fight(data_dir, fight_id, pattern=None, turns=False):
     metas = [m for m in FightArchive.list_archived_fights(data_dir) if m["fight_id"] == fight_id]
     if not metas:
         print("Combat {0} absent de l'archive.".format(fight_id))
@@ -174,6 +348,23 @@ def print_fight(data_dir, fight_id, pattern=None):
             ", ".join(fight["opponents"]) or "?", **fight))
         print("Ops par tour (%) : " + (" ".join("{0:.0f}".format(p) for p in fight["operations"])
                                        or "aucune ligne d'opérations dans les logs"))
+        for turn in fight["turn_records"] if turns else []:
+            def shift(value):
+                if value is None:
+                    return "inconnu"
+                return ("s'est rapproché de {0}".format(-value) if value < 0
+                        else "s'est éloigné de {0}".format(value) if value > 0 else "n'a pas bougé")
+            print("\nTour {turn} — {leek} : distance {distance_start} → {distance_end}, "
+                  "PM {mp_used}/{mp_total}, PT disponibles {tp_total}, "
+                  "{shots} tirs, {chips} puces, {weapon_changes} changements d'arme".format(**turn))
+            print("  ennemi juste avant : {0} ; dégâts infligés {1}, subis ensuite {2} ; "
+                  "ops {3}".format(shift(turn["enemy_shift"]), turn["dealt"], turn["taken"],
+                                   "?" if turn["operations"] is None
+                                   else "{0:.0f} %".format(turn["operations"])))
+            if turn["flags"]:
+                print("  À examiner : " + " ; ".join(turn["flags"]))
+            for line in turn["logs"]:
+                print("  | " + line)
         if pattern:
             folder = FightArchive._fight_folder(
                 data_dir, fight_id, meta.get("farmer_id"), meta["account"])
@@ -191,11 +382,13 @@ def main(arguments=None):
     parser.add_argument("--data", default=default_data, help="dossier de l'archive (LWGarden/Data)")
     parser.add_argument("--fight", type=int, help="affiche un combat au lieu de réécrire le résumé")
     parser.add_argument("--grep", help="avec --fight : lignes de log correspondant à cette regex")
+    parser.add_argument("--turns", action="store_true",
+                        help="avec --fight : déroulé tour par tour (ressources, décisions)")
     options = parser.parse_args(arguments)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     if options.fight is not None:
-        return print_fight(options.data, options.fight, options.grep)
+        return print_fight(options.data, options.fight, options.grep, options.turns)
     print("Résumé écrit : " + write_summary(options.data))
     return 0
 
