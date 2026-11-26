@@ -63,16 +63,30 @@ function scenario({ enemyX = 3, gun = null, chipRange = 2, deny = false, danger 
 		evaluate: () => evaluateTacticalPlans(me, profile, context) }
 }
 
-test("false with or without a spatial explanation never certifies a hypothetical shot", () => {
-	for (const deny of [false, true]) {
-		const w = scenario({ deny })
-		assert.equal(w.me.canUseChip(w.chip, w.enemy), false, "target currently outside range")
-		assert.ok(w.me.chipCells(w.chip, w.enemy).some((cell) => cell.x === 1))
-		const result = w.evaluate()
-		assert.equal(result.plan, null)
-		assert.equal(result.reason, "offensive chip legality unverified")
-		assert.deepEqual(w.events, [])
-	}
+// Règle (décision de l'utilisateur) : `canUseChip` faux alors que ma case n'est PAS dans la liste native est expliqué par
+// la géométrie ; la puce est créditée sur les cases natives atteignables. Avant : plan nul, « legality unverified ».
+test("a chip out of range from my cell is credited on a reachable native cell: move, then cast", () => {
+	const w = scenario()
+	assert.equal(w.me.canUseChip(w.chip, w.enemy), false, "target currently outside range")
+	assert.equal(w.me.chipCells(w.chip, w.enemy).some((cell) => cell.x === 0), false, "my cell is not a native launch cell")
+	const result = w.evaluate()
+	assert.equal(result.reason, "complete search")
+	assert.deepEqual([result.plan.shotCell.x, result.plan.beforeMp, result.plan.chips], [1, 1, [w.chip]])
+	executeTacticalPlan(w.me, result.plan)
+	assert.deepEqual(w.events, ["move:1", "chip"])
+})
+
+test("a restriction that only shows on arrival: the move is made, the refusal is logged, nothing is cast, no error", () => {
+	const w = scenario({ deny: true })
+	const plan = w.evaluate().plan
+	assert.deepEqual([plan.shotCell.x, plan.chips], [1, [w.chip]], "out of range, the refusal cannot be told from geometry")
+	const messages = [], original = console.log
+	initLeekLogging(new LogConfig().setAll(false).setEnabled(LOG_CONTEXT.PLANNING, true))
+	try { console.log = (message) => messages.push(String(message)); executeTacticalPlan(w.me, plan) } finally { console.log = original }
+	assert.deepEqual(w.events, ["move:1"])
+	assert.equal(w.me.tp, 2, "no PT spent")
+	assert.ok(messages.some((m) => m.includes("[Tactical] execution: chip unavailable: chip")), "refusal logged in PLANNING")
+	assert.ok(!messages.some((m) => m.includes("API failure")))
 })
 
 test("a non-spatial refusal in range excludes only that chip, not a usable weapon", () => {

@@ -178,13 +178,13 @@ const describe = (w, plan) => ({
 
 // Valeurs relevées sur cette reconstruction ; aux deux tours la décision est celle d'avant le terme N, seul le score change.
 // Tour 3 : spark x 3 puis 546 (danger 0, distance 11 ; des cases de danger 0 existent à 13), d'où neutrino et rock sont
-// utilisables au tour suivant. N = 0,75 x (221 - 161,88) : plafonné par les PV restants après le MEILLEUR tour possible
-// (2 tirs de shotgun à 113 de force), pas après ce plan. Tour 4 : CARACTÉRISATION d'un objectif NON atteint au poids 0,75 :
-// le repli en 526 (danger 142,2 ; seul spark y reste utilisable, N = 0,75 x 43,2) bat de 12,15 points motivation + neutrino
-// + spark depuis 564 puis 527 (danger 252,8, N = 0,75 x 66 neutrino en main, score -43,2) ; bascule mesurée entre 1,2 et 1,3.
+// utilisables au tour suivant. N = 0,75 x 58,05 : plafonné par les PV restants après le MEILLEUR tour possible (toutes
+// cases de tir, puces créditées après déplacement comprises), pas après ce plan. Tour 4 : CARACTÉRISATION d'un objectif NON
+// atteint au poids 0,75 : le repli en 526 (danger 142,2 ; seul spark y reste utilisable, N = 0,75 x 43,2) garde l'avantage
+// sur motivation + neutrino + spark depuis 564 puis 527 (danger 252,8) ; bascule mesurée entre 0,8 et 0,85.
 const RECORDED = {
 	3: { destination: 546, distance: 11, shotCell: 565, weapon: null, shots: 0, chips: ["spark", "spark", "spark"], boost: [],
-		protection: [], usefulDamage: 76.68, danger: 0, nextTurn: 44.34, score: 121.02, neutrino: true, rock: true },
+		protection: [], usefulDamage: 76.68, danger: 0, nextTurn: 43.54, score: 120.22, neutrino: true, rock: true },
 	4: { destination: 526, distance: 12, shotCell: 546, weapon: null, shots: 0, chips: ["spark", "spark", "spark"], boost: [],
 		protection: [], usefulDamage: 43.2, danger: 142.2, nextTurn: 32.4, score: -31.05, neutrino: false, rock: false }
 }
@@ -209,7 +209,7 @@ test("N falls back to 0 for every cell when its operations allowance (5 %) is ex
 		// Tour 3 : 29 recherches de case hors zone. À 1 000 ops chacune (29 000 < 50 000) N est calculé ; à 2 000 (58 000),
 		// N = 0 partout : même plan et même score qu'avant le terme N, et une ligne PLANNING.
 		const within = arena(3, { ops: { perCellLookup: 1000 } })
-		assert.equal(Number(within.evaluate().plan.nextTurn.toFixed(2)), 44.34)
+		assert.equal(Number(within.evaluate().plan.nextTurn.toFixed(2)), 43.54)
 		const beyond = arena(3, { ops: { perCellLookup: 2000 } })
 		const { plan, reason } = beyond.evaluate()
 		assert.equal(reason, "complete search")

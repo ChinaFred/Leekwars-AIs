@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 29
+// file version: 30
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -73,13 +73,17 @@ export interface TacticalPlan {
 
 class Unavailable extends Error {}
 
-/** Bornes de recherche, pas des mesures d'opérations moteur. Aucun plan partiel n'est exécuté. */
+/**
+ * Bornes de recherche, pas des mesures d'opérations moteur. Aucun plan partiel n'est exécuté.
+ * `cells` 85 → 113 (losange de 7 PM en terrain ouvert : 5 PM + bottes) quand le budget du tour est passé à
+ * 2 000 000 d'opérations (pic d'opérations relevé : 44 % à 5 PM). Coût à 113 cases non mesuré en combat.
+ */
 export const TACTICAL_LIMITS = {
-	cells: 85, enemies: 4, weapons: 4, attackChips: 8, protectionChips: 3, tp: 30, work: 100000
+	cells: 113, enemies: 4, weapons: 4, attackChips: 8, protectionChips: 3, tp: 30, work: 100000
 } as const
 
 /**
- * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (300 000 sur 1 000 000) :
+ * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (alors 300 000 sur 1 000 000 ; 600 000 sur 2 000 000 aujourd'hui) :
  * combat 54939649, tours 4 et 5, la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147
  * alors que le planificateur complet choisissait une case sûre. Aucun coût réel mesuré : politique, pas borne moteur.
  */
@@ -93,7 +97,24 @@ const STAGNATION_ROUTE_CELLS = 613
 const STAGNATION_ROUTE_FRACTION = 0.02
 
 /** Compteurs de l'évaluation : puces écartées, et cause d'un plan nul sans progrès (sinon raison générique). */
-interface Skipped { unverified: number; refused: number; noProgress: string | null }
+interface Skipped { refused: number; noProgress: string | null }
+
+/**
+ * Zone d'effet d'une puce offensive : distance de Manhattan à la cible jusqu'à laquelle le lanceur peut se trouver
+ * dans la zone (le plan ne simule pas les zones). Clés : types `area` du moteur officiel (leek-wars-generator,
+ * `Area.java`) : cercles 1-3 (3, 4, 5), plus 2-3 (6, 7), X 1-3 (8, 9, 10), carrés 1-2 (11, 12). Case seule, laser,
+ * premier en ligne, `area` absent ou inconnu : 0. Renvoie 0 si chaque effet exclut le lanceur (`targets` sans le
+ * bit 4, `TARGET_CASTER` du moteur ; Éclair : 27). HYPOTHÈSE non vérifiée en combat : `chip.area` et
+ * `feature.targets` de l'API ont ces valeurs ; `targets` illisible = lanceur supposé touché.
+ */
+const AREA_SELF_RADIUS: Readonly<Record<number, number>> = { 3: 1, 4: 2, 5: 3, 6: 2, 7: 3, 8: 2, 9: 4, 10: 6, 11: 2, 12: 4 }
+const TARGET_CASTER = 4
+export function selfHitRadius(chip: Chip): number {
+	const radius = AREA_SELF_RADIUS[chip.area ?? 1] ?? 0
+	if (radius === 0 || chip.features.every((feature) =>
+		Number.isInteger(feature.targets) && (feature.targets & TARGET_CASTER) === 0)) return 0
+	return radius
+}
 class Budget {
 	private work = 0
 	private readonly start = typeof System === "undefined" ? 0 : System.operations
@@ -763,11 +784,11 @@ export function evaluateTacticalPlans(
 		...plan, state: { turn: preparation.turn, enemies: preparation.enemies }
 	}
 	try {
-		const skipped: Skipped = { unverified: 0, refused: 0, noProgress: null }
+		const skipped: Skipped = { refused: 0, noProgress: null }
 		const plan = evaluate(me, profile, context, skipped, budget, preparation)
 		if (!currentState()) throw new Unavailable("state changed during search")
-		const reason = skipped.noProgress ?? (skipped.unverified > 0 ? "offensive chip legality unverified" :
-			skipped.refused > 0 ? "offensive chip refused at current cell" : "no actionable plan")
+		const reason = skipped.noProgress ??
+			(skipped.refused > 0 ? "offensive chip refused at current cell" : "no actionable plan")
 		return { plan: stamp(plan), reason: plan ? "complete search" : reason, preparation }
 	} catch (error) {
 		if (error instanceof Unavailable) {
@@ -1098,11 +1119,11 @@ function evaluate(
 			if (nearest) retainWeapon(target, weapon, candidate, nearest)
 			return { weapon, candidate, cells }
 		}),
-		// Un refus depuis l'origine ne prouve pas une interdiction depuis une autre case :
-		// la raison peut être la portée/LOS, mais aussi une restriction que nous ne savons pas isoler.
-		// Sans preuve indépendante, ne pas créditer cette puce sur les cases hypothétiques.
+		// Refus depuis ma case alors qu'elle N'EST PAS dans la liste native : la géométrie (portée, alignement, ligne
+		// de vue) l'explique, la puce est créditée sur les cases natives atteignables (déplacement puis tir, revérifié
+		// par `canUseChip` à l'arrivée). Refus alors que ma case EST dans la liste : restriction inconnue, puce écartée.
 		chips: attackChips.map((chip) => {
-			if (!mayReach(target, chip)) { skipped.unverified++; return null }
+			if (!mayReach(target, chip)) return null
 			const cells = nativeCells(() => {
 				const raw = me.chipCells(chip, target)
 				chipZones.set(chip, raw) // Réutilisé par la sortie de stagnation, sans second appel natif.
@@ -1111,10 +1132,17 @@ function evaluate(
 			budget.check()
 			const usable = me.canUseChip(chip, target)
 			budget.check()
-			if (!usable) {
-				if (cells.has(key(me.cell))) skipped.refused++
-				else skipped.unverified++
-				return null
+			if (!usable && cells.has(key(me.cell))) { skipped.refused++; return null }
+			// Zone d'effet non simulée : pas de tir depuis une case où je serais dans la zone centrée sur la cible.
+			const radius = selfHitRadius(chip)
+			if (radius > 0) {
+				const outside = (cell: Cell): boolean =>
+					Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y) > radius
+				for (const { cell } of entries) {
+					budget.tick()
+					if (!outside(cell)) cells.delete(key(cell))
+				}
+				chipZones.set(chip, chipZones.get(chip)!.filter(outside)) // même garde pour la sortie de stagnation
 			}
 			return { candidate: toCandidate(chip, true, me.strength) as ShotCandidate, cells }
 		}).filter((chip) => chip !== null)
@@ -1142,8 +1170,9 @@ function evaluate(
 		}
 	}
 	// Terme `N` (un seul ennemi) : dégâts du tour suivant calculés pour TOUTES les cases dans leur propre allocation,
-	// sinon `N` nul pour toutes. Puces : seulement celles que la recherche de ce tour crédite (`canUseChip` vrai depuis
-	// ma case) et dont le cooldown de base (0 ou 1) les laisse prêtes au tour suivant même si le plan les lance.
+	// sinon `N` nul pour toutes. Puces : exactement celles que la recherche de ce tour crédite (même règle : écartée
+	// seulement si `canUseChip` la refuse depuis une case de sa liste native ; cases sous zone d'effet déjà retirées), de
+	// cooldown de base 0 ou 1 (prêtes au tour suivant même si le plan les lance). Aucun appel natif de plus.
 	let nextDamages: NextTurn | null = null
 	if (enemies.length === 1) {
 		try {
@@ -1166,10 +1195,13 @@ function evaluate(
 		const distance = firing[entryIndex.get(key(cell))!]
 		return distance === Infinity ? undefined : distance
 	}
-	const hasOffense = prepared.some((enemy) =>
-		enemy.weapons.some((w) => w.candidate && netDamage(w.candidate, enemy.target) > 0 && w.cells.size > 0) ||
+	const weaponOffense = prepared.some((enemy) =>
+		enemy.weapons.some((w) => w.candidate && netDamage(w.candidate, enemy.target) > 0 && w.cells.size > 0))
+	const hasOffense = weaponOffense || prepared.some((enemy) =>
 		enemy.chips.some((c) => netDamage(c.candidate, enemy.target) > 0 && c.cells.size > 0))
-	const futureRoute = !hasOffense && enemies.length === 1
+	// Le trajet futur est celui d'une ARME : une puce atteignable ce tour ne le coupe pas (son tir peut être décliné
+	// comme trop dangereux ; l'avance sûre vers une case de tir d'arme doit alors rester un plan candidat).
+	const futureRoute = !weaponOffense && enemies.length === 1
 		? futureWeaponRoute(me, enemies[0]!, weapons, reachable, budget) : null
 	// Si la case hypothétique est déjà accessible ce tour, conserver le progrès
 	// Manhattan existant ; la distance sert seulement à départager les égalités.
@@ -1255,9 +1287,9 @@ function evaluate(
 	}
 	endingCache.clear()
 	// Sans attaque connue, progression/couvert/support sont AUSSI un plan complet.
-	// Une légalité de puce refusée/non vérifiée n'autorise pas une approche de tir fictive.
+	// Une puce refusée depuis une case de sa liste native n'autorise pas une approche de tir fictive.
 	let progressPlan: TacticalPlan | null = null
-	if (enemies.length && (hasAffordableWeapon || futureRoute || (!skipped.unverified && !skipped.refused))) {
+	if (enemies.length && (hasAffordableWeapon || futureRoute || !skipped.refused)) {
 		const target = enemies[0]!
 		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
 		// Valeurs qui ne dépendent pas de la protection : une fois par case, pas une fois par (protection, case).
@@ -1406,7 +1438,9 @@ function evaluate(
 					killsLastEnemy(attack.damage, option.target, enemies.length), lifeFraction) + weight * protection.heal +
 					future + nextTurn
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
-				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, undefined,
+				// Même départage que le plan de progression (trajet futur, seulement sans tir d'arme à portée).
+				const futureRouteAtEnd = futureRoute?.get(key(ending.cell))
+				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, futureRouteAtEnd,
 					shot.cost + ending.cost)) continue
 				const candidate: TacticalPlan = {
 					target: option.target, shotCell: shot.cell, destination: ending.cell,
@@ -1414,7 +1448,7 @@ function evaluate(
 					weapon: attack.weaponShots > 0 ? option.weapon : null,
 					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
 					boost: boostOf(variant), tpUsed, usefulDamage, danger: finalDanger,
-					firingDistance: firingDistanceAtEnd,
+					firingDistance: firingDistanceAtEnd, futureRouteDistance: futureRouteAtEnd,
 					score, nextTurn
 				}
 				best = candidate
@@ -1472,7 +1506,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 		boost: (plan.boost?.chips ?? []).map((chip) => ({ name: chip.name, cost: chip.cost })),
 		protection: plan.protection.map((chip) => ({ name: chip.name, cost: chip.cost })),
 		attackLegality: plan.weaponShots > 0 || plan.chips.length > 0
-			? "native cells/current permission; range/LOS checked in selection, native permission rechecked at execution"
+			? "native cells; range/LOS checked in selection, native permission rechecked at execution"
 			: "no attack selected",
 		usefulDamage: plan.usefulDamage, danger: currentState() ? plan.danger : null,
 		score: currentState() ? plan.score : null, nextTurn: currentState() ? plan.nextTurn ?? 0 : null,

@@ -188,6 +188,8 @@ declare const Effect: {
 	readonly BUFF_STRENGTH: number
 	readonly BUFF_AGILITY: number
 	readonly BUFF_MP: number
+	/** Nom non confirmé dans la doc TypeScript (TYPE_RAW_BUFF_MP = 31 dans `Effect.java` du générateur) : optionnel. */
+	readonly RAW_BUFF_MP?: number
 	readonly BUFF_TP: number
 	/** Nom non confirmé dans la doc TypeScript (EFFECT_RAW_BUFF_TP = 32 en LeekScript) : optionnel. */
 	readonly RAW_BUFF_TP?: number

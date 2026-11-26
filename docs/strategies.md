@@ -9,17 +9,18 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 
 1. **Observer** : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
-2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
+2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
+3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
    (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
      historique** (`Plannification.ts`), sans boost.
-3. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
+4. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
    (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
-Un plan est entièrement décidé et affiché (`PLANNING`) **avant** la première action, boosts compris : `turn()` ne
-lance rien hors du plan. Après le début de l'exécution, aucun second plan n'est lancé : un échec arrête la séquence.
+Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, boosts de force et de PT compris ; hors du
+plan, `turn()` ne lance que le boost de PM (il en change les entrées). Exécution commencée, aucun second plan : un échec l'arrête.
 
 **Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ;
 elle est suivie à part (`[Chest]`, contexte `MEMORY`).
@@ -27,18 +28,19 @@ elle est suivie à part (`[Chest]`, contexte `MEMORY`).
 ## Plan conjoint (`TacticalPlanner.ts`)
 
 Compare en un seul score attaque, boost, protection et déplacement. Un plan = **une cible, une case de tir, au plus
-une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support)
-concourt aussi.
+une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support) concourt aussi.
 
 **Conditions** : `ReachableCells` et `ThreatMap` du tour courant, non tronquées, danger connu, fini et ≥ 0 sur
 chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par zéro) et on passe au plan B.
 
-**Cases de tir** : listes natives `Fight.weaponCells` / `me.chipCells` (portée, motif, ligne de vue). Un item dont
-aucune case de ma zone n'est à portée de Manhattan de la cible n'appelle pas le fournisseur natif. Une puce
-offensive n'est créditée que si `me.canUseChip` est vrai depuis la case actuelle.
+**Cases de tir** : listes natives `Fight.weaponCells` / `me.chipCells` (portée, motif dont le lancer en ligne, ligne de vue) ;
+pas d'appel natif si aucune case de ma zone n'est à portée de Manhattan de la cible. Arme et puce offensive sont créditées sur
+leurs cases atteignables (déplacement puis tir). Puce écartée si `me.canUseChip` la refuse alors que ma case est dans sa liste
+(restriction inconnue) ; jamais tirée d'une case de sa zone d'effet si un effet peut toucher le lanceur (`selfHitRadius`).
 
 **Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs → déplacement
 final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce offensive au cooldown de base nul (`Chip.cooldown`, `chipUsesOf`) est planifiée et relancée tant que `maxUses` et les PT le permettent ; sinon 1 fois.
+Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
 
 ### Score et compromis explicite
 
@@ -75,16 +77,15 @@ le plan préfère une case sûre et un recul après tir. `RETREAT_RISK_FACTOR` e
 
 **Anticipation** (un seul ennemi, sinon `N` = 0). **`N`** (`nextTurn` dans le journal du plan) valorise la **position** finale, jamais des dégâts non infligés : il ne dépend que de la case finale et de l'arme en main à la fin du plan.
 `U_max` étant une constante du tour, renoncer à un tir coûte ses dégâts pleins, et si un plan peut prendre tous les PV de la cible ce tour `N` = 0 partout (classement identique à celui sans `N`). Cible supposée **immobile** ; un item est utilisable depuis une case
-si une case de sa liste native de tir est à au plus mes PM de marche (cases libres). Items : armes dont la liste a déjà été obtenue ce tour, puces offensives créditées ce tour (`canUseChip` vrai depuis ma case) de cooldown de base 0 ou 1 ; aucun appel natif de plus.
+si une case de sa liste native de tir est à au plus mes PM de marche (cases libres). Items : armes dont la liste a déjà été obtenue ce tour, puces offensives créditées ce tour (même règle que la recherche : voir « Cases de tir ») de cooldown de base 0 ou 1 ; aucun appel natif de plus.
 Dégâts : maximum exact (sac à dos des puces, une arme au plus, 1 PT si elle n'est pas en main à la fin du plan), PT et force du début de ce tour moins les boosts qui expirent, sans les boosts du plan (leur gain futur est `F`).
 Après un tir, la case finale maximise `N` − coût de risque parmi les cases atteignables avec les PM restants (sans `N` : la case de moindre danger). Allocation : 5 % des opérations (`NEXT_TURN_FRACTION`) ; dépassée, `N` = 0 pour **toutes** les cases, ligne `PLANNING`. Le plan B n'a pas `N`.
-La distance à une case de tir ne départage que les égalités. **Trajet futur sans tir** : si aucune attaque n'est possible ce tour, un BFS
+La distance à une case de tir ne départage que les égalités. **Trajet futur sans tir** : si aucun tir d'arme n'est possible ce tour, un BFS
 (160 cases, 8 pas, 8 lignes de vue, 2 % des opérations) cherche une case de tir et remplace `G` Manhattan par la distance de trajet.
 
 ### Sortie de stagnation
 
-Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de
-distance Manhattan).
+Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
 
 - **Tour sans progrès** : ni dégâts infligés, ni nouveau record de proximité à l'ennemi le plus proche. Rester
   immobile ou osciller compte de la même façon.
@@ -103,12 +104,12 @@ distance Manhattan).
 
 | Borne | Valeur | Fichier |
 |---|---|---|
-| `TACTICAL_LIMITS` | 85 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalPlanner.ts` |
+| `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalPlanner.ts` |
 | Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalPlanner.ts` |
 | Arrêt de la recherche (global) | 80 % du total, partagé avec le plan B et la carte de danger (`SEARCH_GLOBAL_FRACTION`) | `ExecutionBudget.ts` |
 | Garde d'exécution | continuer si `max − ops > 3 % × max + 2 × plus gros segment observé` (`TAIL_FRACTION`) | `ExecutionBudget.ts` |
 
-Au-delà d'une borne (par exemple plus de 85 cases atteignables, soit dès 7 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
+Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 
 ## Plan B (`ReservePlan.ts`)
@@ -123,16 +124,14 @@ Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou 
 3. Sans attaque : progression ou couvert si `G − w × danger` bat le score de rester ; danger inconnu → seul un
    progrès strictement positif.
 4. Supports (soin, bouclier) avec les PT restants, aux seuils du tableau ci-dessous.
-5. Repli final vers une case de danger connu strictement inférieur ; sans carte valide, `moveAwayFrom` l'ennemi
-   le plus proche.
+5. Repli final vers une case de danger connu strictement inférieur ; sans carte valide, `moveAwayFrom` l'ennemi le plus proche.
 
 Passé 80 % d'opérations au départ, le plan B tourne en mode dégradé (8 premières cases natives, pas de progression).
 
 ## Boosts (`src/Brain/StrengthBoost.ts`)
 
-Une puce est un boost de force (`BUFF_STRENGTH`, ou effet 38) ou de PT (`BUFF_TP`, ou effet 32). Le boost est une
-**composante du plan** : au plus une puce de chaque type par tour (le plus grand gain), jamais tant que l'effet est
-actif, le boost de PT avant celui de force.
+Une puce est un boost de force (`BUFF_STRENGTH`, ou effet 38), de PT (`BUFF_TP`, 32) ou de PM (`BUFF_MP`, 31) : au plus une
+par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Force et PT : **composante du plan**, PT d'abord.
 
 - **Plan conjoint** : 4 variantes au plus (aucun, PT, force, les deux). PT du plan = PT − coûts + PT gagnés
   (partie entière du gain moyen) ; dégâts calculés avec la force boostée : le gain de ce tour est dans `U`.
@@ -142,13 +141,15 @@ actif, le boost de PT avant celui de force.
   `F > 0` (durée ≥ 2) et si l'ennemi le plus proche est à portée max de mes armes + 2 × mes PM + ses PM.
 - **Plan B** : avec un tir d'arme, gain net du modèle à une arme (`boostNetDamage`, `tpBoostNetDamage`) > 0 et PV ≥ 50 % ;
   les tirs prévus sont réduits d'autant. Sinon, règle « sans tir » avec les PT que ni l'attaque ni les supports n'emploient.
-- Sans boost prêt, la recherche ne fait aucun travail de plus (une seule variante).
+- Sans boost de force ou de PT prêt, la recherche ne fait aucun travail de plus (une seule variante).
+- **Boost de PM** (`decideMpBoost`, avant le plan ; gain = partie entière ≥ 1), si tout est vrai : PV ≥ 50 % ; cases du tour
+  non tronquées, sans case de tir native d'une arme ou puce offensive prête payable ; zone à PM + gain non tronquée, ≤ 113 cases
+  (sinon plan B), avec une case de tir d'une arme payable après le boost (+ 1 PT si non équipée) ; opérations < 80 %.
 
 ## Séquence historique (`Plannification.ts`, `Strategy/*.ts`)
 
 Chemin de compatibilité ; les classes `Strategy` fournissent les seuils du rôle aux trois chemins. Ordre normal : arme → déplacement → tir ou
-puce → bouclier/soin → repli. **Ordre critique** (distance ≤ 8, vie ≤ 60 %, `shouldHide` vrai) : repli → puces →
-tir → déplacement.
+puce → bouclier/soin → repli. **Ordre critique** (distance ≤ 8, vie ≤ 60 %, `shouldHide` vrai) : repli → puces → tir → déplacement.
 
 ### Seuils par stratégie
 
@@ -167,8 +168,7 @@ pénalité de portée d'arme et portée préférée max : séquence historique s
 | Puce d'attaque | `vie ≥ 0,50 − 0,20a` (0,40) | `vie ≥ 0,45 − 0,25a` (0,325) | `vie ≥ 0,75 − 0,20a` (0,65) |
 | Pénalité de portée d'arme | `0,045 − 0,015a` | `0,02 − 0,01a` | `0,07 − 0,015a` |
 
-- « Trop près » : `d < max(2, portée préférée min − 1)`.
-- Portée de menace : PM de l'ennemi + portée max de son arme.
+- « Trop près » : `d < max(2, portée préférée min − 1)`. Portée de menace : PM de l'ennemi + portée max de son arme.
 - Score d'arme : dégâts moyens du tour − pénalité × écart entre portée moyenne préférée et portée moyenne de l'arme.
 - Le soin est sauté si tirer rapporte plus : `dégâts par PT × coût du soin > 2 × soin moyen`.
 - **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux
@@ -216,7 +216,7 @@ Pour chaque case que je peux atteindre : somme, sur les ennemis, de leurs meille
 - **Boosts adverses** : jusqu'à 3 puces de force ou de PT (`MAX_THREAT_BOOSTS`) lancées avant de tirer.
 - **Portée** : l'ennemi se déplace (PM maximaux vus) puis tire ; distance, motif de lancer, puis ligne de vue si
   l'item l'exige. La valeur d'une case est le maximum sur ses cases de tir.
-- **Garde-fous** : `MAX_THREAT_PAIRS` = 8 000 paires (case de tir, ma case) et arrêt à 80 % des opérations ;
+- **Garde-fous** : `MAX_THREAT_PAIRS` = 16 000 paires (case de tir, ma case) et arrêt à 80 % des opérations ;
   au-delà, `truncated` : les cases non évaluées sont absentes, jamais présentées comme sûres.
 
 Les tests vérifient les écarts **documentés** de la carte, jamais exacte à 100 % : au plus `MAX_THREAT_WEAPONS`
@@ -237,12 +237,14 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 
 ## Limites connues
 
-- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage.
-- Non simulés : zones d'effet, poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
+- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
+- Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
+  combat), poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
 - Les coûts en opérations sont estimés, pas mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces (`Effect.turns` = 1 : dernier tour), cooldown de base 1 = puce prête au tour suivant, détection `instanceof Chest`.
 - `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, `NEXT_TURN_WEIGHT`, passivité et sa marge : non calibrés.
-- `N` : l'ennemi bouge en réalité (la promesse d'un tir peut ne pas être tenue) ; les items d'une case peuvent demander des cases de tir différentes ; un item hors de portée de ma zone ce tour, inabordable, en cooldown ou de cooldown de base > 1 n'est pas compté ; `U_max` (même réalisable seulement à fort danger) comprime `N` ; `N` et `F` s'additionnent sans plafond commun. Combat 54965081, tour 4 : à 0,75 le repli garde 12,15 points d'avance (bascule entre 1,2 et 1,3).
+- `N` : l'ennemi bouge en réalité (la promesse d'un tir peut ne pas être tenue) ; les items d'une case peuvent demander des cases de tir différentes ; un item hors de portée de ma zone ce tour, inabordable, en cooldown ou de cooldown de base > 1 n'est pas compté ; `U_max` (même réalisable seulement à fort danger) comprime `N` ; `N` et `F` s'additionnent sans plafond commun. Combat 54965081, tour 4 : à 0,75 le repli garde l'avantage (bascule mesurée entre 0,8 et 0,85).
 - Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
+- Boost de PM : danger des cases débloquées non regardé (si le plan refuse d'y aller, ses PT sont perdus ce tour) ; pas pour fuir.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API : les tests valident la logique, pas la force en combat.
