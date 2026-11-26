@@ -2,6 +2,15 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 09838c1 — fix(tactique): historique des actions dans un fichier existant
+Compte Kassbi, publié le 2026-11-26T17:36:51Z.
+Stratégie : aucun changement de comportement par rapport à f418b84 (passivité tirée des dégâts mesurés de mes actions, poids du risque 1 / 0,5 / 0 à 2 / 3 / 4 tours passifs, marge de 0,75 x (PV + soin) à poids réduit, ligne [History] en fin de tour) ; seul l'emplacement du code change.
+Combats : 1 — 1 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 44 % (combat 54965081), médiane des pics 44 %.
+Ressources : 7 tours joués, 0 sans aucune action payante (0 %), 31 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 40 % inutilisés sur 73 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54965081 (0/7, victoire).
+
 ## b7c7b61 — refactor(plan): createStrategy dans LeekProfile.ts, sans nouveau fichier
 Compte Kassbi, publié le 2026-11-26T10:44:25Z.
 Stratégie : aucun changement de comportement.
