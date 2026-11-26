@@ -116,6 +116,39 @@ class GardenRecordPublicationTests(unittest.TestCase):
             self.assertIsNone(self.record(self.summary))
 
 
+class UnattendedApi(DeployFakeApi):
+    def connect_with_api_key(self, api_key):
+        return api_key == "key"
+
+    def get_farmer_self(self):
+        return {"farmer": {"login": "me"}}
+
+
+class UnattendedPushTests(unittest.TestCase):
+    def push(self, state, api, key="key"):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "main.ts", "code")
+            config = {"AIs_folder": root, "accounts": [], "data_folder": os.path.join(root, "data")}
+            with patch.object(FightArchive, "read_git_state", return_value=state), \
+                    patch("builtins.input", side_effect=AssertionError("prompted")):
+                code = Garden.push_unattended(api, {"LEEKWARS_API_KEY": key}, config)
+            return code, FightArchive.load_publications(config["data_folder"])
+
+    def test_clean_sources_are_deployed_and_recorded_without_prompt_or_deletion(self):
+        api = UnattendedApi(ais=[{"path": "old"}], codes={"old": "x"})
+        code, publications = self.push(git_state(), api)
+        self.assertEqual(code, 0)
+        self.assertEqual([record["commit"] for record in publications], ["a" * 40])
+        self.assertIn("old", api.codes)
+
+    def test_refusals_deploy_nothing(self):
+        for state, key, expected in ((git_state(dirty=True), "key", 3), (git_state(), "", 2),
+                                     (git_state(), "wrong", 2)):
+            api = UnattendedApi()
+            code, publications = self.push(state, api, key)
+            self.assertEqual((code, publications, api.codes), (expected, [], {}))
+
+
 class RemoteTreeErrorTests(unittest.TestCase):
     def test_error_response_is_reported_and_never_wipes_local_sources(self):
         class ErrorApi:

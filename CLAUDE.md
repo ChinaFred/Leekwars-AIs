@@ -49,6 +49,8 @@ Choisis le plus petit circuit qui couvre la demande.
 
 - N'expose jamais de mot de passe, jeton ou secret. N'ouvre pas `LWGarden/src/config.json`.
 - Ne pousse pas de code et ne déclenche pas de PUSH Garden sans demande explicite.
+- Déploiement sur Leek Wars : seulement quand l'utilisateur valide une version ou demande « déploie sur leek »,
+  par un tag `leek-*` (skill `deploie-leek`), jamais à chaque push.
 
 ## Commits
 

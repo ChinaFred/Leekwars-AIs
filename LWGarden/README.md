@@ -76,6 +76,25 @@ For each account, remote-only AIs and folders are listed before any deletion;
 type `DELETE` to move them to the server trash, or enter anything else to keep
 them.
 
+## Déploiement sans menu
+
+`python LWGarden/src/Garden.py push` déploie les sources sur le compte principal sans
+aucune question, pour un usage automatique. Il lit `LEEKWARS_API_KEY` (ou le compte
+principal de `config.json` s'il existe ; sans `config.json`, les sources sont `src/`),
+ne supprime jamais rien côté serveur, refuse des sources différentes du dernier commit et
+enregistre la publication. Codes de sortie : `0` déployé ou déjà à jour, `1` échec,
+`2` clé absente ou refusée, `3` sources modifiées.
+
+Le workflow `.github/workflows/deploy-leek.yml` l'utilise : il se déclenche sur un tag
+`leek-*` (ou à la main dans l'onglet Actions), lance les tests, déploie, puis committe
+`Data/publications.json` sur la branche par défaut. Il lui faut le secret
+`LEEKWARS_API_KEY` du dépôt GitHub.
+
+```powershell
+git tag -a leek-20261126-1 -m "Déploiement : sortie de stagnation"
+git push origin leek-20261126-1
+```
+
 ## Archive des combats et versions
 
 Les options `7` et `8` constituent une base locale pour analyser les combats

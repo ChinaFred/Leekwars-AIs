@@ -15,11 +15,19 @@ def connect_primary(api, principal, api_key):
     return api.connect(principal["username"], principal["password"])
 
 
-def load_config():
+DEFAULT_AIS_FOLDER = "../../src"
+
+
+def load_config(required=True):
+    """Read config.json. With required=False (unattended PUSH), a missing file
+    falls back to the repository layout and no configured account."""
     garden_directory = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(garden_directory, "config.json")
-    with open(config_path, "r") as configfile:
-        config = json.load(configfile)
+    if not required and not os.path.exists(config_path):
+        config = {"AIs_folder": DEFAULT_AIS_FOLDER, "accounts": []}
+    else:
+        with open(config_path, "r") as configfile:
+            config = json.load(configfile)
     config["AIs_folder"] = os.path.abspath(
         os.path.join(garden_directory, config["AIs_folder"])
     )
@@ -61,6 +69,53 @@ def record_publication(config, account, summary):
     else:
         print("Publication already recorded for this version.")
     return record
+
+
+def push_unattended(api=None, environ=None, config=None):
+    """PUSH the sources to the primary account without any prompt (CI, tags).
+
+    Never deletes remote-only items and refuses sources that differ from HEAD, so
+    that the recorded commit message describes exactly what fights. Returns a
+    process exit code: 0 deployed or already up to date, 1 deployment failed,
+    2 no credentials or login refused, 3 sources differ from the last commit.
+    """
+    environ = os.environ if environ is None else environ
+    config = load_config(required=False) if config is None else config
+    api_key = environ.get("LEEKWARS_API_KEY", "").strip()
+    principal = next((a for a in config.get("accounts", []) if a.get("primary") == 'true'), None)
+    if not api_key and principal is None:
+        print("Unattended PUSH needs LEEKWARS_API_KEY (or a primary account in config.json).")
+        return 2
+    git_state = FightArchive.read_git_state(config["AIs_folder"])
+    if git_state["dirty"]:
+        print("Unattended PUSH refused: sources differ from the last commit "
+              "(or git is unavailable): {0}".format(", ".join(git_state["dirty_files"]) or "?"))
+        return 3
+    api = LWApi() if api is None else api
+    if not connect_primary(api, principal, api_key):
+        print("Cannot authenticate to the primary Leek Wars account.")
+        return 2
+    login = api.get_farmer_self()["farmer"]["login"]
+    print("Unattended PUSH of {0} ({1}) to {2}".format(
+        git_state["commit"][:12], git_state["subject"], login))
+    try:
+        summary = deploy_local_ais(api, config["AIs_folder"])
+    except (RuntimeError, ValueError) as error:
+        print("PUSH failed: {0}".format(error))
+        return 1
+    record_publication(config, login, summary)
+    return 0
+
+
+def run(arguments):
+    """`Garden.py` opens the menu; `Garden.py push` deploys without prompting."""
+    if not arguments:
+        main()
+        return 0
+    if arguments == ["push"]:
+        return push_unattended()
+    print("Usage: Garden.py [push]")
+    return 64
 
 
 MAX_PRINTED_LOG_FAILURES = 10
@@ -581,4 +636,4 @@ def get_local_ais(root_folder, local_ais=None):
 
 # Here goes all the magic
 if __name__ == "__main__":
-    main()
+    sys.exit(run(sys.argv[1:]))

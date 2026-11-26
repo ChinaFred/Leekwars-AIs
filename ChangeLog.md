@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Déploiement par tag : `Garden.py push` sans menu ni suppression distante, lancé par GitHub Actions sur un tag `leek-*` après les tests.
 - 2026-11-26 — Aide au dev : agents développeur, testeur, stratège, 4 skills et hooks Claude, agents Copilot générés, docs allégées, combats archivés suivis dans Git avec `resume.md`.
 - 2026-11-25 — Diagnostic des logs refusés : l'archive garde âge, erreur et mode d'authentification ; un combat de moins de 10 min est marqué « logs pas encore disponibles ».
 - 2026-11-25 — Sortie de stagnation : après 2 tours sans progrès, plan bloqué et ennemis immobiles, Kassbi marche vers une zone de tir sans augmenter son danger (combat 54940819).

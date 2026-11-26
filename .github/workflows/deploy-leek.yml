@@ -1,0 +1,69 @@
+# Déploie src/ sur le compte principal Leek Wars.
+# Déclenché par un tag `leek-*` poussé sur un commit validé, ou à la main (Actions > Run workflow).
+# Secret requis : LEEKWARS_API_KEY (Settings > Secrets and variables > Actions).
+name: Déploiement Leek Wars
+
+on:
+  push:
+    tags: ["leek-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-leek
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      PUBLICATIONS: LWGarden/Data/publications.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          python -m pip install --quiet -r LWGarden/src/requirements.txt
+          python -m unittest discover -s LWGarden/tests -p "test*.py"
+
+      - name: Reprendre l'historique des publications de la branche par défaut
+        run: |
+          git fetch origin "$DEFAULT_BRANCH"
+          mkdir -p "$(dirname "$PUBLICATIONS")"
+          git show "origin/$DEFAULT_BRANCH:$PUBLICATIONS" > "$PUBLICATIONS" || rm -f "$PUBLICATIONS"
+
+      - name: PUSH Garden vers Leek Wars
+        env:
+          LEEKWARS_API_KEY: ${{ secrets.LEEKWARS_API_KEY }}
+        run: python LWGarden/src/Garden.py push
+
+      - name: Enregistrer la publication sur la branche par défaut
+        run: |
+          if [ ! -f "$PUBLICATIONS" ]; then echo "Aucune publication à enregistrer."; exit 0; fi
+          cp "$PUBLICATIONS" "$RUNNER_TEMP/publications.json"
+          git checkout --force -B "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+          cp "$RUNNER_TEMP/publications.json" "$PUBLICATIONS"
+          git add "$PUBLICATIONS"
+          if git diff --cached --quiet; then echo "Version déjà enregistrée."; exit 0; fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(data): publication ${GITHUB_REF_NAME} (${GITHUB_SHA::12})"
+          git push origin "$DEFAULT_BRANCH"
