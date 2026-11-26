@@ -97,7 +97,8 @@ déployé, sa branche (`master` ou autre), le tag, la date et le résumé de la 
 tourne. Il est réécrit même si aucune source n'a changé, n'est jamais proposé à la
 suppression ni rapatrié par PULL. Si sa création est refusée (`ai/create` avec une clé
 d'API), le déploiement réussit quand même avec un avertissement : créez une fois une IA
-`DEPLOYED.ts` à la racine de l'éditeur, Garden la tiendra ensuite à jour.
+`DEPLOYED.ts` à la racine de l'éditeur (casse et extension libres), Garden la tiendra
+ensuite à jour.
 
 De même, `python LWGarden/src/Garden.py archive` enchaîne sans question l'archive des
 combats récents, l'export de toutes les versions et `Data/resume.md` (options `7` et `8`,

@@ -89,6 +89,21 @@ class PublishTests(unittest.TestCase):
         self.assertEqual([path for path, _ in api.writes], ["DEPLOYED.ts"] * 2)
         self.assertIn("// Commit déployé : " + "b" * 40, api.codes["DEPLOYED.ts"])
 
+    def test_hand_made_file_is_reused_whatever_its_case_or_extension(self):
+        for existing in ("deployed.ts", "Deployed", "DEPLOYED.ts"):
+            api = FakeApi(ais=[{"path": existing}, {"path": "Main/DEPLOYED.ts"}],
+                          codes={existing: "", "Main/DEPLOYED.ts": "keep"})
+            self.assertTrue(self.publish(api))
+            self.assertEqual(api.created_ais, [])
+            self.assertIn("// Commit déployé : " + "b" * 40, api.codes[existing])
+            self.assertEqual(api.codes["Main/DEPLOYED.ts"], "keep")
+            with tempfile.TemporaryDirectory() as root:
+                write(root, "main.ts", "code")
+                offered = []
+                Garden.deploy_local_ais(
+                    api, root, lambda files, folders: offered.append(files) or False)
+                self.assertEqual(offered, [["Main/DEPLOYED.ts"]])
+
     def test_refused_creation_or_write_is_reported_not_raised(self):
         class NoCreate(FakeApi):
             def create_ai(self, folder, name, version=4):
