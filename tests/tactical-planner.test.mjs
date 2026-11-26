@@ -3,7 +3,7 @@ import test from "node:test"
 import {
 	evaluateTacticalPlans, executeTacticalPlan, riskWeight, RETREAT_RISK_FACTOR, TACTICAL_LIMITS
 } from "../dist/Classes/Plannification/TacticalPlanner.js"
-import { createStrategy } from "../dist/Classes/Strategy/createStrategy.js"
+import { createStrategy } from "../dist/Classes/LeekProfile.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
