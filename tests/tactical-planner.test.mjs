@@ -650,11 +650,18 @@ test("active turn feeds the stagnation counter: observed once at the start of th
 	const observe = stagnation.observe, noteOffense = stagnation.noteOffense
 	stagnation.observe = function (...args) { observed.push(args); return observe.apply(this, args) }
 	stagnation.noteOffense = function () { offense.push(true); return noteOffense.apply(this) }
+	// Tour précédent dans l'historique partagé : une de mes actions a retiré 20 PV à sa cible.
+	const { actionHistory } = await import("../dist/Classes/Context/ActionHistory.js")
+	const hit = { id: -1, life: 50 }
 	try {
 		initLeekLogging(new LogConfig().setAll(false))
+		actionHistory.begin(0, w.me, 0, 0)
+		actionHistory.track(w.me, "shot", hit, () => { hit.life -= 20 })
+		actionHistory.end()
 		turn()
 	} finally { delete stagnation.observe; delete stagnation.noteOffense }
-	assert.deepEqual(observed, [[1, lifeBefore, distanceBefore]])
+	// Depuis l'historique des actions : `observe` reçoit aussi les dégâts de mon tour précédent et le nombre d'ennemis.
+	assert.deepEqual(observed, [[1, lifeBefore, distanceBefore, 20, 1]])
 	assert.equal(offense.length, 1, "planAct received the counter: the enemy in a firing zone notified the tracker")
 })
 

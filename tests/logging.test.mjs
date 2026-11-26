@@ -391,7 +391,9 @@ async function playTurn(config, options) {
 	const { actions } = makeCombatWorld(runCounter++, options)
 	const originalLog = console.log
 	const lines = []
-	console.log = (...args) => lines.push(args.join(" ").replace(/#\d+/g, "#N").replace(/\be\d+\b/g, "eN"))
+	// `[History]` : le tour et la passivité viennent de l'état partagé du module (un tour de plus à chaque monde).
+	console.log = (...args) => lines.push(args.join(" ").replace(/#\d+/g, "#N").replace(/\be\d+\b/g, "eN")
+		.replace(/^\[History\] T\d+ (.*) passive \d+ \|/, "[History] TN $1 passive N |"))
 	try {
 		initLeekLogging(config)
 		turn()
@@ -404,7 +406,7 @@ async function playTurn(config, options) {
 
 const CONTEXT_LINES = {
 	[LOG_CONTEXT.SYSTEM]: (line) => line.includes("=== KASSBI TURN START ===") || line.includes("=== KASSBI TURN END ==="),
-	[LOG_CONTEXT.COMBAT]: (line) => /^(My HP:|Enemy:|Enemy HP:)/.test(line),
+	[LOG_CONTEXT.COMBAT]: (line) => /^(My HP:|Enemy:|Enemy HP:|\[History\] )/.test(line),
 	[LOG_CONTEXT.SPEECH]: (line) => line.startsWith("[Speech]"),
 	[LOG_CONTEXT.MEMORY]: (line) => line.startsWith("[EnemyMemory]"),
 	[LOG_CONTEXT.REACHABLE]: (line) => line.startsWith("[Reachable]"),
@@ -435,6 +437,8 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 		assert.equal(lines[0], "\n=== KASSBI TURN START ===")
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
 		assert.equal(lines.at(-2), "=== KASSBI TURN END ===\n")
+		assert.equal(lines.at(-3), "[History] TN TP 0/7 MP 0/3 dealt 0 taken 0 passive N | " +
+			"equip:?:-; move:?:-; attack chip:?:0; strong:?:0; strong:?:0; bandage:?:-")
 		assert.ok(lines.some((line) => line.startsWith("[Plannification] Move: distance=4")))
 		assert.ok(lines.some((line) => line.startsWith("[Reachable] me:")))
 		assert.ok(lines.some((line) => line.startsWith("[Threat] ")))

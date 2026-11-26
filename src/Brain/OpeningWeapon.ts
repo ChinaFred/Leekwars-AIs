@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+import { track } from "../Classes/Context/ActionHistory.js"
 import { reportError } from "../Toolbox/Debug.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
@@ -43,7 +44,7 @@ export function equipOpeningWeapon(me: Me): void {
 			return
 		}
 		const tpBefore = me.tp
-		const equipped = me.setWeapon(weapon)
+		const equipped = track(me, "equip", null, () => me.setWeapon(weapon))
 		log(() => `[Weapon] Opening equip: ${weapon.name} (1 TP, ${tpBefore} → ${me.tp}, result ${String(equipped)})`, LOG_CONTEXT.WEAPON)
 	} catch (error) {
 		reportError("src/Brain/OpeningWeapon.ts", "equipOpeningWeapon", error)

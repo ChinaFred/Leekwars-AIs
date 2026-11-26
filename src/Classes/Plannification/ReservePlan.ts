@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
@@ -9,6 +9,7 @@ import {
 	tpBoostNetDamage
 } from "../../Brain/StrengthBoost.js"
 import { TacticalContext, TacticalPreparation, riskWeight } from "./TacticalPlanner.js"
+import { track } from "../Context/ActionHistory.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
@@ -564,7 +565,7 @@ export function executeReservePlan(
 				dangerScope: validationInterrupted ? "evaluated origin/destination only; map incomplete" : known ? "complete validated map" : "unknown"
 			})}`)
 			if (!budget()) { message(() => `${phase}: hard operations reserve; stop before action`); return false }
-			me.moveToward(cell, actual)
+			track(me, "move", null, () => me.moveToward(cell, actual!))
 			moved = true
 			spentMp += Math.max(0, before - me.mp)
 			const reached = same(me.cell, cell) && before - me.mp <= cost
@@ -579,7 +580,7 @@ export function executeReservePlan(
 					!me.canUseChip(chip, me)) { message(() => `boost unavailable: ${chip.name}`); continue }
 				phase(me, "boost", () => ({ chip: chip.name, target: me.id, tpCost: chip.cost }))
 				if (!budget()) { message("boost: hard operations reserve; stop"); return false }
-				const result = me.useChip(chip, me)
+				const result = track(me, chip, me, () => me.useChip(chip, me))
 				if (!(result > 0)) message(() => `boost refused: ${chip.name}; result ${result}`)
 			}
 			return true
@@ -592,7 +593,7 @@ export function executeReservePlan(
 			if (shot.weapon && me.weapon !== shot.weapon && me.tp >= 1 && me.life > 0) {
 				phase(me, "equipment", () => ({ weapon: shot.weapon!.name, tpCost: 1 }))
 				if (!budget()) { message("equipment: hard operations reserve; stop"); return true }
-				me.setWeapon(shot.weapon)
+				track(me, "equip", null, () => me.setWeapon(shot.weapon!))
 				if (me.weapon !== shot.weapon) message("equipment not applied; weapon attacks remain conditional")
 			}
 			if (!budget()) { message("attack: hard operations reserve; stop"); return true }
@@ -603,7 +604,7 @@ export function executeReservePlan(
 				me.canUseChip(shot.chip, shot.target)) {
 				phase(me, "offensive chip", () => ({ chip: shot.chip!.name, target: shot.target.id, tpCost: shot.chip!.cost }))
 				if (!budget()) { message("offensive chip: hard operations reserve; stop"); return true }
-				const result = me.useChip(shot.chip, shot.target)
+				const result = track(me, shot.chip, shot.target, () => me.useChip(shot.chip!, shot.target))
 				if (result > 0) attacks++
 				else message(() => `attack chip refused: ${shot.chip!.name}; result ${result}`)
 			}
@@ -617,7 +618,7 @@ export function executeReservePlan(
 						weapon: weapon.name, target: shot.target.id, shot: i + 1, atMost: count, tpCost: weapon.cost
 					}))
 					if (!budget()) { message("weapon shot: hard operations reserve; stop"); return true }
-					const result = me.useWeapon(shot.target)
+					const result = track(me, weapon, shot.target, () => me.useWeapon(shot.target))
 					if (!(result > 0)) { message(() => `weapon refused: result ${result}`); break }
 					attacks++
 				}
@@ -645,7 +646,7 @@ export function executeReservePlan(
 					chip.cost > me.tp || me.life <= 0 || !me.canUseChip(chip, me)) continue
 				phase(me, "support", () => ({ chip: chip.name, target: me.id, tpCost: chip.cost }))
 				if (!budget()) { message("support: hard operations reserve; stop"); return true }
-				const result = me.useChip(chip, me)
+				const result = track(me, chip, me, () => me.useChip(chip, me))
 				if (result > 0) message(() => `support: ${chip.name}; PT ${me.tp}`)
 				else message(() => `support refused: ${chip.name}; result ${result}; PT ${me.tp}`)
 			}
@@ -661,7 +662,7 @@ export function executeReservePlan(
 					destination: null, danger: null, status: "unknown; no safety claim"
 				}))
 				if (!budget()) { message("retreat: hard operations reserve; stop"); return true }
-				me.moveAwayFrom(nearest, Math.max(0, Math.min(me.mp, initialMp - spentMp)))
+				track(me, "move", null, () => me.moveAwayFrom(nearest, Math.max(0, Math.min(me.mp, initialMp - spentMp))))
 			}
 			return true
 		}

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan, PASSIVE_DANGER_LIFE_FRACTION } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { ActionHistory, actionHistory, HISTORY_TURNS } from "../dist/Classes/Context/ActionHistory.js"
+import { getLogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
 import { planAct } from "../dist/Brain/PlanActScenario.js"
 import {
 	StagnationTracker, STAGNATION_TURNS, PASSIVE_TURNS_AT_FULL_RISK, PASSIVE_RISK_STEP
@@ -348,7 +350,7 @@ test("real chronology of the fight (positions and PV embedded, no external data)
 	starts.forEach(([k, e, life], i) => {
 		const turn = i + 1
 		tracker.noteEnemyPositions(String(e))
-		tracker.observe(turn, life, distance(cells[k], cells[e]))
+		tracker.observe(turn, life, distance(cells[k], cells[e]), i > 0 ? starts[i - 1][2] - life : 0) // dégât de mon tir du tour 7
 		counters.push(tracker.turns)
 		if (turn < 8) return
 		const withRule = quiet(() => world({ turn, k, e, enemyLife: life, stagnation: tracker }).evaluate())
@@ -749,7 +751,7 @@ test("with a boost ready: a hold becomes a boost-only plan, which still counts a
 // ou d'approche dépasse le gain d'un tour, rester l'emportait indéfiniment. Le poids du risque décroît désormais avec la
 // passivité (`StagnationTracker.riskFactor`) ; un danger qui atteint mes PV reste refusé. États construits sur la carte de
 // 54940819 (terrain ouvert, ennemi immobile), danger imposé : ce ne sont pas des rejeux exacts de ces combats.
-test("tracker: passive turns are reset by damage only, frozen by an approach, and counted through a dance", () => {
+test("tracker: passive turns are reset by damage dealt by my actions only, frozen by an approach, and counted through a dance", () => {
 	assert.deepEqual([PASSIVE_TURNS_AT_FULL_RISK, PASSIVE_RISK_STEP], [2, 0.5])
 	const tracker = new StagnationTracker()
 	const factors = []
@@ -764,8 +766,80 @@ test("tracker: passive turns are reset by damage only, frozen by an approach, an
 	tracker.noteOffense() // un tir seulement prévu ne remet pas la passivité à zéro
 	tracker.observe(9, 100, 4) // nouveau minimum du combat : gelé, pas remis à zéro
 	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [4, 0])
-	tracker.observe(10, 80, 9) // dégât infligé
+	tracker.observe(10, 80, 9) // PV ennemis en baisse sans dégât de mes actions (allié, poison) : toujours passif
+	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [5, 0])
+	tracker.observe(11, 80, 9, 20) // dégât infligé par mes actions au tour précédent
 	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [0, 1])
+	// Deux ennemis : le proche (distance 2) meurt, l'approche du suivant (12 -> 8 -> 4) bat le minimum reparti de zéro.
+	const two = new StagnationTracker()
+	const counts = []
+	for (const [turn, d, dealt, alive] of [[1, 6, 0, 2], [2, 2, 0, 2], [3, 12, 50, 1], [4, 8, 0, 1], [5, 4, 0, 1], [6, 4, 0, 1]]) {
+		two.observe(turn, 100, d, dealt, alive)
+		counts.push(two.passiveTurns)
+	}
+	assert.deepEqual(counts, [0, 0, 0, 0, 0, 1], "approaching the next enemy is not passive; holding at 4 is")
+})
+
+// HISTORIQUE DES ACTIONS (`ActionHistory`) : la passivité vient des dégâts mesurés autour de chaque appel natif, plus de
+// la somme des PV ennemis d'un tour à l'autre. Choix : un tour est actif si une de mes actions a fait perdre des PV à sa
+// cible ; un tir absorbé (0 PV) ou refusé laisse le tour passif, comme un tour sans tir.
+test("history: an enemy healing more than I hit keeps passivity at 0; turns without damage dealt raise it as before", () => {
+	const history = new ActionHistory(), tracker = new StagnationTracker()
+	const me = { id: 1, tp: 10, mp: 4 }, enemy = { id: 2, life: 100 }
+	const shot = (result, damage) => () => history.track(me, { name: "pistol" }, enemy,
+		() => { if (result > 0) { me.tp -= 3; enemy.life -= damage } return result })
+	const play = (turn, act) => {
+		tracker.observe(turn, enemy.life, 5, history.lastDealt, 1)
+		const seenAtStart = [tracker.passiveTurns, tracker.riskFactor]
+		Object.assign(me, { tp: 10, mp: 4 })
+		history.begin(turn, me, 0, tracker.passiveTurns)
+		act?.()
+		quiet(() => history.end())
+		return seenAtStart
+	}
+	// PV ennemis au début de mes tours : 100, 105, 110, 115, 120, 125 (soin 15, tir 10) : jamais passif.
+	for (let turn = 1; turn <= 6; turn++) {
+		assert.deepEqual(play(turn, shot(1, 10)), [0, 1], `turn ${turn}, enemy life ${enemy.life}`)
+		enemy.life += 15
+	}
+	assert.equal(history.records.at(-1).dealt, 10)
+	// Puis : rien, un déplacement, un tir absorbé (succès, 0 PV), un tir refusé (-4) : la passivité monte 1, 2, 3, 4.
+	const acts = [undefined, () => history.track(me, "move", null, () => { me.mp -= 2; return 2 }), shot(1, 0), shot(-4, 0), undefined]
+	assert.deepEqual(acts.map((act, i) => play(7 + i, act)), [[0, 1], [1, 1], [2, 1], [3, 0.5], [4, 0]])
+	assert.equal(history.records.length, HISTORY_TURNS, "bounded history")
+	assert.deepEqual(history.records.at(-3).actions, [{ action: { name: "pistol" }, result: 1, damage: 0 }])
+})
+
+test("history: one [History] line per turn (shot, chip, move), through the joint plan and through the reserve plan", () => {
+	const turnLine = (turn, options, taken, passiveTurns) => {
+		const w = world({ turn, ...options })
+		w.me.useWeapon = function (target) { this.tp -= this.weapon.cost; target.life -= 30; this.events.push("shoot"); return 2 }
+		w.me.useChip = function (chip) { this.tp -= chip.cost; this.events.push(`chip:${chip.name}`); return 1 }
+		getLogConfig().setEnabled(LOG_CONTEXT.COMBAT, true)
+		const messages = [], original = console.log
+		try {
+			console.log = (message) => messages.push(message)
+			actionHistory.begin(turn, w.me, taken, passiveTurns)
+			planAct(w.me, undefined, w.context)
+			actionHistory.end()
+		} finally { console.log = original }
+		return { events: w.me.events, reserve: messages.some((m) => m.includes("[Reserve]")),
+			lines: messages.filter((m) => m.startsWith("[History]")) }
+	}
+	// Tour 7 du combat, blessé (200/339) : approche 364, bandage, deux tirs critiques de 30, repli 346.
+	const joint = turnLine(7, { k: 310, e: 262, enemyLife: 195, life: 200 }, 12, 0)
+	assert.deepEqual(joint.events, ["move:364", "chip:bandage", "shoot", "shoot", "move:346"])
+	assert.deepEqual(joint.lines, ["[History] T7 TP 10/10 MP 4/4 dealt 60 taken 12 passive 0 | " +
+		"move:3:-; bandage:1:-; machine_gun:2:30; machine_gun:2:30; move:1:-"])
+	// Tour 12 sans compteur : le plan conjoint retient, le plan B avance en 133 ; sa ligne sort aussi.
+	const reserve = turnLine(12, {}, 0, 3)
+	assert.equal(reserve.reserve, true)
+	assert.deepEqual(reserve.lines, ["[History] T12 TP 0/10 MP 3/4 dealt 0 taken 0 passive 3 | move:3:-"])
+	assert.equal(actionHistory.lastDealt, 0)
+	// Hors d'un tour ouvert, `track` ne fait qu'appeler : rien n'est enregistré.
+	const w = world({ turn: 13 })
+	assert.equal(actionHistory.track(w.me, "move", null, () => 7), 7)
+	assert.equal(actionHistory.records.at(-1).actions.length, 1)
 })
 
 const OPEN_ENEMY = 332
@@ -808,5 +882,29 @@ test("combat refusal: the risk weight drops with passive turns (advance by the 4
 	const walled = (danger) => quiet(() => world({ turn: 20, stagnation: passive(6, 10),
 		dangerOverride: (cell) => closer(cell) ? danger : null }).evaluate()).plan
 	assert.equal(walled(339), null, "walking escape: a lethal closer cell is still refused at nil weight")
-	assert.equal(walled(338)?.progressModel, "stagnation walk route", "control: one point under my life is accepted at nil weight")
+})
+
+// MARGE SOUS LES PV (`PASSIVE_DANGER_LIFE_FRACTION`) : le danger est un modèle (ni critiques ni items inconnus). Dès que
+// la passivité réduit le poids du risque, le danger accepté reste sous 75 % de mes PV : 339 PV -> seuil 254,25.
+test("life margin: at a reduced risk weight a modeled danger at or above 75 % of my life is refused; full weight unchanged", () => {
+	assert.equal(PASSIVE_DANGER_LIFE_FRACTION, 0.75)
+	// Avance sans tir (type 54944456), poids nul : 254 accepté, 255 refusé.
+	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 254, outer: 0 })?.danger, 254)
+	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 255, outer: 0 }), null)
+	// Tir (tour 7 du combat : deux tirs depuis 364), ma case et les autres à 250 : `[tirs, danger]` du plan retenu.
+	const shot = (passiveTurns, inner) => {
+		const plan = refusal({ k: 310, e: 262, passiveTurns, inner, outer: 250 })
+		return [plan.weaponShots, plan.danger]
+	}
+	for (const passiveTurns of [0, 2]) assert.deepEqual(shot(passiveTurns, 260), [2, 260], "full weight: only my life (339) is the limit")
+	for (const passiveTurns of [3, 4]) {
+		assert.deepEqual(shot(passiveTurns, 254), [2, 254], `${passiveTurns} passive turns: just under the margin`)
+		assert.deepEqual(shot(passiveTurns, 255), [0, 250], `${passiveTurns} passive turns: just above the margin`)
+	}
+	// Sortie de stagnation à poids nul : même marge.
+	const closer = (cell) => (walk.get(cell.id) ?? Infinity) < walk.get(KASSBI_STUCK)
+	const walled = (danger) => quiet(() => world({ turn: 20, stagnation: passive(6, 10),
+		dangerOverride: (cell) => closer(cell) ? danger : null }).evaluate()).plan
+	assert.equal(walled(255), null)
+	assert.equal(walled(254)?.progressModel, "stagnation walk route")
 })

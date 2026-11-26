@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Historique des actions : la passivité vient des dégâts mesurés de mes actions, ligne `[History]` en fin de tour (PT/PM, résultats) ; marge de 75 % des PV à poids réduit.
 - 2026-11-26 — Fin du refus de combat : le poids du risque passe à 0,5 au 3e tour sans dégât infligé et à 0 au 4e (danger létal toujours refusé) ; visait 13 nuls de 64 tours sur 100.
 - 2026-11-26 — Stratège tour par tour : `FightSummary.py --turns` (distance, PM, actions payantes, décisions) ; l'agent juge ressources perdues, choix et chaîne d'actions.
 - 2026-11-26 — Version déployée lisible sur le site : chaque PUSH Garden écrit `DEPLOYED.ts` à la racine des IA (commit, branche, tag, résumé de la release).
