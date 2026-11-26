@@ -1,6 +1,6 @@
 # Déploie src/ sur le compte principal Leek Wars.
 # Déclenché par un tag `leek-*` poussé sur un commit validé, ou à la main (Actions > Run workflow).
-# Garden écrit aussi DEPLOYED.ts à la racine des IA du site : commit, branche, tag et résumé de la release.
+# Garden écrit aussi DEPLOYED.ts à la racine des IA du site : version, date, origine et ligne Stratégie.
 # Secret requis : LEEKWARS_API_KEY (Settings > Secrets and variables > Actions).
 name: Déploiement Leek Wars
 
