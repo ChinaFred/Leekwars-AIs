@@ -2,6 +2,12 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## b7c7b61 — refactor(plan): createStrategy dans LeekProfile.ts, sans nouveau fichier
+Compte Kassbi, publié le 2026-11-26T10:44:25Z.
+Stratégie : aucun changement de comportement.
+Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 39 % (combat 54953080), médiane des pics 39 %.
+
 ## unknown-version — version inconnue
 Combats : 128 — 92 victoires, 23 défaites, 13 nuls (72 % de victoires), 0 sans logs.
 Ops : pic maximal 98 % (combat 54942202), médiane des pics 43 %.
