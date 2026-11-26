@@ -3,10 +3,11 @@
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
 ## unknown-version — version inconnue
-Combats : 100 — 73 victoires, 14 défaites, 13 nuls (73 % de victoires), 0 sans logs.
-Ops : pic maximal 98 % (combat 54942202), médiane des pics 42 %.
+Combats : 128 — 92 victoires, 23 défaites, 13 nuls (72 % de victoires), 0 sans logs.
+Ops : pic maximal 98 % (combat 54942202), médiane des pics 43 %.
 
 Défaites :
+- 54932341 : 11 tours · vs EnSahWolf · pic ops 62 %
 - 54932503 : 8 tours · vs SK8 · pic ops 40 %
 - 54933977 : 16 tours · vs Opex · pic ops 85 %
 - 54941018 : 11 tours · vs MimiRigonne · pic ops 56 %
@@ -21,3 +22,4 @@ Défaites :
 - 54944844 : 23 tours · vs gryka · pic ops 38 %
 - 54946689 : 21 tours · vs Poireaufesseur · pic ops 24 %
 - 54946723 : 9 tours · vs Sanguinaire67 · pic ops 33 %
+- … et 8 plus anciennes.
