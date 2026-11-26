@@ -182,11 +182,13 @@ const done = () => { delete globalThis.System }
 // (avant : aucun boost dans le plan, score 2/3/1/1 aux tours 3-4, deux tirs de shotgun ou repli + helmet au tour 5,
 // neutrino + rock au tour 6). À pleine vie, helmet n'est plus candidat ; protein (+90 force, 2 tours) et motivation
 // (+2 PT, 3 tours) sont crédités de leurs tours suivants. Les optimisations d'opérations ne changent aucune décision.
+// Tour 4 relevé de nouveau quand une puce offensive est devenue créditée après déplacement (avant : protein seul, score
+// 52,3, sans quitter 164 avant le tir) : aller-retour vers une case de tir de ice (4 PM, case 130) ou de rock (5 PM, case 148).
 const EXPECTED = {
 	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.3, tpUsed: 3, boost: ["protein"] },
 	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 54.3, tpUsed: 3, boost: ["protein"] },
-	"4PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
-	"5PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
+	"4PM T4 164/255": { destination: 147, shotCell: 130, weapon: null, weaponShots: 0, chips: ["ice"], protection: [], danger: 0, score: 87.3, tpUsed: 7, boost: ["protein"] },
+	"5PM T4 164/255": { destination: 147, shotCell: 148, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 0, score: 128.3, tpUsed: 8, boost: ["protein"] },
 	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
 	"5PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
 	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 90.88, score: 46.62, tpUsed: 12, boost: ["motivation", "protein"] },

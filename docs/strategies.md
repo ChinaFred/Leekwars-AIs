@@ -1,8 +1,8 @@
 # Stratégies de combat de Kassbi
 
-Stratégie **en vigueur**, sans historique. Le code fait foi ; les constantes citées sont suivies de leur fichier.
-Tout changement de seuil, de condition ou d'ordre de planification met ce fichier à jour (lignes concernées
-seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`ChangeLog.md`](../ChangeLog.md) et `git log`.
+Stratégie **en vigueur**, sans historique. Le code fait foi ; les constantes citées sont suivies de leur fichier. Tout changement
+de seuil, de condition ou d'ordre de planification met ce fichier à jour (lignes concernées seulement) et ajoute ou ajuste un
+test de régression. L'historique est dans [`ChangeLog.md`](../ChangeLog.md) et `git log`.
 
 ## Chaîne de décision
 
@@ -34,12 +34,14 @@ une arme**, plus des puces offensives, de protection et de boost ; l'option sans
 **Conditions** : `ReachableCells` et `ThreatMap` du tour courant, non tronquées, danger connu, fini et ≥ 0 sur
 chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par zéro) et on passe au plan B.
 
-**Cases de tir** : listes natives `Fight.weaponCells` / `me.chipCells` (portée, motif, ligne de vue). Un item dont
-aucune case de ma zone n'est à portée de Manhattan de la cible n'appelle pas le fournisseur natif. Une puce
-offensive n'est créditée que si `me.canUseChip` est vrai depuis la case actuelle.
+**Cases de tir** : listes natives `Fight.weaponCells` / `me.chipCells` (portée, motif dont le lancer en ligne, ligne de vue) ;
+pas d'appel natif si aucune case de ma zone n'est à portée de Manhattan de la cible. Arme et puce offensive sont créditées sur
+leurs cases atteignables (déplacement puis tir). Puce écartée si `me.canUseChip` la refuse alors que ma case est dans sa liste
+(restriction inconnue) ; jamais tirée d'une case de sa zone d'effet si un effet peut toucher le lanceur (`selfHitRadius`).
 
 **Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs →
-déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait.
+déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce refusée à
+l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
 
 ### Score et compromis explicite
 
@@ -60,8 +62,7 @@ déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / 
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
-Par défaut `w = 1`. Le score échange des dégâts moyens ce tour contre une menace potentielle au tour ennemi :
-ce n'est ni une probabilité de survie ni un minimax.
+Par défaut `w = 1`. Dégâts moyens ce tour contre menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
 
 **Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours
 passifs, 0,5 au 3e, 0 au 4e (`PASSIVE_TURNS_AT_FULL_RISK`, `PASSIVE_RISK_STEP`). Un tour est **actif** si une de mes
@@ -77,13 +78,12 @@ le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la
 le plan préfère une case sûre et un recul après tir. `RETREAT_RISK_FACTOR` est heuristique, non calibré.
 
 **Anticipation** (un seul ennemi) : la distance de chaque destination à une case de tir ne départage que les
-égalités. **Trajet futur sans tir** : si aucune attaque n'est possible ce tour, un BFS (160 cases, 8 pas, 8 lignes
+égalités. **Trajet futur sans tir** : si aucun tir d'arme n'est possible ce tour, un BFS (160 cases, 8 pas, 8 lignes
 de vue, 2 % des opérations) cherche une case de tir et remplace `G` Manhattan par la distance de trajet.
 
 ### Sortie de stagnation
 
-Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de
-distance Manhattan).
+Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
 
 - **Tour sans progrès** : ni dégâts infligés, ni nouveau record de proximité à l'ennemi le plus proche. Rester
   immobile ou osciller compte de la même façon.
@@ -167,8 +167,7 @@ pénalité de portée d'arme et portée préférée max : séquence historique s
 | Puce d'attaque | `vie ≥ 0,50 − 0,20a` (0,40) | `vie ≥ 0,45 − 0,25a` (0,325) | `vie ≥ 0,75 − 0,20a` (0,65) |
 | Pénalité de portée d'arme | `0,045 − 0,015a` | `0,02 − 0,01a` | `0,07 − 0,015a` |
 
-- « Trop près » : `d < max(2, portée préférée min − 1)`.
-- Portée de menace : PM de l'ennemi + portée max de son arme.
+- « Trop près » : `d < max(2, portée préférée min − 1)`. Portée de menace : PM de l'ennemi + portée max de son arme.
 - Score d'arme : dégâts moyens du tour − pénalité × écart entre portée moyenne préférée et portée moyenne de l'arme.
 - Le soin est sauté si tirer rapporte plus : `dégâts par PT × coût du soin > 2 × soin moyen`.
 - **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux
@@ -237,8 +236,9 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 
 ## Limites connues
 
-- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir.
-- Non simulés : zones d'effet, poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
+- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir ; une puce au plus une fois par plan. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
+- Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
+  combat), poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.
 - Coûts en opérations estimés, non mesurés sur le moteur ; une primitive native peut franchir un plafond entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant
