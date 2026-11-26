@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { Action } from "./Action.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -7,6 +7,7 @@ import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavio
 import { globalCombatLogger } from "../../Toolbox/CombatLogger.js"
 import { log, LOG_CONTEXT, LogContext, LogText } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY } from "./ExecutionBudget.js"
+import { track } from "../Context/ActionHistory.js"
 
 export class Plannification {
 	readonly actions: Action[] = []
@@ -212,9 +213,7 @@ export class Plannification {
 		while (this.tpLeft >= this.chosenWeapon.cost) {
 			shootCount++
 			this.actions.push(new Action("shoot", () => {
-				if (this.leek.canUseWeapon(this.target)) {
-					this.leek.useWeapon(this.target)
-				}
+				return this.leek.canUseWeapon(this.target) ? this.leek.useWeapon(this.target) : undefined
 			}, this.chosenWeapon.name))
 			this.tpLeft -= this.chosenWeapon.cost
 		}
@@ -436,7 +435,12 @@ export class Plannification {
 				this.debug("Execute: global operations reserve after phase log; action cancelled", LOG_CONTEXT.PLANNING)
 				return
 			}
-			action?.action()
+			if (!action) continue
+			// Historique : la file ne connaît que le nom de phase ; arme/puce = `desc`, tout déplacement = `move`.
+			const offensive = action.name === "shoot" || action.name === "attack chip"
+			track(this.leek, () => action.name === "equip weapon" ? "equip" :
+				offensive || action.name === "shield" || action.name === "heal" ? action.desc : "move",
+			offensive ? this.target : null, () => action.action())
 		}
 		this.debug(() => `Done: observed TP ${this.leek.tp}, MP ${this.leek.mp}; ` +
 			`planned remaining TP ${this.tpLeft}, MP ${this.mpLeft}; queue completed, success not inferred`,

@@ -1,8 +1,9 @@
 // @version:5.8
-// file version: 18
+// file version: 19
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { logChipInventory } from "../Brain/StrengthBoost.js"
+import { actionHistory } from "../Classes/Context/ActionHistory.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"
@@ -43,8 +44,9 @@ export const chestMemory = new EnemyMemory()
 export const stagnation = new StagnationTracker()
 
 /**
- * Met à jour le compteur de stagnation au début du tour (PV ennemis vivants, distance au plus proche : voir
- * `StagnationTracker`). Une erreur est journalisée sans interrompre le tour.
+ * Met à jour le compteur de stagnation au début du tour (PV ennemis vivants, distance au plus proche, dégâts de mes
+ * actions au tour précédent : voir `StagnationTracker`), puis ouvre le tour dans l'historique des actions.
+ * Une erreur est journalisée sans interrompre le tour.
  */
 function observeStagnation(me: Me): void {
 	try {
@@ -53,7 +55,8 @@ function observeStagnation(me: Me): void {
 		const enemyDistance = enemies.reduce((best, enemy) =>
 			Math.min(best, Math.abs(me.cell.x - enemy.cell.x) + Math.abs(me.cell.y - enemy.cell.y)), Number.POSITIVE_INFINITY)
 		stagnation.noteEnemyPositions(enemies.map((enemy) => `${enemy.cell.x},${enemy.cell.y}`).sort().join(";"))
-		stagnation.observe(Fight.turn, enemyLife, enemyDistance)
+		stagnation.observe(Fight.turn, enemyLife, enemyDistance, actionHistory.lastDealt, enemies.length)
+		actionHistory.begin(Fight.turn, me, enemyMemory.lifeLostSinceMyTurn(me), stagnation.passiveTurns)
 	} catch (error) {
 		reportError("src/Main/Kassbi_Class.ts", "observeStagnation", error)
 	}
@@ -288,6 +291,8 @@ export function turn(): void {
 		// Après le plan : l'équipement du tour 1 n'utilise que des PT non dépensés par le plan.
 		equipOpeningWeapon(me)
 		recordMyTurnEnd(me)
+		// Ligne `[History]` du tour, avant la ligne d'opérations : son coût est compris dans le total.
+		actionHistory.end()
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)
 		// En dernier : le total inclut tout sauf ce log (quelques opérations).

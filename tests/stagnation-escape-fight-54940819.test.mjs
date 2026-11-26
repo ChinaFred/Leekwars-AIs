@@ -1,8 +1,12 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan, PASSIVE_DANGER_LIFE_FRACTION } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { ActionHistory, actionHistory, HISTORY_TURNS } from "../dist/Classes/Context/ActionHistory.js"
+import { getLogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
 import { planAct } from "../dist/Brain/PlanActScenario.js"
-import { StagnationTracker, STAGNATION_TURNS } from "../dist/Classes/Context/StagnationTracker.js"
+import {
+	StagnationTracker, STAGNATION_TURNS, PASSIVE_TURNS_AT_FULL_RISK, PASSIVE_RISK_STEP
+} from "../dist/Classes/Context/StagnationTracker.js"
 import {
 	cells, at, world, firingZone, walkDistances, distance, KASSBI_STUCK, KASSBI_BEFORE, ENEMY_CORNER
 } from "./helpers/fight-54940819-world.mjs"
@@ -147,7 +151,7 @@ test("safety first: no escape into a cell more dangerous than the current one, a
 	assert.ok(plan === null || tolerated.threat.dangerAt(plan.destination) <= 30)
 })
 
-test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not reset), stops at the safety frontier", () => {
+test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not reset), crosses the danger frontier at 16 (nil risk weight), shoots at 17", () => {
 	const tracker = new StagnationTracker()
 	seen(tracker, 11, KASSBI_BEFORE)
 	let position = KASSBI_STUCK
@@ -159,15 +163,19 @@ test("multi-turn route: idle at 12-13, escapes at 14-15 (its own moves do not re
 		const { plan } = quiet(() => w.evaluate())
 		if (plan) quiet(() => executeTacticalPlan(w.me, plan))
 		position = w.me.cell.id
-		trace.push({ turn, turns: before.turns, position, walk: walk.get(position), danger: w.threat.dangerAt(w.me.cell) })
+		trace.push({ turn, turns: before.turns, position, walk: walk.get(position), danger: w.threat.dangerAt(w.me.cell),
+			shot: !!plan && (plan.weaponShots > 0 || plan.chips.length > 0) })
 	}
 	assert.deepEqual(trace.map(({ position: p }) => p).slice(0, 4), [KASSBI_STUCK, KASSBI_STUCK, 133, 81])
 	assert.deepEqual(trace.slice(0, 4).map(({ turns }) => turns), [0, 1, 2, 3])
-	assert.ok(trace.every(({ danger }) => danger === 0), "never entered a danger zone")
+	assert.ok(trace.slice(0, 4).every(({ danger }) => danger === 0), "full then half risk weight: never entered a danger zone")
 	const walks = trace.map(({ walk: w }) => w)
 	assert.ok(walks[2] < walks[1] && walks[3] < walks[2], "each escape shortens the walking distance")
-	assert.ok(trace.slice(3).every(({ position: p }) => p === 81), "holds at the frontier: closer cells are in the danger zone")
-	assert.equal(walks.at(-1), 4, "4 PM from the ice firing cells, whose danger is modeled 114-162")
+	assert.equal(walks[3], 4, "81: 4 PM from the ice firing cells, whose danger is modeled 114-162")
+	// Avant la baisse du poids du risque : maintien en 81 jusqu'à la fin (refus de combat). Tour 16 : 4 tours passifs,
+	// poids nul, la sortie franchit la frontière (danger sous mes 339 PV) ; tour 17 : premier tir.
+	assert.ok(trace[4].walk < 4 && trace[4].danger > 0 && trace[4].danger < 339, `turn 16 enters the non-lethal danger zone: ${JSON.stringify(trace[4])}`)
+	assert.equal(trace.find(({ shot }) => shot)?.turn, 17, "first shot planned at turn 17")
 })
 
 test("a 187 <-> 133 oscillation through the full planAct (tactical then reserve) reaches the threshold and is broken", () => {
@@ -342,7 +350,7 @@ test("real chronology of the fight (positions and PV embedded, no external data)
 	starts.forEach(([k, e, life], i) => {
 		const turn = i + 1
 		tracker.noteEnemyPositions(String(e))
-		tracker.observe(turn, life, distance(cells[k], cells[e]))
+		tracker.observe(turn, life, distance(cells[k], cells[e]), i > 0 ? starts[i - 1][2] - life : 0) // dégât de mon tir du tour 7
 		counters.push(tracker.turns)
 		if (turn < 8) return
 		const withRule = quiet(() => world({ turn, k, e, enemyLife: life, stagnation: tracker }).evaluate())
@@ -354,7 +362,10 @@ test("real chronology of the fight (positions and PV embedded, no external data)
 		} else {
 			assert.equal(off.plan, null, "rule off: held in 187")
 			assert.equal(withRule.plan.progressModel, "stagnation walk route")
-			assert.equal(withRule.plan.destination.id, 133)
+			// 5 tours passifs depuis le dégât du tour 7 : poids nul, la sortie prend la case la plus proche à pied (116,
+			// danger 38,88 sous mes PV) au lieu de la plus proche parmi les cases sûres (133).
+			assert.equal(withRule.plan.destination.id, 116)
+			assert.ok(withRule.plan.danger < 339)
 		}
 	})
 	assert.deepEqual(counters, [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5], "0 while approaching and after the T7 shot")
@@ -528,13 +539,14 @@ test("anti-oscillation in the planner: a lifted escape never walks back to a cel
 test("episode-wide guard: no walk back to the stagnation cell 187 on the turns AFTER the lift (frontier 5, static enemy, T11-T40)", () => {
 	for (const front of [4, 5, 6, 7]) {
 		const tracker = new StagnationTracker()
-		let k = KASSBI_STUCK, returns = 0
+		let k = KASSBI_STUCK, returns = 0, firstShot = Infinity
 		const path = [k]
 		for (let turn = 11; turn <= 40; turn++) {
 			tracker.noteEnemyPositions(String(ENEMY_CORNER))
 			tracker.observe(turn, 60, distance(cells[turn === 11 ? KASSBI_BEFORE : k], cells[ENEMY_CORNER]))
 			const w = world({ turn, k, stagnation: tracker, dangerOverride: (cell) => (walk.get(cell.id) ?? Infinity) < front ? 100 : null })
 			const { plan } = quiet(() => w.evaluate())
+			if (plan && (plan.weaponShots > 0 || plan.chips.length > 0)) firstShot = Math.min(firstShot, turn)
 			if (plan) {
 				quiet(() => executeTacticalPlan(w.me, plan))
 				if (w.me.cell.id === KASSBI_STUCK && k !== KASSBI_STUCK) returns++
@@ -543,7 +555,9 @@ test("episode-wide guard: no walk back to the stagnation cell 187 on the turns A
 			}
 		}
 		assert.equal(returns, 0, `frontier ${front}: ${returns} return(s) to ${KASSBI_STUCK}, path ${path}`)
-		assert.ok(path.length <= 4, `frontier ${front}: stable after at most a short route, path ${path}`)
+		// Avant la baisse du poids du risque : maintien définitif sur la frontière (danger 100, non mortel). Désormais la
+		// frontière est franchie au 4e tour passif et le premier tir part au tour 17 ou 18.
+		assert.ok(firstShot <= 18, `frontier ${front}: first shot at turn ${firstShot}, path ${path}`)
 	}
 })
 
@@ -618,7 +632,9 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // acculé dans un coin, n'est plus atteint en 30 tours (règle désactivée : premier tir au tour 11). Ce test CARACTÉRISE
 // la limite (aucun correctif prévu) : si ces chiffres changent, la décision d'acceptation est à revoir, pas à masquer.
 // Banque : 16 départs x 5 ennemis (568, 262, 17, 310, 2) x compteur neuf/actif = 160 scénarios par alternance.
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 0 }, 2: { slower: 18, faster: 20 }, 3: { slower: 16, faster: 22 } }
+// Depuis la baisse du poids du risque avec la passivité (mesuré) : 0/56, 4/88, 2/98 (avant : 0/0, 18/20, 16/22), et le
+// départ 80 / ennemi 262 tire au tour 9 (avant : jamais en 30 tours).
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 56 }, 2: { slower: 4, faster: 88 }, 3: { slower: 2, faster: 98 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {
@@ -637,7 +653,7 @@ test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns
 	}
 	const alternating = () => { let calls = 0; return (k, e) => ++calls % 3 === 0 ? fleeStep(k, e) : e }
 	assert.equal(turnsToFirstShotVsFleeing(80, 262, false, alternating(), false), 11, "reference: rule off shoots at turn 11")
-	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), Infinity, "accepted: rule on never shoots in 30 turns")
+	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 9, "rule on: first shot at turn 9")
 })
 
 // LIMITE ACCEPTÉE D1 (caractérisation ; la production n'est pas modifiée). La garde « case visitée » ne vit que dans le
@@ -664,9 +680,9 @@ test("ACCEPTED LIMITATION (characterization): planAct (tactical hold, then the r
 		}
 		return returns
 	}
-	// Règle désactivée (mesuré) : 15 retours quelle que soit la frontière (187 <-> case de frontière, 30 tours) ; la règle activée
-	// en fait 13/4/15 : jamais plus de va-et-vient qu'avec la règle désactivée, mais pas de suppression.
-	for (const [front, on, off] of [[5, 13, 15], [6, 4, 15], [7, 15, 15]]) {
+	// Règle désactivée (mesuré) : 15 retours quelle que soit la frontière (187 <-> case de frontière, 30 tours). Règle activée :
+	// 13/4/15 avant la baisse du poids du risque avec la passivité, 2/2/2 depuis (la frontière est franchie au 4e tour passif).
+	for (const [front, on, off] of [[5, 2, 15], [6, 2, 15], [7, 2, 15]]) {
 		assert.equal(returnsTo187(front, true), on, `frontier ${front}: returns to ${KASSBI_STUCK} with the rule on`)
 		assert.equal(returnsTo187(front, false), off, `frontier ${front}: returns to ${KASSBI_STUCK} with the rule off (same oscillation, not a regression)`)
 	}
@@ -677,11 +693,13 @@ test("ACCEPTED LIMITATION (characterization): planAct (tactical hold, then the r
 // monté à 150 (cooldown ennemi, par exemple), 187 sûr (0), tout le reste à 100. Règle désactivée : retraite en 187 (danger 0).
 // Règle activée avant correction : retraite refusée, la sortie choisissait 100 (<= 150, « marche plus courte »).
 // Pour un danger de 20 ou 60 en 133, le tactique retient (plan nul) mais le plan B retraite en 187 : le défaut est masqué.
+// L'épisode ne compte que 2 tours passifs : le poids du risque est plein (à poids nul, aucune retraite n'est attendue).
 function visitedEpisode187to133() {
 	const tracker = new StagnationTracker()
-	for (let turn = 1; turn <= 4; turn++) { tracker.noteEnemyPositions("A"); seen(tracker, turn, KASSBI_STUCK) }
+	for (let turn = 1; turn <= 2; turn++) { tracker.noteEnemyPositions("A"); seen(tracker, turn, KASSBI_STUCK) }
 	tracker.commit(cells[KASSBI_STUCK], cells[133])
-	tracker.noteEnemyPositions("A"); seen(tracker, 5, 133)
+	tracker.noteEnemyPositions("A"); seen(tracker, 3, 133)
+	assert.deepEqual([tracker.active, tracker.riskFactor], [true, 1])
 	return tracker
 }
 test("a safety retreat to a visited cell is never replaced by a more dangerous cell than the rule off would take", () => {
@@ -697,13 +715,7 @@ test("a safety retreat to a visited cell is never replaced by a more dangerous c
 
 test("the visited-cell guard lets a move + protection plan through (187, 3 MP, helmet) even without any safety gain", () => {
 	const danger = (cell) => cell.id === 133 ? 30 : cell.id === KASSBI_STUCK ? 30 : 100 // danger final 30 = danger courant 30
-	const episode = () => { // record 10 (observé en 187), épisode 187 -> 133 mémorisé : 187 est visité et ne bat pas le record
-		const tracker = new StagnationTracker()
-		for (let turn = 1; turn <= 4; turn++) { tracker.noteEnemyPositions("A"); seen(tracker, turn, KASSBI_STUCK) }
-		tracker.commit(cells[KASSBI_STUCK], cells[133])
-		tracker.noteEnemyPositions("A"); seen(tracker, 5, 133)
-		return tracker
-	}
+	const episode = visitedEpisode187to133 // record 10 (observé en 187), 187 visité et ne bat pas le record
 	const shape = (stagnation) => {
 		// Bouclier candidat au seuil du rôle : blessé (280/339 = 0,83 ≤ 0,85) et à portée de menace (7 PM + 6 ≥ 13).
 		const plan = quiet(() => world({ turn: 6, k: 133, stagnation, life: 280, enemyMp: 7, dangerOverride: danger }).evaluate()).plan
@@ -733,4 +745,166 @@ test("with a boost ready: a hold becomes a boost-only plan, which still counts a
 	assert.deepEqual(escape?.boost?.chips.map((chip) => chip.name), ["protein"])
 	quiet(() => executeTacticalPlan(w.me, escape))
 	assert.deepEqual(w.me.events, ["chip:protein", "move:133"])
+})
+
+// REFUS DE COMBAT (combats 54944456, 54944868, 54946689, joués avec 1faccb2) : dès que le danger modélisé des cases de tir
+// ou d'approche dépasse le gain d'un tour, rester l'emportait indéfiniment. Le poids du risque décroît désormais avec la
+// passivité (`StagnationTracker.riskFactor`) ; un danger qui atteint mes PV reste refusé. États construits sur la carte de
+// 54940819 (terrain ouvert, ennemi immobile), danger imposé : ce ne sont pas des rejeux exacts de ces combats.
+test("tracker: passive turns are reset by damage dealt by my actions only, frozen by an approach, and counted through a dance", () => {
+	assert.deepEqual([PASSIVE_TURNS_AT_FULL_RISK, PASSIVE_RISK_STEP], [2, 0.5])
+	const tracker = new StagnationTracker()
+	const factors = []
+	// Approche 20 -> 12 -> 9 (minimum du combat battu : gelé), puis danse 5 <-> 9 avec un ennemi mobile (54944868).
+	for (const [turn, d] of [[1, 20], [2, 12], [3, 9], [4, 5], [5, 9], [6, 5], [7, 9], [8, 5]]) {
+		tracker.noteEnemyPositions(`E${turn}`)
+		tracker.observe(turn, 100, d)
+		factors.push([tracker.passiveTurns, tracker.riskFactor])
+	}
+	assert.deepEqual(factors, [[0, 1], [0, 1], [0, 1], [0, 1], [1, 1], [2, 1], [3, 0.5], [4, 0]])
+	assert.equal(tracker.active, false, "moving enemy: the walking escape stays out of play, the risk weight still drops")
+	tracker.noteOffense() // un tir seulement prévu ne remet pas la passivité à zéro
+	tracker.observe(9, 100, 4) // nouveau minimum du combat : gelé, pas remis à zéro
+	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [4, 0])
+	tracker.observe(10, 80, 9) // PV ennemis en baisse sans dégât de mes actions (allié, poison) : toujours passif
+	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [5, 0])
+	tracker.observe(11, 80, 9, 20) // dégât infligé par mes actions au tour précédent
+	assert.deepEqual([tracker.passiveTurns, tracker.riskFactor], [0, 1])
+	// Deux ennemis : le proche (distance 2) meurt, l'approche du suivant (12 -> 8 -> 4) bat le minimum reparti de zéro.
+	const two = new StagnationTracker()
+	const counts = []
+	for (const [turn, d, dealt, alive] of [[1, 6, 0, 2], [2, 2, 0, 2], [3, 12, 50, 1], [4, 8, 0, 1], [5, 4, 0, 1], [6, 4, 0, 1]]) {
+		two.observe(turn, 100, d, dealt, alive)
+		counts.push(two.passiveTurns)
+	}
+	assert.deepEqual(counts, [0, 0, 0, 0, 0, 1], "approaching the next enemy is not passive; holding at 4 is")
+})
+
+// HISTORIQUE DES ACTIONS (`ActionHistory`) : la passivité vient des dégâts mesurés autour de chaque appel natif, plus de
+// la somme des PV ennemis d'un tour à l'autre. Choix : un tour est actif si une de mes actions a fait perdre des PV à sa
+// cible ; un tir absorbé (0 PV) ou refusé laisse le tour passif, comme un tour sans tir.
+test("history: an enemy healing more than I hit keeps passivity at 0; turns without damage dealt raise it as before", () => {
+	const history = new ActionHistory(), tracker = new StagnationTracker()
+	const me = { id: 1, tp: 10, mp: 4 }, enemy = { id: 2, life: 100 }
+	const shot = (result, damage) => () => history.track(me, { name: "pistol" }, enemy,
+		() => { if (result > 0) { me.tp -= 3; enemy.life -= damage } return result })
+	const play = (turn, act) => {
+		tracker.observe(turn, enemy.life, 5, history.lastDealt, 1)
+		const seenAtStart = [tracker.passiveTurns, tracker.riskFactor]
+		Object.assign(me, { tp: 10, mp: 4 })
+		history.begin(turn, me, 0, tracker.passiveTurns)
+		act?.()
+		quiet(() => history.end())
+		return seenAtStart
+	}
+	// PV ennemis au début de mes tours : 100, 105, 110, 115, 120, 125 (soin 15, tir 10) : jamais passif.
+	for (let turn = 1; turn <= 6; turn++) {
+		assert.deepEqual(play(turn, shot(1, 10)), [0, 1], `turn ${turn}, enemy life ${enemy.life}`)
+		enemy.life += 15
+	}
+	assert.equal(history.records.at(-1).dealt, 10)
+	// Puis : rien, un déplacement, un tir absorbé (succès, 0 PV), un tir refusé (-4) : la passivité monte 1, 2, 3, 4.
+	const acts = [undefined, () => history.track(me, "move", null, () => { me.mp -= 2; return 2 }), shot(1, 0), shot(-4, 0), undefined]
+	assert.deepEqual(acts.map((act, i) => play(7 + i, act)), [[0, 1], [1, 1], [2, 1], [3, 0.5], [4, 0]])
+	assert.equal(history.records.length, HISTORY_TURNS, "bounded history")
+	assert.deepEqual(history.records.at(-3).actions, [{ action: { name: "pistol" }, result: 1, damage: 0 }])
+})
+
+test("history: one [History] line per turn (shot, chip, move), through the joint plan and through the reserve plan", () => {
+	const turnLine = (turn, options, taken, passiveTurns) => {
+		const w = world({ turn, ...options })
+		w.me.useWeapon = function (target) { this.tp -= this.weapon.cost; target.life -= 30; this.events.push("shoot"); return 2 }
+		w.me.useChip = function (chip) { this.tp -= chip.cost; this.events.push(`chip:${chip.name}`); return 1 }
+		getLogConfig().setEnabled(LOG_CONTEXT.COMBAT, true)
+		const messages = [], original = console.log
+		try {
+			console.log = (message) => messages.push(message)
+			actionHistory.begin(turn, w.me, taken, passiveTurns)
+			planAct(w.me, undefined, w.context)
+			actionHistory.end()
+		} finally { console.log = original }
+		return { events: w.me.events, reserve: messages.some((m) => m.includes("[Reserve]")),
+			lines: messages.filter((m) => m.startsWith("[History]")) }
+	}
+	// Tour 7 du combat, blessé (200/339) : approche 364, bandage, deux tirs critiques de 30, repli 346.
+	const joint = turnLine(7, { k: 310, e: 262, enemyLife: 195, life: 200 }, 12, 0)
+	assert.deepEqual(joint.events, ["move:364", "chip:bandage", "shoot", "shoot", "move:346"])
+	assert.deepEqual(joint.lines, ["[History] T7 TP 10/10 MP 4/4 dealt 60 taken 12 passive 0 | " +
+		"move:3:-; bandage:1:-; machine_gun:2:30; machine_gun:2:30; move:1:-"])
+	// Tour 12 sans compteur : le plan conjoint retient, le plan B avance en 133 ; sa ligne sort aussi.
+	const reserve = turnLine(12, {}, 0, 3)
+	assert.equal(reserve.reserve, true)
+	assert.deepEqual(reserve.lines, ["[History] T12 TP 0/10 MP 3/4 dealt 0 taken 0 passive 3 | move:3:-"])
+	assert.equal(actionHistory.lastDealt, 0)
+	// Hors d'un tour ouvert, `track` ne fait qu'appeler : rien n'est enregistré.
+	const w = world({ turn: 13 })
+	assert.equal(actionHistory.track(w.me, "move", null, () => 7), 7)
+	assert.equal(actionHistory.records.at(-1).actions.length, 1)
+})
+
+const OPEN_ENEMY = 332
+/** Compteur après `passiveTurns` tours sans dégât face à un ennemi immobile à distance `d`. */
+function passive(passiveTurns, d) {
+	const tracker = new StagnationTracker()
+	for (let turn = 1; turn <= passiveTurns + 1; turn++) { tracker.noteEnemyPositions("E"); tracker.observe(turn, 151, d) }
+	assert.equal(tracker.passiveTurns, passiveTurns)
+	return tracker
+}
+/** `inner` : danger des cases plus proches de l'ennemi que ma case ; `outer` : danger des autres (dont la mienne). */
+function refusal({ k, e = OPEN_ENEMY, passiveTurns, inner, outer, life }) {
+	const d = distance(cells[k], cells[e])
+	return quiet(() => world({ turn: passiveTurns + 1, k, e, enemyLife: 151, life, stagnation: passive(passiveTurns, d),
+		dangerOverride: (cell) => distance(cell, cells[e]) < d ? inner : outer }).evaluate()).plan
+}
+
+test("combat refusal: the risk weight drops with passive turns (advance by the 4th, shot retained), a lethal danger stays refused", () => {
+	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 52,5 sur toutes les cases plus proches, aucun tir.
+	for (const passiveTurns of [0, 2, 3]) {
+		assert.equal(refusal({ k: 274, passiveTurns, inner: 52.5, outer: 0 }), null, `${passiveTurns} passive turn(s): hold`)
+	}
+	const advance = refusal({ k: 274, passiveTurns: 4, inner: 52.5, outer: 0 })
+	assert.ok(advance && advance.afterMp > 0, "4th passive turn: the plan moves")
+	assert.equal(distance(advance.destination, cells[OPEN_ENEMY]), 7, "from distance 11 to 7 (4 MP)")
+	assert.equal(advance.danger, 52.5)
+	// Type 54946689 T10 : blessé (200/339), distance 9, case à danger 39,4, cases de tir à danger 150 : `bandage` seul.
+	const wounded = (passiveTurns) => refusal({ k: 310, e: 262, passiveTurns, inner: 150, outer: 39.4, life: 200 })
+	const held = wounded(2)
+	assert.deepEqual([held.weaponShots, held.afterMp, held.protection.map((chip) => chip.name)], [0, 0, ["bandage", "helmet"]])
+	const fired = wounded(4)
+	assert.deepEqual([fired.weaponShots, fired.shotCell.id], [2, 364], "nil risk weight: the two-shot plan is retained")
+	assert.deepEqual(fired.protection.map((chip) => chip.name), ["bandage"], "the heal credit is not reduced")
+	// Danger ≥ mes PV (339) sur les cases plus proches : refusé quel que soit le nombre de tours passifs, sortie comprise.
+	for (const passiveTurns of [4, 6, 12]) for (const [k, e] of [[274, OPEN_ENEMY], [310, 262], [KASSBI_STUCK, ENEMY_CORNER]]) {
+		const plan = refusal({ k, e, passiveTurns, inner: 339, outer: 0 })
+		assert.ok(plan === null || plan.danger < 339, `${passiveTurns} passive turns from ${k}: danger ${plan?.danger}`)
+	}
+	const closer = (cell) => (walk.get(cell.id) ?? Infinity) < walk.get(KASSBI_STUCK)
+	const walled = (danger) => quiet(() => world({ turn: 20, stagnation: passive(6, 10),
+		dangerOverride: (cell) => closer(cell) ? danger : null }).evaluate()).plan
+	assert.equal(walled(339), null, "walking escape: a lethal closer cell is still refused at nil weight")
+})
+
+// MARGE SOUS LES PV (`PASSIVE_DANGER_LIFE_FRACTION`) : le danger est un modèle (ni critiques ni items inconnus). Dès que
+// la passivité réduit le poids du risque, le danger accepté reste sous 75 % de mes PV : 339 PV -> seuil 254,25.
+test("life margin: at a reduced risk weight a modeled danger at or above 75 % of my life is refused; full weight unchanged", () => {
+	assert.equal(PASSIVE_DANGER_LIFE_FRACTION, 0.75)
+	// Avance sans tir (type 54944456), poids nul : 254 accepté, 255 refusé.
+	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 254, outer: 0 })?.danger, 254)
+	assert.equal(refusal({ k: 274, passiveTurns: 4, inner: 255, outer: 0 }), null)
+	// Tir (tour 7 du combat : deux tirs depuis 364), ma case et les autres à 250 : `[tirs, danger]` du plan retenu.
+	const shot = (passiveTurns, inner) => {
+		const plan = refusal({ k: 310, e: 262, passiveTurns, inner, outer: 250 })
+		return [plan.weaponShots, plan.danger]
+	}
+	for (const passiveTurns of [0, 2]) assert.deepEqual(shot(passiveTurns, 260), [2, 260], "full weight: only my life (339) is the limit")
+	for (const passiveTurns of [3, 4]) {
+		assert.deepEqual(shot(passiveTurns, 254), [2, 254], `${passiveTurns} passive turns: just under the margin`)
+		assert.deepEqual(shot(passiveTurns, 255), [0, 250], `${passiveTurns} passive turns: just above the margin`)
+	}
+	// Sortie de stagnation à poids nul : même marge.
+	const closer = (cell) => (walk.get(cell.id) ?? Infinity) < walk.get(KASSBI_STUCK)
+	const walled = (danger) => quiet(() => world({ turn: 20, stagnation: passive(6, 10),
+		dangerOverride: (cell) => closer(cell) ? danger : null }).evaluate()).plan
+	assert.equal(walled(255), null)
+	assert.equal(walled(254)?.progressModel, "stagnation walk route")
 })

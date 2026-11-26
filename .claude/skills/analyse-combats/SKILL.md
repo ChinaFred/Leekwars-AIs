@@ -22,9 +22,11 @@ et après, mouvement de l'ennemi juste avant (rapproché, éloigné), PM utilis�
 changements d'arme, dégâts infligés et subis, ops, drapeaux « À examiner », puis les logs de décision (plan
 retenu avec PT prévus et restants, boosts, replis, abandons de recherche).
 
-Limite : les PM utilisés sont exacts ; les PT restants ne sont pas dans l'archive. Déduis-les des logs
-(`"tp":{"available","planned","remainingIfExecuted"}`, `TP 10 → 7`, coûts de la ligne `[Chips]`). Un tour sans
-aucune action payante a perdu tous ses PT.
+PT et PM : les PM utilisés sont exacts. Les PT le sont pour les combats joués avec une version qui écrit la
+ligne `[History] T<tour> TP utilisés/disponibles MP … dealt … taken … passive … | action:résultat:dégâts; …` en
+fin de tour (résultat natif : 2 critique, 1 succès, 0 ou négatif échec) : elle donne aussi ce que chaque action a
+réellement produit. Pour les combats plus anciens, déduis les PT des logs de plan (`remainingIfExecuted`,
+`TP 10 → 7`) ; un tour sans aucune action payante a perdu tous ses PT.
 
 ## Démarche
 

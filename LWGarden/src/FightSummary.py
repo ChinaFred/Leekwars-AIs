@@ -80,6 +80,9 @@ PLAN_LINE = re.compile(r"^\[(Tactical|Reserve)\] plan before execution (\{.*)$",
 PLAN_KEYS = ("tp", "tpAvailable", "mp", "mpAvailable", "weapon", "chips", "protection", "attack",
              "usefulDamage", "danger", "score", "searchStatus")
 MAX_LOG_LINE = 240
+# End-of-turn line written by src/Classes/Context/ActionHistory.ts: exact TP/MP and results.
+HISTORY_LINE = re.compile(
+    r"^\[History\] T\d+ TP (-?\d+)/(-?\d+) MP (-?\d+)/(-?\d+) dealt (-?\d+) taken (-?\d+) passive (\d+)")
 
 
 def cell_distance(first, second):
@@ -199,12 +202,21 @@ def timeline(fight, logs, farmer_id):
         turn["logs"] = [_compact_log(text) for text in lines
                         if not text.strip().startswith(LOG_NOISE)]
         turn["paid_actions"] = turn["shots"] + turn["chips"] + turn["weapon_changes"]
+        turn["tp_used"] = turn["tp_available"] = turn["passive"] = None
+        for text in lines:
+            history = HISTORY_LINE.match(text.strip())
+            if history:
+                values = [int(value) for value in history.groups()]
+                turn["tp_used"], turn["tp_available"], turn["passive"] = values[0], values[1], values[6]
         turn.setdefault("distance_end", None)
         own_shift = (turn["distance_end"] - turn["distance_start"]
                      if None not in (turn["distance_end"], turn["distance_start"]) else None)
         turn["flags"] = [flag for flag, raised in (
             ("tour interrompu ou erreur d'IA", turn["error"] or not turn["complete"]),
-            ("aucune action payante : PT tous perdus", turn["paid_actions"] == 0),
+            ("aucune action payante : PT tous perdus",
+             turn["paid_actions"] == 0 and turn["tp_used"] is None),
+            ("PT inutilisés : {0}".format((turn["tp_available"] or 0) - (turn["tp_used"] or 0)),
+             turn["tp_used"] is not None and turn["tp_used"] < turn["tp_available"]),
             ("PM inutilisés", turn["mp_total"] is not None and turn["mp_used"] < turn["mp_total"]),
             ("recule alors que l'ennemi s'éloignait",
              own_shift is not None and own_shift > 0 and (turn["enemy_shift"] or 0) > 0),
@@ -221,6 +233,8 @@ def waste(turns):
         "broken": sum(1 for turn in turns if turn["error"] or not turn["complete"]),
         "mp_unused": sum(turn["mp_total"] - turn["mp_used"] for turn in counted),
         "mp_total": sum(turn["mp_total"] for turn in counted),
+        "tp_unused": sum(t["tp_available"] - t["tp_used"] for t in turns if t["tp_used"] is not None),
+        "tp_total": sum(t["tp_available"] for t in turns if t["tp_used"] is not None),
     }
 
 
@@ -313,6 +327,9 @@ def render(groups):
                              totals["turns"], totals["idle"], 100.0 * totals["idle"] / totals["turns"],
                              100.0 * totals["mp_unused"] / totals["mp_total"] if totals["mp_total"] else 0,
                              totals["broken"]))
+            if totals["tp_total"]:
+                lines.append("PT (ligne [History]) : {0:.0f} % inutilisés sur {1} disponibles.".format(
+                    100.0 * totals["tp_unused"] / totals["tp_total"], totals["tp_total"]))
             worst = sorted((f for f in fights if f["turn_records"]), reverse=True,
                            key=lambda f: waste(f["turn_records"])["idle"] / len(f["turn_records"]))[:5]
             lines.append("Combats les plus gaspilleurs (tours sans action payante) : " + ", ".join(
@@ -355,8 +372,11 @@ def print_fight(data_dir, fight_id, pattern=None, turns=False):
                 return ("s'est rapproché de {0}".format(-value) if value < 0
                         else "s'est éloigné de {0}".format(value) if value > 0 else "n'a pas bougé")
             print("\nTour {turn} — {leek} : distance {distance_start} → {distance_end}, "
-                  "PM {mp_used}/{mp_total}, PT disponibles {tp_total}, "
-                  "{shots} tirs, {chips} puces, {weapon_changes} changements d'arme".format(**turn))
+                  "PM {mp_used}/{mp_total}, PT {tp}, "
+                  "{shots} tirs, {chips} puces, {weapon_changes} changements d'arme".format(
+                      tp=("{0}/{1} utilisés".format(turn["tp_used"], turn["tp_available"])
+                          if turn["tp_used"] is not None
+                          else "disponibles {0}".format(turn["tp_total"])), **turn))
             print("  ennemi juste avant : {0} ; dégâts infligés {1}, subis ensuite {2} ; "
                   "ops {3}".format(shift(turn["enemy_shift"]), turn["dealt"], turn["taken"],
                                    "?" if turn["operations"] is None

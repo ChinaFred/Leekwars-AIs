@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -130,6 +130,11 @@ export class EnemyMemory {
 	endMyTurn(me: Me, turn: number): void {
 		this.lastLife = me.life
 		this.lastLifeTurn = turn
+	}
+
+	/** PV perdus depuis la fin de mon tour précédent (`endMyTurn`), nets des soins reçus ; 0 au premier tour. */
+	lifeLostSinceMyTurn(me: Me): number {
+		return this.lastLife === null ? 0 : Math.max(0, this.lastLife - me.life)
 	}
 
 	getProfile(enemyId: number): EnemyProfile | null {

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 8
 
 /**
  * Nombre de tours consécutifs sans progrès réel à partir duquel la sortie de stagnation s'applique.
@@ -9,6 +9,14 @@
  * Combat 54940819 : 53 tours d'immobilité (T12 à T64) faute de cette règle.
  */
 export const STAGNATION_TURNS = 2
+
+/**
+ * Passivité : nombre de tours sans dégât infligé par mes actions pendant lesquels le risque garde son poids plein, puis part du poids
+ * retirée à chaque tour passif de plus (2 et 0,5 : plein jusqu'à 2 tours, moitié au 3e, nul au 4e). Points de départ
+ * choisis sur les combats 54944456, 54944868 et 54946689 (refus de combat), non calibrés en combat.
+ */
+export const PASSIVE_TURNS_AT_FULL_RISK = 2
+export const PASSIVE_RISK_STEP = 0.5
 
 /**
  * Compteur de tours consécutifs SANS PROGRÈS RÉEL. Mémorisé entre les tours par `Kassbi_Class.ts` (même mécanisme
@@ -47,12 +55,29 @@ export class StagnationTracker {
 	private enemyKeySeen: string | null = null
 	private pendingKey: string | undefined = undefined
 	private stillTurns = 0
+	private passive = 0
+	private closest = Number.POSITIVE_INFINITY
+	private enemyCountSeen = 0
 
 	/** Positions des ennemis vivants (clé), à fournir juste avant `observe` du même tour. */
 	noteEnemyPositions(key: string): void { this.pendingKey = key }
 
 	/** Tours consécutifs sans progrès réel, vus au début du tour courant. */
 	get turns(): number { return this.count }
+
+	/**
+	 * Tours passifs : tours où AUCUNE de mes actions n'a fait perdre de PV à sa cible (`dealt` de `observe`, mesuré autour
+	 * de chaque appel par `ActionHistory`), hors tours d'approche (distance à l'ennemi le plus proche strictement inférieure
+	 * au minimum depuis la dernière mort d'un ennemi : le compteur est alors gelé, pas remis à zéro). Seul un dégât de mes
+	 * actions le remet à zéro : ni un tir prévu, ni un tir raté ou absorbé (0 PV), ni un dégât d'allié ou de poison, ni un
+	 * ennemi qui bouge ; un soin adverse ne l'augmente pas. Une « danse » sans se toucher compte comme l'immobilité.
+	 */
+	get passiveTurns(): number { return this.passive }
+
+	/** Facteur appliqué au poids du risque du plan conjoint : 1 jusqu'à `PASSIVE_TURNS_AT_FULL_RISK`, puis décroît jusqu'à 0. */
+	get riskFactor(): number {
+		return Math.max(0, Math.min(1, 1 - PASSIVE_RISK_STEP * (this.passive - PASSIVE_TURNS_AT_FULL_RISK)))
+	}
 
 	/**
 	 * Stagnation à traiter : au moins `STAGNATION_TURNS` tours sans progrès réel ET ennemis immobiles pendant tout ce
@@ -75,8 +100,11 @@ export class StagnationTracker {
 	 * `enemyLife` = somme des PV des ennemis vivants (une mort ou un coup la fait baisser) ;
 	 * `enemyDistance` = distance de Manhattan de ma case à l'ennemi vivant le plus proche.
 	 * Les positions ennemies (`noteEnemyPositions`, appelé juste avant) sont facultatives : sans elles, ennemis supposés immobiles.
+	 * `dealt` = dégâts infligés par mes actions à mon tour précédent (`ActionHistory.lastDealt`) : seule source de la
+	 * passivité. `enemyCount` = ennemis vivants : s'il baisse, le minimum de distance de la passivité repart de zéro
+	 * (l'approche de l'ennemi suivant n'est pas passive).
 	 */
-	observe(turn: number, enemyLife: number, enemyDistance: number): void {
+	observe(turn: number, enemyLife: number, enemyDistance: number, dealt = 0, enemyCount = this.enemyCountSeen): void {
 		if (turn === this.turnSeen) return
 		const enemyKey = this.pendingKey
 		this.pendingKey = undefined
@@ -90,7 +118,12 @@ export class StagnationTracker {
 				this.visitedCells.clear()
 				this.record = enemyDistance
 			} else this.count++
+			if (enemyCount < this.enemyCountSeen) this.closest = Number.POSITIVE_INFINITY
+			if (dealt > 0) this.passive = 0
+			else if (enemyDistance >= this.closest) this.passive++
 		} else this.record = enemyDistance
+		this.enemyCountSeen = enemyCount
+		this.closest = Math.min(this.closest, enemyDistance)
 		this.enemyKeySeen = enemyKey ?? null
 		this.turnSeen = turn
 		this.enemyLifeSeen = enemyLife

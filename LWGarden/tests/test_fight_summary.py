@@ -52,15 +52,18 @@ class TimelineTests(unittest.TestCase):
                 [7, 0], [10, 0, 53, [53]], [8, 0, 10, 5],
             ]}}
         logs = {"7": {"1": [[0, 1, "Enemy: Rival, HP: 1/1, Distance: 5"], [0, 4, [35], "ff", 1]],
-                      "5": [[0, 1, "=== KASSBI TURN END ==="], [0, 1, "Operations: 50/100 (50.0%)"]]}}
+                      "5": [[0, 1, "[History] T1 TP 6/10 MP 2/5 dealt 40 taken 0 passive 0 | gun:1:40"],
+                            [0, 1, "=== KASSBI TURN END ==="], [0, 1, "Operations: 50/100 (50.0%)"]]}}
 
         first, second = FightSummary.timeline(fight, logs, 7)
 
         self.assertEqual((first["distance_start"], first["distance_end"]), (5, 3))
         self.assertEqual((first["mp_used"], first["mp_total"], first["shots"], first["dealt"]),
                          (2, 5, 1, 40))
-        self.assertEqual((first["flags"], first["operations"]), (["PM inutilisés"], 50.0))
-        self.assertEqual(first["logs"], ["Enemy: Rival, HP: 1/1, Distance: 5"])
+        self.assertEqual((first["flags"], first["operations"]),
+                         (["PT inutilisés : 4", "PM inutilisés"], 50.0))
+        self.assertEqual((first["tp_used"], first["tp_available"], second["tp_used"]), (6, 10, None))
+        self.assertEqual(first["logs"][0], "Enemy: Rival, HP: 1/1, Distance: 5")
         self.assertEqual(second["enemy_shift"], 1)
         self.assertEqual(second["flags"], ["aucune action payante : PT tous perdus", "PM inutilisés",
                                            "recule alors que l'ennemi s'éloignait"])
