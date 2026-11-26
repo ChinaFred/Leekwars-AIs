@@ -149,6 +149,45 @@ class UnattendedPushTests(unittest.TestCase):
             self.assertEqual((code, publications, api.codes), (expected, [], {}))
 
 
+class UnattendedArchiveTests(unittest.TestCase):
+    def test_archive_exports_and_summarises_in_one_run_and_needs_credentials(self):
+        class Response:
+            ok = True
+
+            def __init__(self, payload):
+                self.payload = payload
+
+            def json(self):
+                return self.payload
+
+        class Api(UnattendedApi):
+            def get_farmer_self(self):
+                return {"farmer": {"login": "me", "id": 7}}
+
+            def get_farmer_history(self, farmer_id):
+                return Response({"fights": [{"id": 5}]})
+
+            def get_fight(self, fight_id):
+                return Response({"id": 5, "date": 200, "status": 2, "winner": 1,
+                                 "farmers1": {"7": {}}, "farmers2": {"8": {}}})
+
+            def get_fight_logs(self, fight_id):
+                return Response({"logs": {"1": ["Operations: 10/100 (10.0%)"]}})
+
+        with tempfile.TemporaryDirectory() as root:
+            config = {"AIs_folder": root, "accounts": [], "data_folder": os.path.join(root, "data")}
+            with patch("builtins.input", side_effect=AssertionError("prompted")):
+                self.assertEqual(Garden.archive_unattended(Api(), {}, config), 2)
+                self.assertFalse(os.path.exists(config["data_folder"]))
+                self.assertEqual(
+                    Garden.archive_unattended(Api(), {"LEEKWARS_API_KEY": "key"}, config), 0)
+            data = config["data_folder"]
+            self.assertTrue(os.path.exists(os.path.join(data, "fights", "5", "logs.json")))
+            self.assertEqual(os.listdir(os.path.join(data, "exports")), ["unknown-version.json"])
+            with open(os.path.join(data, "resume.md"), encoding="utf-8") as infile:
+                self.assertIn("1 victoires", infile.read())
+
+
 class RemoteTreeErrorTests(unittest.TestCase):
     def test_error_response_is_reported_and_never_wipes_local_sources(self):
         class ErrorApi:

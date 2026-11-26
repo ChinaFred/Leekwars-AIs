@@ -71,6 +71,43 @@ def record_publication(config, account, summary):
     return record
 
 
+def connect_unattended(api, environ, config):
+    """Connect to the primary account without prompting. Returns (api, farmer or None)."""
+    environ = os.environ if environ is None else environ
+    api_key = environ.get("LEEKWARS_API_KEY", "").strip()
+    principal = next((a for a in config.get("accounts", []) if a.get("primary") == 'true'), None)
+    if not api_key and principal is None:
+        print("Unattended mode needs LEEKWARS_API_KEY (or a primary account in config.json).")
+        return api, None
+    api = LWApi() if api is None else api
+    if not connect_primary(api, principal, api_key):
+        print("Cannot authenticate to the primary Leek Wars account.")
+        return api, None
+    return api, api.get_farmer_self()["farmer"]
+
+
+def refresh_analysis_files(config):
+    """Options 7 and 8 always go together: exports per version, then the summary."""
+    exported = export_archived_fights(config)
+    write_fight_summary(config)
+    return exported
+
+
+def archive_unattended(api=None, environ=None, config=None):
+    """Archive recent fights, export them per version and refresh the summary (CI).
+
+    Returns a process exit code: 0 done, 1 the archive failed, 2 no credentials
+    or login refused. Fights without debug logs are reported, not an error.
+    """
+    config = load_config(required=False) if config is None else config
+    api, farmer = connect_unattended(api, environ, config)
+    if farmer is None:
+        return 2
+    stats = archive_recent_fights(api, config, farmer)
+    refresh_analysis_files(config)
+    return 1 if stats is None else 0
+
+
 def push_unattended(api=None, environ=None, config=None):
     """PUSH the sources to the primary account without any prompt (CI, tags).
 
@@ -79,23 +116,16 @@ def push_unattended(api=None, environ=None, config=None):
     process exit code: 0 deployed or already up to date, 1 deployment failed,
     2 no credentials or login refused, 3 sources differ from the last commit.
     """
-    environ = os.environ if environ is None else environ
     config = load_config(required=False) if config is None else config
-    api_key = environ.get("LEEKWARS_API_KEY", "").strip()
-    principal = next((a for a in config.get("accounts", []) if a.get("primary") == 'true'), None)
-    if not api_key and principal is None:
-        print("Unattended PUSH needs LEEKWARS_API_KEY (or a primary account in config.json).")
-        return 2
     git_state = FightArchive.read_git_state(config["AIs_folder"])
     if git_state["dirty"]:
         print("Unattended PUSH refused: sources differ from the last commit "
               "(or git is unavailable): {0}".format(", ".join(git_state["dirty_files"]) or "?"))
         return 3
-    api = LWApi() if api is None else api
-    if not connect_primary(api, principal, api_key):
-        print("Cannot authenticate to the primary Leek Wars account.")
+    api, farmer = connect_unattended(api, environ, config)
+    if farmer is None:
         return 2
-    login = api.get_farmer_self()["farmer"]["login"]
+    login = farmer["login"]
     print("Unattended PUSH of {0} ({1}) to {2}".format(
         git_state["commit"][:12], git_state["subject"], login))
     try:
@@ -108,13 +138,18 @@ def push_unattended(api=None, environ=None, config=None):
 
 
 def run(arguments):
-    """`Garden.py` opens the menu; `Garden.py push` deploys without prompting."""
+    """`Garden.py` opens the menu; `push`, `archive` and `export` never prompt."""
     if not arguments:
         main()
         return 0
     if arguments == ["push"]:
         return push_unattended()
-    print("Usage: Garden.py [push]")
+    if arguments == ["archive"]:
+        return archive_unattended()
+    if arguments == ["export"]:
+        refresh_analysis_files(load_config(required=False))
+        return 0
+    print("Usage: Garden.py [push|archive|export]")
     return 64
 
 
@@ -275,8 +310,8 @@ def main():
         '4': "Get Farmer's Throphies",
         '5': "PUSH local .leek/.ts sources to primary account; optionally delete remote-only items.",
         '6': "PUSH local .leek/.ts sources to secondary accounts; optionally delete remote-only items.",
-        '7': "ARCHIVE recent fights and their debug logs (local, for analysis).",
-        '8': "EXPORT archived fights per published version (for AI analysis).",
+        '7': "ARCHIVE recent fights and their debug logs, then EXPORT all versions.",
+        '8': "EXPORT archived fights of one version only (for AI analysis).",
         '9': "Exit"
     }
     while True:
@@ -329,7 +364,7 @@ def main():
                 print("PUSH cancelled.")
         elif selection == '7':
             archive_recent_fights(api, config, farmer)
-            write_fight_summary(config)
+            refresh_analysis_files(config)
         elif selection == '8':
             version_id = input("Version id (empty = all retained versions): ").strip()
             export_archived_fights(config, version_id or None)

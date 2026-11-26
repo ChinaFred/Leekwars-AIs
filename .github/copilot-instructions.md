@@ -27,6 +27,8 @@ Choisis le plus petit circuit qui couvre la demande.
 - `npm run typecheck`.
 - `python -m unittest discover -s LWGarden/tests -p "test*.py"` si `LWGarden/` change.
 - `python LWGarden/src/FightSummary.py` : régénère `LWGarden/Data/resume.md` ; `--fight <id>` détaille un combat.
+- Combats récents : workflow GitHub « Archive des combats » (`Garden.py archive` : archive, export, résumé),
+  puis `git pull`. `python LWGarden/src/Garden.py export` refait export et résumé hors ligne.
 - `npm run agents:sync` après toute modification de `CLAUDE.md` ou de `.claude/agents/`.
 
 ## Règles du code

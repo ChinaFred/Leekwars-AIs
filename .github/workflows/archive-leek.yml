@@ -1,0 +1,43 @@
+# Récupère les combats récents et leurs logs (options 7 et 8 de Garden), puis les committe.
+# Lancement à la main : Actions > « Archive des combats » > Run workflow.
+# Secret requis : LEEKWARS_API_KEY.
+name: Archive des combats
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: leek-default-branch-writes
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Archive, export et résumé
+        env:
+          LEEKWARS_API_KEY: ${{ secrets.LEEKWARS_API_KEY }}
+        run: |
+          python -m pip install --quiet -r LWGarden/src/requirements.txt
+          python LWGarden/src/Garden.py archive
+
+      - name: Committer les combats
+        run: |
+          git add LWGarden/Data
+          if git diff --cached --quiet; then echo "Aucun nouveau combat."; exit 0; fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(data): archive des combats du $(date -u +%Y-%m-%d)"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"

@@ -76,6 +76,7 @@ Déploiement depuis GitHub : un tag `leek-*` poussé sur un commit validé lance
 `python LWGarden/src/Garden.py push` (compte principal, sans menu ni suppression distante) ; voir
 [LWGarden/README.md](LWGarden/README.md#déploiement-sans-menu).
 
+Le workflow « Archive des combats » (lancement manuel) récupère les combats récents et les committe.
 Les combats archivés sont suivis dans Git sous `LWGarden/Data/`, avec un résumé par version dans
 `LWGarden/Data/resume.md` : c'est la matière de l'analyse des défaites.
 
