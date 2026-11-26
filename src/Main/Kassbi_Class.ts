@@ -28,7 +28,7 @@ initLeekLogging(leekLogConfig)
  * repli. Effets détaillés : `docs/strategies.md`.
  */
 export const leekProfile = new LeekProfile()
-leekProfile.setRole("BALANCED")
+leekProfile.setRole("AGGRESSIVE")
 leekProfile.setAggression(50)
 leekProfile.setPreferredRange(3, 8)
 leekProfile.setSupportOptions(true, true, true)

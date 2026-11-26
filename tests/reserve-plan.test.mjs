@@ -329,6 +329,45 @@ test("reserve provider exception is reported and interrupts the sequence", () =>
 	}, { reported: true, events: [] })
 })
 
+test("plan B casts an offensive chip without base cooldown as often as TP allow, a cooldown chip once", () => {
+	for (const [cooldown, casts] of [[0, 3], [2, 1]]) {
+		const spark = { name: "spark", cost: 3, cooldown, currentCooldown: 0, minRange: 1, maxRange: 10, maxUses: -1,
+			features: [{ type: 1, minValue: 20, maxValue: 20 }] }
+		// Arme hors de portée sans approche (ennemi à 7, portée 6) : la puce, utilisable sur place, coûte 0 PM.
+		const w = world({ chips: [spark] })
+		w.me.canUseChip = (chip, target) => target !== w.me && target.life > 0
+		w.me.useChip = (chip, target) => {
+			assert.ok(w.me.tp >= chip.cost)
+			w.events.push("spark"); w.me.tp -= chip.cost; target.life -= 20; chip.currentCooldown = chip.cooldown
+			return 1
+		}
+		w.run()
+		assert.equal(w.events.filter(event => event === "spark").length, casts, `cooldown ${cooldown}`)
+		assert.equal(w.enemies[0].life, 153 - 20 * casts, `cooldown ${cooldown}`)
+		assert.ok(!w.events.includes("shoot"))
+	}
+})
+
+test("plan B never reserves more chip casts than the kill needs: the spare TP stay available for support", () => {
+	const spark = { name: "spark", cost: 3, cooldown: 0, currentCooldown: 0, minRange: 1, maxRange: 10, maxUses: -1,
+		features: [{ type: 1, minValue: 20, maxValue: 20 }] }
+	const preview = (life) => {
+		const w = world({ chips: [spark] })
+		w.enemies[0].life = life
+		w.me.canUseChip = (chip, target) => target !== w.me && target.life > 0
+		w.me.useChip = (chip, target) => { w.me.tp -= chip.cost; target.life -= 20; return 1 }
+		const lines = []
+		const original = console.log
+		console.log = (...args) => lines.push(args.join(" "))
+		try { w.run() } finally { console.log = original }
+		const line = lines.find((text) => text.includes("[Reserve] plan before execution"))
+		const plan = JSON.parse(line.slice(line.indexOf("{")))
+		return [plan.attack.chip.castsAtMost, plan.resources.attack, plan.resources.tpRemainingIfExecuted]
+	}
+	assert.deepEqual(preview(40), [2, 6, 4]) // ceil(40 / 20) = 2 lancers, pas floor(10 / 3) = 3
+	assert.deepEqual(preview(41), [3, 9, 1])
+})
+
 test("rejected native attack must not be reported as two successful attacks", () => {
 	const w = world(), messages = [], original = console.log
 	w.me.useWeapon = () => { w.events.push("refused"); return -1 }

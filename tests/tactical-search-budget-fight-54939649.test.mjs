@@ -169,7 +169,7 @@ test("turn 5 with the stagnation counter below its threshold: same safe retreat 
 	assert.equal(result.plan.stagnation, undefined)
 })
 
-test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search casts ice from 463 and retreats to 409", () => {
+test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search casts ice twice from 463 and retreats to 409", () => {
 	const { plan, memory, me } = turn5({ withSystem: false })
 	const threat = memory.getThreatMap()
 	assert.equal(threat.dangerAt(me.cell), 147, "three pistol shots on the current cell")
@@ -177,7 +177,7 @@ test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete se
 	assert.deepEqual(safe, [374, 376, 392, 393, 394, 409, 479, 514])
 	assert.equal(threat.dangerAt(cells[464]), 147, "the shot cell of the real fight is fully exposed")
 	assert.equal(plan.destination.id, SAFE_CELL)
-	assert.deepEqual([plan.shotCell.id, plan.chips.map(chip => chip.name), plan.weaponShots], [ICE_CELL, ["ice"], 0])
+	assert.deepEqual([plan.shotCell.id, plan.chips.map(chip => chip.name), plan.weaponShots], [ICE_CELL, ["ice", "ice"], 0])
 	assert.equal(plan.danger, 0)
 	assert.ok(plan.score > 0)
 })

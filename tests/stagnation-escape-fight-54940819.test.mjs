@@ -878,16 +878,19 @@ function refusal({ k, e = OPEN_ENEMY, passiveTurns, inner, outer, life }) {
 		dangerOverride: (cell) => distance(cell, cells[e]) < d ? inner : outer }).evaluate()).plan
 }
 
-test("combat refusal: the risk weight drops with passive turns (advance by the 4th, shot retained), a lethal danger stays refused", () => {
+test("combat refusal: the risk weight drops with passive turns (advance by the 3rd, shot retained), a lethal danger stays refused", () => {
 	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 52,5 sur toutes les cases plus proches. Seule ice (0-8)
 	// atteint la cible, depuis une case à 4 PM : 19,8 de dégâts contre 52,5 de danger. Le tir est connu mais décliné : le plan
 	// retenu est le maintien sur place sans action (avant le crédit des puces après déplacement : plan nul).
 	const shape = (plan) => plan && [plan.beforeMp + plan.afterMp, plan.weaponShots, plan.chips.map((chip) => chip.name), plan.tpUsed]
-	for (const passiveTurns of [0, 2, 3]) {
+	for (const passiveTurns of [0, 2]) {
 		assert.deepEqual(shape(refusal({ k: 274, passiveTurns, inner: 52.5, outer: 0 })), [0, 0, [], 0], `${passiveTurns} passive turn(s): hold`)
 	}
+	// Puces sans cooldown lancées plusieurs fois : deux ice (39,6) battent le danger à poids réduit dès le 3e tour passif
+	// (avant : une seule ice, 19,8, maintien jusqu'au 4e tour).
+	assert.deepEqual(shape(refusal({ k: 274, passiveTurns: 3, inner: 52.5, outer: 0 })), [4, 0, ["ice", "ice"], 8], "3rd passive turn: advance and cast ice twice")
 	const advance = refusal({ k: 274, passiveTurns: 4, inner: 52.5, outer: 0 })
-	assert.deepEqual(shape(advance), [4, 0, ["ice"], 4], "4th passive turn: the plan moves 4 MP and casts ice on arrival")
+	assert.deepEqual(shape(advance), [4, 0, ["ice", "ice"], 8], "4th passive turn: the plan moves 4 MP and casts ice twice on arrival")
 	assert.equal(distance(advance.destination, cells[OPEN_ENEMY]), 7, "from distance 11 to 7 (4 MP)")
 	assert.equal(advance.danger, 52.5)
 	// Type 54946689 T10 : blessé (200/339), distance 9, case à danger 39,4, cases de tir à danger 150 : `bandage` seul.

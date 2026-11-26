@@ -144,6 +144,39 @@ test("exact PT search beats the ratio-greedy chip combination", () => {
 	assert.deepEqual(w.events, ["chip:pairA:2", "chip:pairB:2"])
 })
 
+// Combat 54965081, tours 3 et 4 : un seul spark (3 PT) lancé sur 10 PT alors que la puce n'a pas de cooldown.
+test("fight 54965081: a chip without base cooldown is planned and cast as often as TP and maxUses allow, others once", () => {
+	const cases = [
+		["no cooldown, 10 TP / 3 TP", { cooldown: 0 }, 3],
+		["no cooldown, maxUses 2", { cooldown: 0, maxUses: 2 }, 2],
+		["cooldown 1", { cooldown: 1 }, 1],
+		["unknown base cooldown", { cooldown: undefined }, 1]
+	]
+	for (const [name, options, casts] of cases) {
+		const w = world({ tp: 10, gun: null, chips: [chip("spark", 3, 8, options)] })
+		const { plan } = w.evaluate()
+		assert.deepEqual(plan.chips.map((c) => c.name), Array(casts).fill("spark"), name)
+		assert.deepEqual([plan.tpUsed, plan.usefulDamage], [3 * casts, 8 * casts], name)
+		executeTacticalPlan(w.me, plan)
+		assert.deepEqual(w.events, Array(casts).fill("chip:spark:2"), name)
+		assert.equal(w.me.tp, 10 - 3 * casts, name)
+	}
+	// Chaque lancer revérifie la permission native : un refus après le premier lancer arrête les suivants.
+	const w = world({ tp: 10, gun: null, chips: [chip("spark", 3, 8, { cooldown: 0 })] })
+	const { plan } = w.evaluate()
+	const useChip = w.me.useChip
+	w.me.useChip = function (...args) { const result = useChip.apply(this, args); this.denyChips = true; return result }
+	executeTacticalPlan(w.me, plan)
+	assert.deepEqual(w.events, ["chip:spark:2"])
+	// Retour natif ≤ 0 de `useChip` (sans que `canUseChip` change) : les lancers restants de cette puce ne sont pas tentés.
+	const refused = world({ tp: 10, gun: null, chips: [chip("spark", 3, 8, { cooldown: 0 })] })
+	const refusedPlan = refused.evaluate().plan
+	let calls = 0
+	refused.me.useChip = () => { calls++; return 0 }
+	executeTacticalPlan(refused.me, refusedPlan)
+	assert.equal(calls, 1)
+})
+
 test("a lower-ratio chip uses residual PT and chip-only fighters work without a weapon", () => {
 	let w = world({ gun: item("gun", 4, 10), chips: [chip("filler", 2, 4)] })
 	let plan = w.evaluate().plan
@@ -691,14 +724,17 @@ test("shared search handles the formerly bounded combination without spending PT
 
 test("active turn passes real EnemyMemory maps into the joint planner", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], maxLife: 120 })
 	Object.assign(w.enemies[0], {
 		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
 		weapons: [], chips: [], effects: [], launchedEffects: []
 	})
 	initLeekLogging(new LogConfig().setAll(false))
-	turn()
+	// Le bouclier à 100/120 PV prouve que la carte de danger arrive au plan : seuil BALANCED (0,85), pas celui du rôle par défaut.
+	const role = leekProfile.strategyName
+	leekProfile.setRole("BALANCED")
+	try { turn() } finally { leekProfile.setRole(role) }
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
 

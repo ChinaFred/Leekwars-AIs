@@ -12,7 +12,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
 3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `BALANCED`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
@@ -39,9 +39,9 @@ pas d'appel natif si aucune case de ma zone n'est à portée de Manhattan de la 
 leurs cases atteignables (déplacement puis tir). Puce écartée si `me.canUseChip` la refuse alors que ma case est dans sa liste
 (restriction inconnue) ; jamais tirée d'une case de sa zone d'effet si un effet peut toucher le lanceur (`selfHitRadius`).
 
-**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs →
-déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce refusée à
-l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
+**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement → puces offensives → tirs → déplacement
+final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce offensive au cooldown de base nul (`Chip.cooldown`, `chipUsesOf`) est planifiée et relancée tant que `maxUses` et les PT le permettent ; sinon 1 fois.
+Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
 
 ### Score et compromis explicite
 
@@ -62,7 +62,7 @@ l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan c
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
-Par défaut `w = 1`. Dégâts moyens ce tour contre menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
+Par défaut `w = 0,75`. Dégâts moyens ce tour contre menace potentielle au tour ennemi : ni probabilité de survie ni minimax.
 
 **Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours
 passifs, 0,5 au 3e, 0 au 4e (`PASSIVE_TURNS_AT_FULL_RISK`, `PASSIVE_RISK_STEP`). Un tour est **actif** si une de mes
@@ -118,7 +118,7 @@ Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou 
 1. Bornes `RESERVE_LIMITS` : 4 ennemis, 4 armes (équipée d'abord), 8 puces, BFS de 500 cases, liste native de
    613 cases. Recherche limitée à **3 %** des opérations depuis son entrée et aux 80 % globaux.
 2. Attaque : **coût d'approche minimal** ; à coût égal, maximiser `min(PV cible, dégâts × tirs) − w × danger`.
-   Un seul item offensif ; une puce offensive seulement si elle est utilisable depuis la case actuelle.
+   Un seul item offensif ; une puce offensive seulement si elle est utilisable depuis la case actuelle (relancée tant que les PT le permettent si son cooldown de base est nul).
    Boost décidé ensuite, avant l'exécution, annoncé dans le plan et lancé avant l'attaque (voir « Boosts »).
 3. Sans attaque : progression ou couvert si `G − w × danger` bat le score de rester ; danger inconnu → seul un
    progrès strictement positif.
@@ -211,7 +211,7 @@ Pour chaque case que je peux atteindre : somme, sur les ennemis, de leurs meille
   une arme par plan, 4 au plus par ennemi (`MAX_THREAT_WEAPONS`).
 - **Dégâts** : moyenne des effets `DAMAGE` × (1 + force/100) ; tirs = `floor(PT / coût)` plafonné par `maxUses`.
   Valeur brute : sans critique, ni mes boucliers, ni ma résistance.
-- **Puces** : offensives, prêtes selon la mémoire, chacune une fois ; ajoutées si leur ratio dégâts/PT bat l'arme.
+- **Puces** : offensives, prêtes selon la mémoire ; cooldown de base nul : autant de fois que PT et `maxUses` le permettent, sinon une fois. Maximum exact des dégâts arme + puces dans les PT (`planShots`) ; le plan « puces seules » (sans PT de changement d'arme) concourt toujours.
 - **Boosts adverses** : jusqu'à 3 puces de force ou de PT (`MAX_THREAT_BOOSTS`) lancées avant de tirer.
 - **Portée** : l'ennemi se déplace (PM maximaux vus) puis tire ; distance, motif de lancer, puis ligne de vue si
   l'item l'exige. La valeur d'une case est le maximum sur ses cases de tir.
@@ -236,7 +236,7 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 
 ## Limites connues
 
-- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir ; une puce au plus une fois par plan. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
+- Une seule cible et une seule case de tir par plan ; pas de tir-déplacement-tir. Puce au cooldown de base inconnu : 1 usage. Une puce planifiée remet la stagnation à zéro même si elle est refusée à l'arrivée (le même plan peut se répéter).
 - Non simulés : zones d'effet (seule garde : `selfHitRadius`, puces seulement, champs `area` / `targets` non vérifiés en
   combat), poison, vol de vie, critiques, arrondis du moteur, combos de buffs.
 - Danger modélisé nul ≠ absence de menace : l'ennemi peut avoir des items ou des PM jamais observés.

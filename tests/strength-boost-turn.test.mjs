@@ -310,18 +310,18 @@ test("a chest next to me never triggers the boost; with no real enemy left nothi
 
 // --- le comportement configuré (leekProfile) décide, de bout en bout ---------------------------------------------
 
-test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, the default BALANCED does not", () => {
+test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, the default AGGRESSIVE does not", () => {
 	const play = (turnNumber) => {
 		const w = makeWorld({ turnNumber, chips: [bandage()], life: 246 }) // 246/300 = 0,82
 		captureTurn(w)
 		return w
 	}
-	assert.equal(leekProfile.strategyName, "BALANCED")
+	assert.equal(leekProfile.strategyName, "AGGRESSIVE")
 	assert.deepEqual([leekProfile.aggression, leekProfile.preferredMinRange, leekProfile.preferredMaxRange], [50, 3, 8])
 	assert.deepEqual([leekProfile.allowHealing, leekProfile.allowShielding, leekProfile.allowHiding], [true, true, true])
-	const balanced = play(61) // seuil de soin BALANCED : perte ≥ 0,20 ; ici 0,18
-	assert.equal(balanced.actions.includes("bandage"), false)
-	assert.equal(balanced.me.life, 246)
+	const aggressive = play(61) // seuil de soin AGGRESSIVE : vie ≤ 0,325 (0,50 sous menace) ; ici 0,82
+	assert.equal(aggressive.actions.includes("bandage"), false)
+	assert.equal(aggressive.me.life, 246)
 	leekProfile.setRole("DEFENSIVE") // seuil de soin DEFENSIVE : vie ≤ 0,825
 	try {
 		const defensive = play(62)
@@ -329,7 +329,7 @@ test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, 
 		assert.equal(defensive.me.life, 276)
 		assert.equal(defensive.actions.filter((action) => action === "shoot").length, 2)
 	} finally {
-		leekProfile.setRole("BALANCED")
+		leekProfile.setRole("AGGRESSIVE")
 	}
 })
 
