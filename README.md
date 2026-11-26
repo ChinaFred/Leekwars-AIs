@@ -13,11 +13,11 @@ Point d'entrée : `turn()` dans [`src/Main/Kassbi_Class.ts`](src/Main/Kassbi_Cla
 
 1. **Contexte** : mémoire de l'adversaire, cases atteignables de chaque poireau, carte de danger de mes cases,
    compteur de stagnation.
-2. **Planification** (`planAct`) : un plan conjoint attaque / protection / déplacement choisi par un score
-   dégâts − risque ; à défaut un plan B séquentiel borné en opérations.
+2. **Planification** (`planAct`, comportement réglé par `leekProfile`) : un plan conjoint attaque / boost /
+   protection / déplacement choisi par un score dégâts − risque ; à défaut un plan B séquentiel borné en opérations.
 3. **Exécution** : le plan est affiché en entier avant la première action, puis chaque action est revérifiée
    (PT, portée, cooldown) ; un échec arrête la séquence, sans second plan.
-4. **Autour du plan** : boosts de force et de PT, arme équipée au tour 1, puis ligne `Operations:` de fin de tour.
+4. **Après le plan** : arme équipée au tour 1, puis ligne `Operations:` de fin de tour.
 
 Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.md](docs/strategies.md).
 

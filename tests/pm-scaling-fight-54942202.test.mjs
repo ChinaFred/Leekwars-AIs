@@ -172,25 +172,28 @@ function arena({ mp = 5, k = 164, e = 255, turn = 4, obstacles = FIGHT_OBSTACLES
 const describe = (plan) => plan === null ? null : {
 	destination: plan.destination.id, shotCell: plan.shotCell.id, weapon: plan.weapon?.name ?? null, weaponShots: plan.weaponShots,
 	chips: plan.chips.map(item => item.name), protection: plan.protection.map(item => item.name),
-	danger: Number(plan.danger.toFixed(3)), score: Number(plan.score.toFixed(3)), tpUsed: plan.tpUsed
+	danger: Number(plan.danger.toFixed(3)), score: Number(plan.score.toFixed(3)), tpUsed: plan.tpUsed,
+	boost: (plan.boost?.chips ?? []).map(item => item.name)
 }
 const done = () => { delete globalThis.System }
 
-// Décisions relevées avant l'optimisation, aux positions réelles des tours 3 à 6 (Kassbi 180 puis 164 ; Shangrill 326, 255,
-// 218, 199) et à 4 comme à 5 PM. Les optimisations (carte de danger groupée, tableaux denses, fournisseur natif évité,
-// création de plans différée) ne changent aucune décision.
+// Décisions aux positions réelles des tours 3 à 6 (Kassbi 180 puis 164 ; Shangrill 326, 255, 218, 199), à 4 comme à 5 PM.
+// Relevées de nouveau quand le boost est devenu une composante du plan et que le bouclier a été soumis au seuil du rôle
+// (avant : aucun boost dans le plan, score 2/3/1/1 aux tours 3-4, deux tirs de shotgun ou repli + helmet au tour 5,
+// neutrino + rock au tour 6). À pleine vie, helmet n'est plus candidat ; protein (+90 force, 2 tours) et motivation
+// (+2 PT, 3 tours) sont crédités de leurs tours suivants. Les optimisations d'opérations ne changent aucune décision.
 const EXPECTED = {
-	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 2, tpUsed: 0 },
-	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 3, tpUsed: 0 },
-	"4PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 1, tpUsed: 0 },
-	"5PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 1, tpUsed: 0 },
-	"4PM T5 164/218": { destination: 235, shotCell: 235, weapon: "shotgun", weaponShots: 2, chips: [], protection: [], danger: 124.5, score: -40.9, tpUsed: 10 },
-	"5PM T5 164/218": { destination: 74, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: ["helmet"], danger: 46.08, score: -31.08, tpUsed: 3 },
-	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: ["rock"], protection: [], danger: 90.88, score: -18.28, tpUsed: 10 },
-	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: ["rock"], protection: [], danger: 90.88, score: -18.28, tpUsed: 10 }
+	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.3, tpUsed: 3, boost: ["protein"] },
+	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 54.3, tpUsed: 3, boost: ["protein"] },
+	"4PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
+	"5PM T4 164/255": { destination: 147, shotCell: 164, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 52.3, tpUsed: 3, boost: ["protein"] },
+	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
+	"5PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 124.5, score: 13, tpUsed: 12, boost: ["motivation", "protein"] },
+	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 90.88, score: 46.62, tpUsed: 12, boost: ["motivation", "protein"] },
+	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 90.88, score: 46.62, tpUsed: 12, boost: ["motivation", "protein"] }
 }
 
-test("combat 54942202 at 4 and 5 MP: the tactical decisions are exactly those of the code before the optimisation", () => {
+test("combat 54942202 at 4 and 5 MP: the tactical decisions are exactly the recorded ones (boost in the plan)", () => {
 	try {
 		for (const mp of [4, 5]) for (const [turn, k, e] of [[3, 180, 326], [4, 164, 255], [5, 164, 218], [6, 164, 199]]) {
 			const name = `${mp}PM T${turn} ${k}/${e}`
@@ -243,6 +246,8 @@ test("a native provider is called exactly for the items some reachable cell can 
 test("the approach computes only cells within the planned approach cost, not the whole zone of this turn's MP", () => {
 	try {
 		const w = arena({ mp: 5, k: 164, e: 56, turn: 4 })
+		// Boosts en délai : avec eux, le plan tire sur place (protein + rock) et ce test n'aurait plus d'approche à mesurer.
+		for (const item of w.me.chips) if (item.name === "protein" || item.name === "motivation") item.currentCooldown = 1
 		const { plan } = w.evaluate()
 		assert.deepEqual([plan.shotCell.id, plan.beforeMp, plan.destination.id, plan.weaponShots, plan.chips.map(c => c.name)],
 			[146, 1, 181, 1, ["rock"]])
