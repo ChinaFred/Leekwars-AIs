@@ -118,7 +118,8 @@ export function firingZone(enemyCell = ENEMY_CORNER) {
  * Un tour de Kassbi : `k` = sa case, `e` = celle de dv3 (PV `enemyLife`), PM 4, PT 10. Construit la mémoire, la carte
  * de danger réelle du dépôt, puis évalue le plan tactique. `stagnation` = compteur transmis au planificateur.
  */
-export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife = 60, stagnation, dangerOverride } = {}) {
+export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife = 60, stagnation, dangerOverride,
+	boosts = false, life = 339, enemyMp = 4 } = {}) {
 	delete globalThis.System
 	globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5,
 		ABSOLUTE_SHIELD: 6, BUFF_MP: 7, BUFF_TP: 8, DEBUFF: 9, POISON: 13, RAW_BUFF_TP: 32, RAW_BUFF_STRENGTH: 38 }
@@ -127,8 +128,11 @@ export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife
 	const neutrino = weapon("neutrino", 4, 2, 6, 2, 3, [feature(1, 25, 30), feature(26, 8, 8, 2)])
 	const myChips = [
 		chip("ice", 4, 0, 0, 8, [feature(1, 17, 19)]), chip("bandage", 2, 1, 0, 6, [feature(2, 23, 28)]),
-		chip("rock", 5, 1, 2, 6, [feature(1, 38, 39)]), chip("protein", 3, 3, 0, 4, [feature(38, 80, 100, 2)]),
-		chip("motivation", 4, 6, 0, 5, [feature(32, 2, 2, 3)]), chip("helmet", 3, 3, 0, 4, [feature(6, 15, 15, 2)])
+		chip("rock", 5, 1, 2, 6, [feature(1, 38, 39)]),
+		// Boosts en délai par défaut : depuis que le boost est une composante du plan, un boost prêt s'ajoute à chaque
+		// plan (y compris à un maintien). `boosts: true` les rend prêts pour les tests qui portent sur cette interaction.
+		chip("protein", 3, 3, 0, 4, [feature(38, 80, 100, 2)], boosts ? 0 : 1),
+		chip("motivation", 4, 6, 0, 5, [feature(32, 2, 2, 3)], boosts ? 0 : 1), chip("helmet", 3, 3, 0, 4, [feature(6, 15, 15, 2)])
 	]
 	const enemyChips = [
 		chip("shock", 2, 0, 0, 6, [feature(1, 7, 9)]), chip("ice", 4, 0, 0, 8, [feature(1, 17, 19)]),
@@ -137,7 +141,7 @@ export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife
 	]
 	for (const cell of cells) { cell.entity = null; cell.empty = !cell.obstacle }
 	const me = {
-		id: 103947, name: "Kassbi", cell: cells[k], life: 339, maxLife: 339, strength: 10, wisdom: 0, agility: 10,
+		id: 103947, name: "Kassbi", cell: cells[k], life, maxLife: 339, strength: 10, wisdom: 0, agility: 10,
 		resistance: 10, science: 0, magic: 0, level: 14, absoluteShield: 0, relativeShield: 0, tp: 10, mp: 4,
 		weapon: machineGun, weapons: [machineGun, neutrino], chips: myChips, effects: [], launchedEffects: [],
 		events: [], say() {}, distance(other) { return distance(this.cell, other.cell) },
@@ -157,7 +161,7 @@ export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife
 		useWeapon() { this.events.push("shoot"); return 1 }, useChip(item) { this.events.push(`chip:${item.name}`); return 1 }
 	}
 	const enemy = {
-		id: 76599, name: "dv3", cell: cells[e], life: enemyLife, maxLife: 189, mp: 4, tp: 10, strength: 116, agility: 10,
+		id: 76599, name: "dv3", cell: cells[e], life: enemyLife, maxLife: 189, mp: enemyMp, tp: 10, strength: 116, agility: 10,
 		wisdom: 0, resistance: 26, science: 0, magic: 0, level: 14, weapon: machineGun, weapons: [pistol, machineGun],
 		chips: enemyChips, absoluteShield: 0, relativeShield: 0, effects: [], launchedEffects: [], frequency: 100,
 		cores: 1, ram: 6

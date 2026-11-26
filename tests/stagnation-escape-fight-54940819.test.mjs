@@ -592,7 +592,8 @@ test("visited-cell guard exceptions: a cell that beats the proximity record is a
 	const record = quiet(() => world({ turn: 5, k: 133, stagnation: episode(), dangerOverride: (cell) => closer(cell) ? 100 : null }).evaluate())
 	assert.equal(record.plan?.destination.id, KASSBI_STUCK, "visited but a new record: not refused")
 	// Protection sur place (afterMp = 0) depuis une case visitée, danger modéré : jamais assimilée à un déplacement refusé.
-	const protectedHere = (stagnation) => quiet(() => world({ turn: 5, k: 133, stagnation,
+	// Le bouclier n'est candidat qu'au seuil du rôle : blessé (280/339 = 0,83 ≤ 0,85) et à portée de menace (7 PM + 6 ≥ 13).
+	const protectedHere = (stagnation) => quiet(() => world({ turn: 5, k: 133, stagnation, life: 280, enemyMp: 7,
 		dangerOverride: (cell) => cell.id === 133 ? 30 : 100 }).evaluate()).plan
 	const off = protectedHere(undefined), on = protectedHere(episode())
 	assert.deepEqual(off?.protection.map((chip) => chip.name), ["helmet"], "reference: the rule off casts the helmet in place")
@@ -704,7 +705,8 @@ test("the visited-cell guard lets a move + protection plan through (187, 3 MP, h
 		return tracker
 	}
 	const shape = (stagnation) => {
-		const plan = quiet(() => 		world({ turn: 6, k: 133, stagnation, dangerOverride: danger }).evaluate()).plan
+		// Bouclier candidat au seuil du rôle : blessé (280/339 = 0,83 ≤ 0,85) et à portée de menace (7 PM + 6 ≥ 13).
+		const plan = quiet(() => world({ turn: 6, k: 133, stagnation, life: 280, enemyMp: 7, dangerOverride: danger }).evaluate()).plan
 		return [plan?.destination.id, plan?.afterMp, plan?.danger, plan?.protection.map((chip) => chip.name)]
 	}
 	assert.deepEqual(shape(undefined), [KASSBI_STUCK, 3, 30, ["helmet"]], "reference: the rule off moves to 187 and casts the helmet")
@@ -715,4 +717,20 @@ test("the visited-cell guard lets a safety retreat through at the tactical level
 	const danger = (cell) => cell.id === 133 ? 150 : cell.id === KASSBI_STUCK ? 0 : 100
 	const plan = quiet(() => world({ turn: 6, k: 133, stagnation: visitedEpisode187to133(), dangerOverride: danger }).evaluate()).plan
 	assert.deepEqual([plan?.destination.id, plan?.danger], [KASSBI_STUCK, 0])
+})
+
+// Boost dans le plan (les autres tests de ce fichier gardent les boosts en délai : voir le monde partagé).
+test("with a boost ready: a hold becomes a boost-only plan, which still counts as blocked, and the escape keeps the boost", () => {
+	// Tour 13 : sous le seuil, pas de sortie. Le plan ne bouge pas mais lance protein (ennemi à 10 ≤ 6 + 2 × 4 + 4).
+	const hold = quiet(() => world({ turn: 13, stagnation: stalled(1), boosts: true }).evaluate()).plan
+	assert.deepEqual([hold?.destination.id, hold?.afterMp, hold?.weaponShots], [KASSBI_STUCK, 0, 0])
+	assert.deepEqual(hold?.boost?.chips.map((chip) => chip.name), ["protein"])
+	// Tour 14 : seuil atteint. Un plan réduit à un boost reste « bloqué » : la sortie part, avec le même boost.
+	const w = world({ turn: 14, stagnation: stalled(2), boosts: true })
+	const escape = quiet(() => w.evaluate()).plan
+	assert.equal(escape?.progressModel, "stagnation walk route")
+	assert.equal(escape?.destination.id, 133)
+	assert.deepEqual(escape?.boost?.chips.map((chip) => chip.name), ["protein"])
+	quiet(() => executeTacticalPlan(w.me, escape))
+	assert.deepEqual(w.me.events, ["chip:protein", "move:133"])
 })

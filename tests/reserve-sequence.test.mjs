@@ -141,7 +141,7 @@ test("turn6 fallback: actual sequence, support, final path and PT/MP are decided
 	assert.deepEqual(r.plan.protection, [{ chip: "bandage", target: 1, tpCost: 2, tpBefore: 2, tpAfter: 0 }])
 	assert.deepEqual(r.plan.destination, { x: -2, y: 0 })
 	assert.equal(r.plan.retreat.mpCost, 3)
-	assert.deepEqual(r.plan.resources, { tpInitial: 10, equipment: 0, attack: 8, support: 2,
+	assert.deepEqual(r.plan.resources, { tpInitial: 10, equipment: 0, attack: 8, boost: 0, support: 2,
 		tpRemainingIfExecuted: 0, mpInitial: 4, approachOrProgress: 1, retreat: 3, mpRemainingIfExecuted: 0 })
 	assert.deepEqual(r.actions.map(e => e.name), ["move", "shoot", "shoot", "support", "move"])
 	assert.deepEqual(r.actions.at(-1).to, r.plan.destination)

@@ -128,10 +128,11 @@ test("complete plan: exact preview and real protection/equipment/chip/shots/move
 	w.me.tp = 12; w.me.weapon = { ...w.gun, name: "old" }; w.me.chips = [w.shield, w.bolt]
 	const trace = capture(w, () => executeTacticalPlan(w.me, plan))
 	const p = preview(trace, TACTICAL)
-	assert.deepEqual(p.order, ["approach", "protection", "equipment if needed", "offensive chips", "weapon shots", "final move"])
+	assert.deepEqual(p.order, ["approach", "boost", "protection", "equipment if needed", "offensive chips", "weapon shots", "final move"])
+	assert.deepEqual(p.boost, [])
 	assert.deepEqual(p.target, { id: 2, position: { x: 7, y: 0 } })
 	assert.deepEqual([p.origin, p.shotCell, p.destination], [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: -2, y: 0 }])
-	assert.deepEqual(p.tp, { available: 12, planned: 11, remainingIfExecuted: 1 })
+	assert.deepEqual(p.tp, { available: 12, planned: 11, gainedFromBoost: 0, remainingIfExecuted: 1 })
 	assert.deepEqual(p.mp, { available: 4, before: 1, after: 3 })
 	assert.deepEqual(p.weapon, { name: "gun", cost: 4, equipTp: 1, shots: 2 })
 	assert.deepEqual(p.chips, [{ name: "bolt", cost: 1 }])
