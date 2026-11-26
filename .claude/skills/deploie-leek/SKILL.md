@@ -28,7 +28,8 @@ git push origin "leek-..."
 ```
 
 Si le push du tag est refusé depuis cette session, ne contourne pas : donne la commande à l'utilisateur, ou
-lance le même workflow à la main (Actions > « Déploiement Leek Wars » > Run workflow) sur la branche voulue.
+lance le même workflow à la main (Actions > « Déploiement Leek Wars » > Run workflow) sur la branche par défaut.
+Le workflow refuse tout commit absent de la branche par défaut : fusionne d'abord, déploie ensuite.
 
 ## Après
 
