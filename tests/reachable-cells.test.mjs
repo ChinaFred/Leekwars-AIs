@@ -477,7 +477,9 @@ async function runTurnCapturingLogs(turn) {
 }
 
 test("turn() computes the reachable cells of me, my ally and the enemy, logs one short line, and plays as before", async () => {
-	const { turn, enemyMemory } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 20, ally: 21 })
 	debugLogs.length = 0
 
@@ -495,7 +497,9 @@ test("turn() computes the reachable cells of me, my ally and the enemy, logs one
 })
 
 test("turn() still plays when the reachable-cells computation fails, and reports the error", async () => {
-	const { turn, enemyMemory } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 30, ally: 31 })
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	debugLogs.length = 0
@@ -508,7 +512,9 @@ test("turn() still plays when the reachable-cells computation fails, and reports
 })
 
 test("turn() logs the operations line after TURN END, and still works when System is undefined", async () => {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 
 	makeCombatWorld({ enemy: 50, ally: 51 })
 	assert.equal(typeof globalThis.System, "undefined")
@@ -532,7 +538,9 @@ test("turn() logs the operations line after TURN END, and still works when Syste
 })
 
 test("turn() does not feed the reachable data to planAct: same actions with or without a ring of obstacles", async () => {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions, grid } = makeCombatWorld({ enemy: 40, ally: 41 })
 	for (const [x, y] of [[4, 5], [6, 5], [5, 4], [5, 6]]) {
 		grid.cell(x, y).obstacle = true

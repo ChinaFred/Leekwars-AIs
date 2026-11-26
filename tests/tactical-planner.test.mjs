@@ -626,14 +626,17 @@ test("shared search handles the formerly bounded combination without spending PT
 
 test("active turn passes real EnemyMemory maps into the joint planner", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], maxLife: 120 })
 	Object.assign(w.enemies[0], {
 		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
 		weapons: [], chips: [], effects: [], launchedEffects: []
 	})
 	initLeekLogging(new LogConfig().setAll(false))
-	turn()
+	// Le bouclier à 100/120 PV prouve que la carte de danger arrive au plan : seuil BALANCED (0,85), pas celui du rôle par défaut.
+	const role = leekProfile.strategyName
+	leekProfile.setRole("BALANCED")
+	try { turn() } finally { leekProfile.setRole(role) }
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
 

@@ -11,7 +11,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 1. **Observer** : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `BALANCED`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
@@ -60,7 +60,7 @@ déplacement final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / 
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
 - Égalités : danger brut inférieur, PT dépensés inférieurs, distance de tir futur inférieure, PM inférieurs.
 
-Par défaut `w = 1`. Le score échange des dégâts moyens ce tour contre une menace potentielle au tour ennemi :
+Par défaut `w = 0,75`. Le score échange des dégâts moyens ce tour contre une menace potentielle au tour ennemi :
 ce n'est ni une probabilité de survie ni un minimax.
 
 **Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours

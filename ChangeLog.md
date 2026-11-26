@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Profil `AGGRESSIVE` par défaut (agressivité 50) : poids du risque 0,75 au lieu de 1 ; soin à ≤ 32,5 % de vie, bouclier à ≤ 37,5 %, repli à ≤ 22,5 %.
 - 2026-11-26 — `DEPLOYED.ts` allégé : version, date et origine du déploiement, ligne `Stratégie:` ; plus de message de fusion ni de détail du commit.
 - 2026-11-26 — Déploiement sans fichier à créer : l'historique des actions rejoint `StagnationTracker.ts` ; un PUSH par clé API refuse d'écrire s'il faudrait créer une IA.
 - 2026-11-26 — Historique des actions : la passivité vient des dégâts mesurés de mes actions, ligne `[History]` en fin de tour (PT/PM, résultats) ; marge de 75 % des PV à poids réduit.

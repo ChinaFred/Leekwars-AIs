@@ -387,7 +387,9 @@ let runCounter = 1
 
 /** Joue un tour dans un monde neuf (ids et tour distincts : `enemyMemory` est partagé) et renvoie ses lignes normalisées. */
 async function playTurn(config, options) {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld(runCounter++, options)
 	const originalLog = console.log
 	const lines = []
@@ -484,7 +486,9 @@ test("turn() with setAll(false): no log line at all, same actions; the config is
 })
 
 test("importing Kassbi_Class installs its own all-enabled config (leekLogConfig) that can be tuned per context", async () => {
-	const { leekLogConfig, turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { leekLogConfig, turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	leekProfile.setRole("BALANCED")
 	assert.deepEqual(leekLogConfig.enabledContexts(), [...LOG_CONTEXTS])
 	initLeekLogging(leekLogConfig)
 	try {
