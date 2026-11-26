@@ -1,18 +1,18 @@
 """The `DEPLOYED.ts` file Garden writes at the root of the Leek Wars AI tree.
 
 It is generated at each PUSH (never stored in Git) and holds only comments: the
-deployed commit, its branch and tag, and the release summary, so that the game
-site itself tells which version is live.
+version (last commit that changed the AI sources), when and from which branch or
+tag it was deployed, and its `Stratégie:` line, so that the game site itself tells
+which version is live.
 """
 import os
+import re
 import time
 
 import FightArchive
 
 
 RELEASE_FILE = "DEPLOYED.ts"
-MAX_SUMMARY_LINES = 30
-TRAILERS = ("co-authored-by:", "claude-session:", "signed-off-by:")
 DEFAULT_BRANCHES = ("master", "main")
 
 
@@ -67,38 +67,32 @@ def read_tag(folder, environ=None):
     return ", ".join(_git_lines(folder, "tag", "--points-at", "HEAD"))
 
 
-def summary_lines(message):
-    """The commit message without its trailers, capped."""
-    lines = [line.rstrip() for line in message.splitlines()
-             if not line.strip().lower().startswith(TRAILERS)]
-    while lines and not lines[-1]:
-        lines.pop()
-    if len(lines) > MAX_SUMMARY_LINES:
-        lines = lines[:MAX_SUMMARY_LINES] + ["[...]"]
-    return lines
+STRATEGY_LINE = re.compile(r"^Strat[eé]gie[ \t]*:[ \t]*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
 def build_content(head, source_state, branch, tag, account, now=None):
-    """Comment-only TypeScript: every variable line is prefixed, so nothing can run."""
+    """Comment-only TypeScript, kept to what tells which version fights: the last commit
+    that changed the AI sources (the version id of the fight archive), when and from
+    where it was deployed, and its `Stratégie:` line. Every line is prefixed, so nothing
+    can run. `head` and `account` are not shown: the merge commit and the account name
+    say nothing about the behaviour in a fight."""
     now = time.time() if now is None else now
+    commit = source_state.get("commit")
+    strategy = STRATEGY_LINE.search(source_state.get("message") or "")
+    origin = (branch or "branche inconnue") + (", tag {0}".format(tag) if tag else "")
     lines = [
-        "Fichier généré par LWGarden à chaque PUSH : ne pas modifier, ne pas inclure.",
+        "Généré par LWGarden à chaque PUSH : ne pas modifier, ne pas inclure.",
         "",
-        "Commit déployé : {0}".format(head.get("commit") or "inconnu (git indisponible)"),
-        "Branche : {0}".format(branch or "inconnue"),
-        "Tag : {0}".format(tag or "aucun"),
-        "Compte : {0}".format(account),
-        "Déployé le : {0}".format(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))),
+        "Version : {0}".format("{0} — {1}".format(commit[:7], source_state.get("subject", ""))
+                               if commit else "inconnue (git indisponible)"),
+        "Déployée le : {0} depuis {1}".format(
+            time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(now)), origin),
+        "Stratégie : {0}".format(strategy.group(1).strip() if strategy else "non renseignée"),
     ]
     if source_state.get("dirty"):
         lines.append("ATTENTION : sources modifiées localement, différentes de ce commit : "
                      + (", ".join(source_state.get("dirty_files") or []) or "?"))
-    lines += ["", "Résumé de la release :"] + summary_lines(head.get("message", ""))
-    source_commit = source_state.get("commit")
-    if source_commit and source_commit != head.get("commit"):
-        lines += ["", "Dernier commit modifiant les sources ({0}) :".format(source_commit)]
-        lines += summary_lines(source_state.get("message", ""))
-    body = "\n".join(("// " + line).rstrip() for line in lines)
+    body = "\n".join(("// " + " ".join(line.split())).rstrip() for line in lines)
     return "// @version:5.8\n" + body + "\n"
 
 

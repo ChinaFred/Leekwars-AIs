@@ -25,32 +25,29 @@ def git(folder, *args):
 
 
 class ContentTests(unittest.TestCase):
-    def test_content_is_comment_only_and_names_commit_branch_tag_and_summary(self):
-        content = ReleaseFile.build_content(HEAD, git_state(), "master", "leek-1", "me", now=0)
-        lines = content.splitlines()
-        self.assertEqual(lines[0], "// @version:5.8")
-        self.assertTrue(all(line.startswith("//") for line in lines))
-        for expected in ("// Commit déployé : " + "b" * 40, "// Branche : master",
-                         "// Tag : leek-1", "// Compte : me",
-                         "// Déployé le : 1970-01-01T00:00:00Z", "// feat: x",
-                         "// Stratégie: seuil 30 %",
-                         "// Dernier commit modifiant les sources ({0}) :".format("a" * 40)):
-            self.assertIn(expected, lines)
-        self.assertNotIn("Co-Authored-By", content)
-        self.assertNotIn("Claude-Session", content)
-        self.assertNotIn("ATTENTION", content)
+    def test_content_is_comment_only_and_keeps_version_origin_and_strategy(self):
+        state = git_state(message="feat: x\n\nPourquoi : détail\n- puce\nStratégie: seuil 30 %\n"
+                                  "Tests: npm test\n*/ alert(1)\n\nCo-Authored-By: A <a@b>")
+        content = ReleaseFile.build_content(HEAD, state, "master", "leek-1", "me", now=0)
+        self.assertEqual(content.splitlines(), [
+            "// @version:5.8",
+            "// Généré par LWGarden à chaque PUSH : ne pas modifier, ne pas inclure.",
+            "//",
+            "// Version : aaaaaaa — feat: x",
+            "// Déployée le : 1970-01-01 00:00 UTC depuis master, tag leek-1",
+            "// Stratégie : seuil 30 %",
+        ])
 
-    def test_dirty_sources_and_missing_git_are_stated(self):
+    def test_content_flags_unknown_git_state_and_local_changes(self):
         content = ReleaseFile.build_content(
             {"commit": None, "subject": "", "message": ""},
-            dict(git_state(dirty=True), dirty_files=["Main/a.ts"]), "", "", "me", now=0)
-        self.assertIn("// Commit déployé : inconnu", content)
-        self.assertIn("// ATTENTION : sources modifiées localement", content)
-        self.assertIn("Main/a.ts", content)
-        self.assertIn("// Tag : aucun", content)
+            {"commit": None, "dirty": True, "dirty_files": ["Main/a.ts"]}, "", "", "me", now=0)
+        self.assertIn("// Version : inconnue (git indisponible)", content)
+        self.assertIn("depuis branche inconnue\n", content)
+        self.assertIn("// Stratégie : non renseignée", content)
+        self.assertIn("// ATTENTION : sources modifiées localement, différentes de ce commit : Main/a.ts",
+                      content)
 
-
-class GitTests(unittest.TestCase):
     def test_branch_and_tag_come_from_git_then_from_the_ci_environment(self):
         with tempfile.TemporaryDirectory() as root:
             git(root, "init", "-q", "-b", "work")
@@ -87,7 +84,7 @@ class PublishTests(unittest.TestCase):
         self.assertTrue(self.publish(api))
         self.assertEqual(api.created_ais, [("", "DEPLOYED.ts", 4)])
         self.assertEqual([path for path, _ in api.writes], ["DEPLOYED.ts"] * 2)
-        self.assertIn("// Commit déployé : " + "b" * 40, api.codes["DEPLOYED.ts"])
+        self.assertIn("// Version : aaaaaaa", api.codes["DEPLOYED.ts"])
 
     def test_hand_made_file_is_reused_whatever_its_case_or_extension(self):
         for existing in ("deployed.ts", "Deployed", "DEPLOYED.ts"):
@@ -95,7 +92,7 @@ class PublishTests(unittest.TestCase):
                           codes={existing: "", "Main/DEPLOYED.ts": "keep"})
             self.assertTrue(self.publish(api))
             self.assertEqual(api.created_ais, [])
-            self.assertIn("// Commit déployé : " + "b" * 40, api.codes[existing])
+            self.assertIn("// Version : aaaaaaa", api.codes[existing])
             self.assertEqual(api.codes["Main/DEPLOYED.ts"], "keep")
             with tempfile.TemporaryDirectory() as root:
                 write(root, "main.ts", "code")
