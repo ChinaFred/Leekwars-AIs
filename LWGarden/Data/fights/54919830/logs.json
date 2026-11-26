@@ -1,0 +1,944 @@
+{
+ "98285": {
+  "5": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 333/333, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 333/333, Distance: 29"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Greeting: \"Hi!\""
+   ]
+  ],
+  "6": [
+   [
+    0,
+    1,
+    "Enemy HP: 100.0%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] EquipWeapon: machine_gun (cost 1 TP, 9 → 8)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=29, myMaxReach=25, myMaxRange=6, iCanShoot=false, enemyMaxReach=26, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=29, behavior=simple_advance, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×2 (cost 8 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=29, myMaxReach=29, myMaxRange=6, iCanShoot=false, enemyMaxReach=26, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=29, myMaxReach=29, myMaxRange=6, iCanShoot=false, enemyMaxReach=26, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=1.00, lifeLost=0.00, shouldDefense=false, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 4 actions (TP: 0 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → equip weapon"
+   ]
+  ],
+  "7": [
+   [
+    0,
+    1,
+    "[Plannification]   → move [simple_advance]"
+   ]
+  ],
+  "8": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 0, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "14": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 333/333, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 333/333, Distance: 22"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 100.0%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=22, myMaxReach=18, myMaxRange=6, iCanShoot=false, enemyMaxReach=19, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=22, behavior=simple_advance, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×2 (cost 8 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=22, myMaxReach=22, myMaxRange=6, iCanShoot=false, enemyMaxReach=19, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=22, myMaxReach=22, myMaxRange=6, iCanShoot=false, enemyMaxReach=19, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=1.00, lifeLost=0.00, shouldDefense=false, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 2 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [simple_advance]"
+   ]
+  ],
+  "15": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 2, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "21": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 333/333, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 333/333, Distance: 15"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 100.0%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=15, myMaxReach=11, myMaxRange=6, iCanShoot=false, enemyMaxReach=12, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=15, behavior=simple_advance, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×2 (cost 8 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=15, myMaxReach=15, myMaxRange=6, iCanShoot=false, enemyMaxReach=12, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=15, myMaxReach=15, myMaxRange=6, iCanShoot=false, enemyMaxReach=12, enemyMaxRange=7, enemyCanShoot=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=1.00, lifeLost=0.00, shouldDefense=false, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 2 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [simple_advance]"
+   ]
+  ],
+  "22": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 2, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "28": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 333/333, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 333/333, Distance: 8"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 100.0%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=4, myMaxRange=6, iCanShoot=true, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=8, behavior=zone_control, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] AttackChip: ice (cost 4 TP, 10 → 6)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×1 (cost 4 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=8, myMaxRange=6, iCanShoot=false, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=8, myMaxRange=6, iCanShoot=false, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=1.00, lifeLost=0.00, shouldDefense=true, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 2 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [zone_control]"
+   ]
+  ],
+  "29": [
+   [
+    0,
+    1,
+    "[Plannification]   → attack chip"
+   ]
+  ],
+  "31": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "35": [
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 2, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "47": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 282/330, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 278/329, Distance: 7"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 84.5%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=7, myMaxReach=3, myMaxRange=6, iCanShoot=true, enemyMaxReach=4, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=7, behavior=zone_control, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] AttackChip: ice (cost 4 TP, 10 → 6)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×1 (cost 4 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=7, myMaxReach=7, myMaxRange=6, iCanShoot=false, enemyMaxReach=4, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=7, myMaxReach=7, myMaxRange=6, iCanShoot=false, enemyMaxReach=4, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=0.85, lifeLost=0.15, shouldDefense=true, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 2 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [zone_control]"
+   ]
+  ],
+  "48": [
+   [
+    0,
+    1,
+    "[Plannification]   → attack chip"
+   ]
+  ],
+  "50": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "54": [
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 2, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "66": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 231/327, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 220/325, Distance: 6"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 67.7%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipMove: canUseWeapon=true, mpLeft=4"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] AttackChip: shock (cost 2 TP, 10 → 8)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×2 (cost 8 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=6, myMaxReach=2, myMaxRange=6, iCanShoot=true, enemyMaxReach=3, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=6, myMaxReach=2, myMaxRange=6, iCanShoot=true, enemyMaxReach=3, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=0.71, lifeLost=0.29, shouldDefense=false, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] HideCheck: distance=6, lifeRatio=0.71, shouldHide=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 0 left, MP: 4 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → attack chip"
+   ]
+  ],
+  "68": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "72": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "76": [
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 0, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "88": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 175/324, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 121/319, Distance: 9"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 37.9%"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=10"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=9, myMaxReach=5, myMaxRange=6, iCanShoot=true, enemyMaxReach=6, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=9, behavior=zone_control, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×2 (cost 8 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=9, myMaxReach=9, myMaxRange=6, iCanShoot=false, enemyMaxReach=6, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=9, myMaxReach=9, myMaxRange=6, iCanShoot=false, enemyMaxReach=6, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=0.54, lifeLost=0.46, shouldDefense=true, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Heal: bandage (healing=26, meanDamagePerTp=10.31, skip=false, distance=9, threat-aware=true)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 4 actions (TP: 0 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [zone_control]"
+   ]
+  ],
+  "89": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "93": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "97": [
+   [
+    0,
+    1,
+    "[Plannification]   → heal"
+   ]
+  ],
+  "99": [
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 0, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ],
+  "111": [
+   [
+    0,
+    1,
+    "\n=== KASSBI TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "My HP: 148/321, TP: 10, MP: 4"
+   ],
+   [
+    0,
+    1,
+    "Enemy: jeffken, HP: 34/313, Distance: 8"
+   ],
+   [
+    0,
+    1,
+    "Enemy HP: 10.9%"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Taunt (10.9% HP): \"Je vais te dégorger\""
+   ]
+  ],
+  "112": [
+   [
+    0,
+    1,
+    "[Plannification] Weapon pistol: damage=19.3, turnDamage=57.8, range=1-7, score=57.69"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Weapon machine_gun: damage=41.3, turnDamage=82.5, range=1-6, score=82.42"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChosenWeapon: machine_gun (score: 82.42)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipEquipWeapon: weapon=machine_gun, current=machine_gun, tpLeft=9"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=4, myMaxRange=6, iCanShoot=true, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Move: distance=8, behavior=zone_control, mpLeft=4 → 0"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] AttackChip: ice (cost 4 TP, 9 → 5)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Shoot: machine_gun ×1 (cost 4 TP)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=8, myMaxRange=6, iCanShoot=false, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] PredictContactNextTurn: distance=8, myMaxReach=8, myMaxRange=6, iCanShoot=false, enemyMaxReach=5, enemyMaxRange=7, enemyCanShoot=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] ChipsAfterShoot: life=0.46, lifeLost=0.54, shouldDefense=true, shouldOffense=false"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] SkipHide: allowHiding=true, mpLeft=0, alive=true, targetAlive=true"
+   ],
+   [
+    0,
+    1,
+    "[Plannification] Execute: 3 actions (TP: 1 left, MP: 0 left)"
+   ],
+   [
+    0,
+    1,
+    "[Plannification]   → move [zone_control]"
+   ]
+  ],
+  "113": [
+   [
+    0,
+    1,
+    "[Plannification]   → attack chip"
+   ]
+  ],
+  "115": [
+   [
+    0,
+    1,
+    "[Plannification]   → shoot"
+   ]
+  ],
+  "119": [
+   [
+    0,
+    1,
+    "[Plannification] Done: TP: 1, MP: 0"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI TURN END ===\n"
+   ]
+  ]
+ }
+}

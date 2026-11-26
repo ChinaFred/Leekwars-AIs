@@ -2,13 +2,22 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## b7c7b61 — refactor(plan): createStrategy dans LeekProfile.ts, sans nouveau fichier
+Compte Kassbi, publié le 2026-11-26T10:44:25Z.
+Stratégie : aucun changement de comportement.
+Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 39 % (combat 54953080), médiane des pics 39 %.
+Ressources : 64 tours joués, 6 sans aucune action payante (9 %), 46 % des PM inutilisés, 0 tours interrompus ou en erreur.
+Combats les plus gaspilleurs (tours sans action payante) : 54953080 (6/64, nul).
+
 ## unknown-version — version inconnue
-Combats : 100 — 73 victoires, 14 défaites, 13 nuls (73 % de victoires), 0 sans logs.
-Ops : pic maximal 98 % (combat 54942202), médiane des pics 42 %.
-Ressources : 1579 tours joués, 688 sans aucune action payante (44 %), 60 % des PM inutilisés, 11 tours interrompus ou en erreur.
-Combats les plus gaspilleurs (tours sans action payante) : 54941300 (11/12, défaite), 54941022 (42/64, nul), 54941210 (42/64, nul), 54941603 (42/64, nul), 54944456 (42/64, nul).
+Combats : 128 — 92 victoires, 23 défaites, 13 nuls (72 % de victoires), 0 sans logs.
+Ops : pic maximal 98 % (combat 54942202), médiane des pics 43 %.
+Ressources : 1787 tours joués, 751 sans aucune action payante (42 %), 57 % des PM inutilisés, 11 tours interrompus ou en erreur.
+Combats les plus gaspilleurs (tours sans action payante) : 54941300 (11/12, défaite), 54931868 (5/7, victoire), 54941022 (42/64, nul), 54941210 (42/64, nul), 54941603 (42/64, nul).
 
 Défaites :
+- 54932341 : 11 tours · vs EnSahWolf · pic ops 62 %
 - 54932503 : 8 tours · vs SK8 · pic ops 40 %
 - 54933977 : 16 tours · vs Opex · pic ops 85 %
 - 54941018 : 11 tours · vs MimiRigonne · pic ops 56 %
@@ -23,3 +32,4 @@ Défaites :
 - 54944844 : 23 tours · vs gryka · pic ops 38 %
 - 54946689 : 21 tours · vs Poireaufesseur · pic ops 24 %
 - 54946723 : 9 tours · vs Sanguinaire67 · pic ops 33 %
+- … et 8 plus anciennes.

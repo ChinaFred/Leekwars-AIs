@@ -1,11 +1,14 @@
 // @version:5.8
-// file version: 8
+// file version: 10
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
-import { LeekProfile } from "../LeekProfile.js"
-import { Plannification } from "./Plannification.js"
-import { TacticalContext, TacticalPreparation } from "./TacticalPlanner.js"
+import { LeekProfile, createStrategy } from "../LeekProfile.js"
+import {
+	BoostOption, MIN_LIFE_RATIO_FOR_BOOST, boostNetDamage, boostReach, pickBoost, readyBoosts, readyTpBoosts,
+	tpBoostNetDamage
+} from "../../Brain/StrengthBoost.js"
+import { TacticalContext, TacticalPreparation, riskWeight } from "./TacticalPlanner.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
@@ -168,8 +171,9 @@ export function executeReservePlan(
 		const objective = enemies[0]!
 		const distanceToObjective = (cell: Cell): number =>
 			Math.abs(cell.x - objective.cell.x) + Math.abs(cell.y - objective.cell.y)
-		const weight = (profile.strategyName === "DEFENSIVE" ? 1.25 :
-			profile.strategyName === "AGGRESSIVE" ? 0.75 : 1) * (1.5 - profile.aggression / 100)
+		const strategy = createStrategy(profile)
+		const weight = riskWeight(profile, strategy, me.life / me.maxLife, allEnemies.reduce((nearest, enemy) =>
+			Math.min(nearest, Math.abs(origin.x - enemy.cell.x) + Math.abs(origin.y - enemy.cell.y)), Infinity))
 		// Sélection partielle AVANT les validations/fournisseurs coûteux, uniquement avec
 		// les coûts de trajet déjà calculés. Aucun danger n'est crédité à ce stade.
 		let geometricEmergency: ProgressOption | null = null
@@ -345,13 +349,39 @@ export function executeReservePlan(
 		// Sa marge globale couvre aussi aperçu/phases/contrôles, jamais l'ancien chrono relatif.
 		executionBudget = new ExecutionBudget()
 		const equipTp = shot?.weapon && me.weapon !== shot.weapon ? 1 : 0
+		// Boost décidé AVANT l'exécution, lancé avant l'attaque (PT puis force). Avec un tir d'arme : gain net du
+		// modèle à une arme (`StrengthBoost.ts`), jamais sous `MIN_LIFE_RATIO_FOR_BOOST` de PV ; `boostedTp` : PT
+		// attendus après les boosts, qui réduisent d'autant les tirs prévus.
+		const boostPlan: Chip[] = []
+		let boostedTp = me.tp
+		const planBoost = (option: BoostOption, tpGain: number): void => {
+			boostPlan.push(option.chip)
+			boostedTp += tpGain - option.chip.cost
+		}
+		const bestBoost = (options: BoostOption[], net: (option: BoostOption) => number): BoostOption | null => {
+			let best: BoostOption | null = null
+			let bestNet = 0
+			for (const option of options) {
+				const value = net(option)
+				if (value > bestNet) { best = option; bestNet = value }
+			}
+			return best
+		}
+		if (shot?.weapon && me.life / me.maxLife >= MIN_LIFE_RATIO_FOR_BOOST) {
+			const weapon = shot.weapon
+			const tpBoost = bestBoost(readyTpBoosts(me, me.tp), (option) =>
+				tpBoostNetDamage(me, weapon, option, me.tp - equipTp, me.tp, true, shot.target.life))
+			if (tpBoost) planBoost(tpBoost, Math.floor(tpBoost.gain))
+			const strengthBoost = bestBoost(readyBoosts(me, boostedTp), (option) => option.chip === tpBoost?.chip ? 0 :
+				boostNetDamage(me, weapon, option, boostedTp - equipTp, shot.target.life))
+			if (strengthBoost) planBoost(strengthBoost, 0)
+		}
 		const shotsAtMost = shot?.weapon
-			? Math.min(maxUsesOf(shot.weapon), Math.floor((me.tp - equipTp) / shot.weapon.cost), 30) : 0
+			? Math.min(maxUsesOf(shot.weapon), Math.floor((boostedTp - equipTp) / shot.weapon.cost), 30) : 0
 		const attackTp = shot?.weapon ? shotsAtMost * shot.weapon.cost : shot?.chip?.cost ?? 0
 		const actionCell = shot?.cell ?? progressDecision?.cell ?? origin
 		const approachMp = shot?.cost ?? progressDecision?.cost ?? 0
 		const remainingMp = Math.max(0, initialMp - approachMp)
-		const strategy = new Plannification(me, objective, profile).strategy
 		const supportEligible = (chip: Chip, from: Cell, target: Entity): boolean => {
 			const heal = chip.features.some((f) => f.type === Effect.HEAL)
 			const shield = chip.features.some((f) => f.type === Effect.ABSOLUTE_SHIELD || f.type === Effect.RELATIVE_SHIELD)
@@ -368,7 +398,7 @@ export function executeReservePlan(
 			thresholdMet: boolean }> = []
 		const supportOmissions: Array<{ chip: Chip; reason: string }> = []
 		let supportComplete = true
-		let projectedTp = Math.max(0, me.tp - equipTp - attackTp)
+		let projectedTp = Math.max(0, boostedTp - equipTp - attackTp)
 		for (const chip of chips) {
 			if (!budget()) { supportComplete = false; break }
 			const heal = chip.features.some((f) => f.type === Effect.HEAL)
@@ -398,6 +428,24 @@ export function executeReservePlan(
 			}
 			return nearest
 		}
+		// Sans tir d'arme : boost avec les seuls PT que ni l'attaque ni les supports retenus n'emploient, s'il couvre le
+		// tour suivant (durée ≥ 2) et que l'ennemi le plus proche peut être à portée d'ici là.
+		const boostEnemy = shot?.weapon ? null : nearestFrom(origin)
+		const boostWeapon = boostEnemy ? me.weapon ?? weapons[0] ?? null : null
+		if (boostEnemy && boostWeapon && Math.abs(origin.x - boostEnemy.cell.x) +
+			Math.abs(origin.y - boostEnemy.cell.y) <= boostReach(me, boostEnemy)) {
+			const tpBoost = bestBoost(readyTpBoosts(me, projectedTp).filter((option) => option.turns >= 2), (option) =>
+				tpBoostNetDamage(me, boostWeapon, option, projectedTp, me.tp, false, boostEnemy.life))
+			if (tpBoost) {
+				boostPlan.push(tpBoost.chip)
+				projectedTp += Math.floor(tpBoost.gain) - tpBoost.chip.cost
+			}
+			const strengthBoost = pickBoost(me, projectedTp)
+			if (strengthBoost && strengthBoost.turns >= 2 && strengthBoost.chip !== tpBoost?.chip) {
+				boostPlan.push(strengthBoost.chip)
+				projectedTp -= strengthBoost.chip.cost
+			}
+		}
 		let retreatPlan: RetreatDecision = { mode: "hold", from: actionCell, cell: actionCell, cost: 0,
 			mpLimit: remainingMp, awayFrom: null, complete: true,
 			reason: !shot ? "no attack selected; progress/hold already decided" :
@@ -414,8 +462,8 @@ export function executeReservePlan(
 		message(() => {
 			return `plan before execution ${JSON.stringify({
 				mode: "bounded sequence with explicit conditional branches; native checks may cancel",
-				order: shot ? ["approach", "equipment if needed", "conditional attack", "planned support", "planned retreat"]
-					: ["planned progress/hold", "planned support"],
+				order: shot ? ["approach", "boost", "equipment if needed", "conditional attack", "planned support", "planned retreat"]
+					: ["boost", "planned progress/hold", "planned support"],
 				target: { id: (shot?.target ?? enemies[0]!).id,
 					position: { x: (shot?.target ?? enemies[0]!).cell.x, y: (shot?.target ?? enemies[0]!).cell.y } },
 				origin: { x: me.cell.x, y: me.cell.y }, tpAvailable: me.tp, mpAvailable: me.mp,
@@ -435,6 +483,7 @@ export function executeReservePlan(
 					weaponTpAtMost: shot.weapon ? shotsAtMost * shot.weapon.cost : 0,
 					chip: shot.chip ? { name: shot.chip.name, cost: shot.chip.cost } : null,
 					condition: "recheck real position, target, equipment, PT and native permission after approach" } : null,
+				boost: boostPlan.map((chip) => ({ chip: chip.name, tpCost: chip.cost })),
 				protection: supportSteps.filter((step) => step.selected).map((step) => ({
 					chip: step.chip.name, target: me.id, tpCost: step.chip.cost,
 					tpBefore: step.tpBefore, tpAfter: step.tpAfter
@@ -452,7 +501,9 @@ export function executeReservePlan(
 				},
 				destination: retreatPlan.cell ? { x: retreatPlan.cell.x, y: retreatPlan.cell.y } : null,
 				resources: { tpInitial: me.tp, equipment: equipTp, attack: attackTp,
-					support: me.tp - equipTp - attackTp - projectedTp, tpRemainingIfExecuted: projectedTp,
+					boost: boostPlan.reduce((total, chip) => total + chip.cost, 0),
+					support: supportSteps.reduce((total, step) => total + (step.selected ? step.chip.cost : 0), 0),
+					tpRemainingIfExecuted: projectedTp,
 					mpInitial: initialMp, approachOrProgress: approachMp,
 					retreat: retreatPlan.mode === "geometric" ? null : retreatPlan.cost,
 					mpRemainingIfExecuted: retreatPlan.mode === "geometric" ? null : remainingMp - retreatPlan.cost },
@@ -520,9 +571,24 @@ export function executeReservePlan(
 			message(() => `${phase}: PM ${before - me.mp}; ${reached ? "reached" : "not reached; stop"}`)
 			return reached && budget()
 		}
+		// Lance les boosts annoncés, avec les contrôles réels ; false seulement si la réserve d'opérations est atteinte.
+		const castBoosts = (): boolean => {
+			for (const chip of boostPlan) {
+				if (!budget()) { message("boost: hard operations reserve; stop"); return false }
+				if (me.life <= 0 || !me.chips.includes(chip) || chip.currentCooldown !== 0 || chip.cost > me.tp ||
+					!me.canUseChip(chip, me)) { message(() => `boost unavailable: ${chip.name}`); continue }
+				phase(me, "boost", () => ({ chip: chip.name, target: me.id, tpCost: chip.cost }))
+				if (!budget()) { message("boost: hard operations reserve; stop"); return false }
+				const result = me.useChip(chip, me)
+				if (!(result > 0)) message(() => `boost refused: ${chip.name}; result ${result}`)
+			}
+			return true
+		}
 		if (!budget()) { message("hard operations reserve; no action"); return true }
+		if (!shot && !castBoosts()) return true
 		if (shot && unchanged() && shot.target.life > 0) {
 			if (!move(shot.cell, shot.cost, "approach")) return true
+			if (!castBoosts()) return true
 			if (shot.weapon && me.weapon !== shot.weapon && me.tp >= 1 && me.life > 0) {
 				phase(me, "equipment", () => ({ weapon: shot.weapon!.name, tpCost: 1 }))
 				if (!budget()) { message("equipment: hard operations reserve; stop"); return true }

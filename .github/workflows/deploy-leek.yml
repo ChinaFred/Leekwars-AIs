@@ -1,5 +1,6 @@
 # Déploie src/ sur le compte principal Leek Wars.
 # Déclenché par un tag `leek-*` poussé sur un commit validé, ou à la main (Actions > Run workflow).
+# Garden écrit aussi DEPLOYED.ts à la racine des IA du site : commit, branche, tag et résumé de la release.
 # Secret requis : LEEKWARS_API_KEY (Settings > Secrets and variables > Actions).
 name: Déploiement Leek Wars
 
@@ -26,6 +27,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Un déploiement depuis une branche non fusionnée laisse le site en avance sur la branche par défaut.
+      - name: Refuser un commit absent de la branche par défaut
+        run: |
+          git fetch origin "$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"; then
+            echo "::error::${GITHUB_SHA::12} (${GITHUB_REF_NAME}) n'est pas dans $DEFAULT_BRANCH : fusionne d'abord, puis déploie."
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:

@@ -1,12 +1,7 @@
 // @version:5.8
-// file version: 12
+// file version: 14
 import { Action } from "./Action.js"
-import { LeekProfile } from "../LeekProfile.js"
-import {
-	AggressiveStrategy
-} from "../Strategy/AggressiveStrategy.js"
-import { BalancedStrategy } from "../Strategy/BalancedStrategy.js"
-import { DefensiveStrategy } from "../Strategy/DefensiveStrategy.js"
+import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavior.js"
 import { globalCombatLogger } from "../../Toolbox/CombatLogger.js"
@@ -447,16 +442,6 @@ export class Plannification {
 			`planned remaining TP ${this.tpLeft}, MP ${this.mpLeft}; queue completed, success not inferred`,
 		LOG_CONTEXT.PLANNING)
 	}
-}
-
-function createStrategy(profile: LeekProfile): LeekStrategy {
-	if (profile.strategyName === "AGGRESSIVE") {
-		return new AggressiveStrategy(profile.aggression)
-	}
-	if (profile.strategyName === "DEFENSIVE") {
-		return new DefensiveStrategy(profile.aggression)
-	}
-	return new BalancedStrategy(profile.aggression)
 }
 
 function getMeanFeatureValue(features: Feature[], featureType: number): number {

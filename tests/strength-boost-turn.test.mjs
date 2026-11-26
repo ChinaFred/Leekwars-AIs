@@ -7,11 +7,12 @@ globalThis.Debug = { log: (message) => debugLogs.push(String(message)), pause() 
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4, POISON: 5, BUFF_STRENGTH: 6 }
 globalThis.Fight = { turn: 1 }
 
-const { turn } = await import("../dist/Main/Kassbi_Class.js")
-const {
-	boostNetDamage, castBoostInContact, castBoostWithSpareTp, pickBoost, FUTURE_TURN_WEIGHT
-} = await import("../dist/Brain/StrengthBoost.js")
-const { hasActiveStrengthBoost } = await import("../dist/Brain/StrengthBoost.js")
+// Le boost est une composante du plan : décidé par `planAct` (plan conjoint ou plan B) avant la première action,
+// jamais lancé par `turn()` en dehors du plan. Ces tests passent par `turn()` avec le planificateur réel.
+const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+const { boostNetDamage, hasActiveStrengthBoost, pickBoost, FUTURE_TURN_WEIGHT } = await import("../dist/Brain/StrengthBoost.js")
+const { executeReservePlan } = await import("../dist/Classes/Plannification/ReservePlan.js")
+const { LeekProfile } = await import("../dist/Classes/LeekProfile.js")
 
 const machineGun = {
 	id: 38, name: "machine_gun", cost: 4, minRange: 1, maxRange: 6, needsLos: false, maxUses: -1,
@@ -22,6 +23,14 @@ const protein = (extra = {}) => ({
 	features: [{ type: 38, minValue: 90, maxValue: 90, turns: 2 }], ...extra
 })
 const boostChip = (gain, extra = {}) => protein({ features: [{ type: 38, minValue: gain, maxValue: gain, turns: 2 }], ...extra })
+const motivation = () => ({
+	id: 15, name: "motivation", cost: 4, cooldown: 6, currentCooldown: 0, minRange: 0, maxRange: 0, needsLos: false,
+	features: [{ type: 32, minValue: 4, maxValue: 4, turns: 3 }]
+})
+const bandage = () => ({
+	id: 3, name: "bandage", cost: 2, cooldown: 1, currentCooldown: 0, minRange: 0, maxRange: 0, needsLos: false,
+	features: [{ type: 2, minValue: 30, maxValue: 30, turns: 0 }]
+})
 // Ennemi armé : la carte de danger compte les ennemis armés (`threat.enemyCount`), sans quoi le planificateur se replie.
 const enemyGun = { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false, features: [{ type: 1, minValue: 10, maxValue: 20 }] }
 
@@ -46,6 +55,9 @@ function makeWorld({
 	const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 	const actions = []
 	const trace = []
+	// Actions ET lignes de journal, dans l'ordre : prouve que le plan est affiché avant la première action.
+	const timeline = []
+	const act = (name) => { actions.push(name); timeline.push(`action:${name}`) }
 	const me = place({
 		id: 1, name: "me", level: 10, life, maxLife: 300, mp, tp, strength: 10, science: 0, wisdom: 0,
 		weapon: equipped, weapons: [machineGun], chips, effects, launchedEffects: [],
@@ -57,7 +69,7 @@ function makeWorld({
 		},
 		canUseChip(chip, target) { return chip.currentCooldown === 0 && this.tp >= chip.cost && target === this },
 		chipCells() { return [this.cell] },
-		setWeapon(weapon) { actions.push("equip"); this.tp -= 1; this.weapon = weapon; return true },
+		setWeapon(weapon) { act("equip"); this.tp -= 1; this.weapon = weapon; return true },
 		moveToward(destination, max = this.mp) {
 			const to = destination.cell ?? destination
 			const cost = distance(this.cell, to)
@@ -66,16 +78,16 @@ function makeWorld({
 			this.cell.empty = true
 			place(this, [to.x, to.y])
 			this.mp -= cost
-			actions.push("move")
+			act("move")
 			return cost
 		},
-		moveAwayFrom() { actions.push("retreat"); return 0 },
+		moveAwayFrom() { act("retreat"); return 0 },
 		useWeapon(target) {
 			assert.ok(this.canUseWeapon(target), "shot must be legal")
 			trace.push({ shoot: true, tp: this.tp, strength: this.strength })
 			this.tp -= this.weapon.cost
 			target.life -= 22.5 * (1 + this.strength / 100)
-			actions.push("shoot")
+			act("shoot")
 			return 1
 		},
 		useChip(chip, target) {
@@ -84,9 +96,13 @@ function makeWorld({
 			if (useChipImpl) return useChipImpl(this, chip)
 			this.tp -= chip.cost
 			chip.currentCooldown = chip.cooldown
-			this.strength += 90
-			this.effects.push({ type: 38, turns: 2 })
-			actions.push(chip.name)
+			// Comme le moteur (hypothèse du modèle) : force et PT s'ajoutent dès le lancer ; le soin rend des PV.
+			for (const feature of chip.features) {
+				if (feature.type === 38) { this.strength += feature.minValue; this.effects.push({ type: 38, turns: feature.turns }) }
+				if (feature.type === 32) { this.tp += feature.minValue; this.effects.push({ type: 32, turns: feature.turns }) }
+				if (feature.type === 2) this.life = Math.min(this.maxLife, this.life + feature.minValue)
+			}
+			act(chip.name)
 			return 1
 		}
 	}, meAt)
@@ -111,79 +127,126 @@ function makeWorld({
 	}
 	globalThis.Weapon = { pistol: machineGun }
 	globalThis.Chip = {}
-	return { actions, trace, me, enemy, chest }
+	return { actions, trace, timeline, me, enemy, chest }
 }
 
-function captureTurn() {
+function capture(w, run) {
 	const lines = []
 	const original = console.log
-	console.log = (...args) => lines.push(args.join(" "))
+	console.log = (...args) => { lines.push(args.join(" ")); w?.timeline.push(`log:${args.join(" ")}`) }
 	try {
-		turn()
+		run()
 	} finally {
 		console.log = original
 	}
 	return lines
 }
+const captureTurn = (w) => capture(w, turn)
 
-function planLog(lines) {
-	const line = lines.find((text) => text.includes("[Tactical] plan before execution"))
+function planLog(lines, prefix = "[Tactical] plan before execution") {
+	const line = lines.find((text) => text.includes(prefix))
 	return line === undefined ? null : JSON.parse(line.slice(line.indexOf("{")))
 }
 
-// --- (1) ordre des actions dans turn() ----------------------------------------------------------------------
+// --- le boost est décidé dans le plan conjoint -------------------------------------------------------------------
 
-test("turn 1, enemy out of contact: the plan runs first, then the opening weapon, then the spare-TP boost; the inventory is logged once", () => {
-	const w = makeWorld({ turnNumber: 1, equipped: null, enemyAt: [19, 5] }) // distance 14 : hors contact (9), dans 6 + 2×3 + 3 = 15
-	const lines = captureTurn()
-	assert.equal(lines.filter((text) => text.includes("[Chips]")).length, 1)
-	assert.ok(lines.some((text) => text.includes("protein#8(3TP,cd3,38:90-90x2)")))
-	assert.deepEqual(w.actions, ["move", "equip", "protein"])
-	// le plan (approche) passe avant l'arme du tour 1, elle-même avant le boost de PT restants
-	assert.equal(w.me.weapon, machineGun)
-	assert.equal(w.me.strength, 100)
-	assert.equal(w.me.tp, 10 - 1 - 3)
-
-	const second = makeWorld({ turnNumber: 40, enemyAt: [19, 5] })
-	assert.equal(captureTurn().some((text) => text.includes("[Chips]")), false) // inventaire : tour 1 seulement
-	assert.ok(second.actions.length >= 0)
-})
-
-test("in contact: the boost is cast BEFORE the plan, which then sees the reduced TP, the raised strength and a current state", () => {
-	const w = makeWorld({ turnNumber: 41 }) // distance 4 : en contact, 300/300 PV, 10 PT
-	const lines = captureTurn()
+test("turn(): nothing is cast before the plan is shown; in contact the plan itself trades a shot for the boost", () => {
+	const w = makeWorld({ turnNumber: 41 }) // distance 4, 300/300 PV, 10 PT
+	const lines = captureTurn(w)
+	// 2 tirs : 49,5. Boost + 1 tir à ×2,0 : 45, plus le tour suivant (0,75 × 2 tirs × 22,5 × 0,9 = 30,4).
 	assert.deepEqual(w.actions, ["protein", "shoot"])
-	assert.equal(w.actions.filter((action) => action === "protein").length, 1) // pas relancé après le plan
-	// le plan voit 7 PT et la force 100 : un seul tir (4 PT), à ×2,0
-	const shots = w.trace.filter((entry) => entry.shoot)
-	assert.equal(shots.length, 1)
-	assert.deepEqual(shots[0], { shoot: true, tp: 7, strength: 100 })
+	assert.deepEqual(w.trace, [{ chip: "protein", tp: 10, strength: 10 }, { shoot: true, tp: 7, strength: 100 }])
 	const plan = planLog(lines)
-	assert.ok(plan, "[Tactical] plan before execution is logged: the planner did not fall back\n" +
+	assert.ok(plan, "[Tactical] plan before execution is logged\n" +
 		lines.filter((text) => /Plannification|Tactical|ERROR/.test(text)).join("\n") + debugLogs.slice(-3).join("\n"))
-	assert.equal(plan.stateCurrent, true)
-	assert.equal(plan.tp.available, 7)
+	// Le plan voit les PT et la force du DÉBUT du tour : rien n'a été lancé avant lui.
+	assert.equal(plan.tp.available, 10)
+	assert.equal(plan.tp.planned, 7)
+	assert.deepEqual(plan.boost, [{ name: "protein", cost: 3 }])
+	assert.deepEqual(plan.order.slice(0, 3), ["approach", "boost", "protection"])
+	assert.equal(plan.weapon.shots, 1)
 	assert.ok(Math.abs(plan.usefulDamage - 22.5 * 2.0) < 1e-6, `usefulDamage ${plan.usefulDamage}`)
+	const shown = w.timeline.findIndex((entry) => entry.includes("[Tactical] plan before execution"))
+	const firstAction = w.timeline.findIndex((entry) => entry.startsWith("action:"))
+	assert.ok(shown >= 0 && shown < firstAction, "the whole plan, boost included, is displayed before the first action")
 	assert.equal(lines.some((text) => text.includes("stale/inconsistent") || text.includes("fallback")), false)
 	assert.equal(w.me.tp, 3)
+	// Inventaire des puces : une ligne, au premier tour joué seulement.
+	assert.equal(lines.filter((text) => text.includes("[Chips]")).length, 1)
+	assert.ok(lines.some((text) => text.includes("protein#8(3TP,cd3,38:90-90x2)")))
+	makeWorld({ turnNumber: 40 })
+	assert.equal(captureTurn(null).some((text) => text.includes("[Chips]")), false)
 })
 
-test("in contact on turn 1 with no weapon equipped: boost first, then the plan equips and shoots with the reduced TP", () => {
+test("the plan refuses the boost that would cost the fatal blow, and takes it against a sturdy enemy", () => {
+	const killable = makeWorld({ turnNumber: 42, enemyLife: 49 }) // 2 tirs sans boost = 49,5 ; boost + 1 tir = 45
+	const lines = captureTurn(killable)
+	assert.deepEqual(killable.actions, ["shoot", "shoot"])
+	assert.deepEqual(planLog(lines).boost, [])
+	assert.ok(killable.enemy.life <= 0)
+	const sturdy = makeWorld({ turnNumber: 43, enemyLife: 300 })
+	captureTurn(sturdy)
+	assert.deepEqual(sturdy.actions, ["protein", "shoot"])
+})
+
+test("a boost that leaves no shot is not worth it; a one-turn boost never beats the shot it costs", () => {
+	const tight = makeWorld({ turnNumber: 44, tp: 4 }) // 1 tir sans boost, 0 avec
+	captureTurn(tight)
+	assert.deepEqual(tight.actions, ["shoot"])
+	const brief = makeWorld({ turnNumber: 45, chips: [protein({ features: [{ type: 38, minValue: 90, maxValue: 90, turns: 1 }] })] })
+	captureTurn(brief)
+	assert.deepEqual(brief.actions, ["shoot", "shoot"]) // 45 < 49,5 et aucun tour suivant couvert
+	const free = makeWorld({ turnNumber: 46, tp: 7 }) // 1 tir avec ou sans boost : le boost ne coûte aucun tir
+	captureTurn(free)
+	assert.deepEqual(free.actions, ["protein", "shoot"])
+})
+
+test("execution order: TP boost, then strength boost, then the shots that use both", () => {
+	for (const chips of [[protein(), motivation()], [motivation(), protein()]]) {
+		const w = makeWorld({ turnNumber: 47, chips })
+		const lines = captureTurn(w)
+		// motivation (4 PT, +4 PT pendant 3 tours) puis protein (3 PT) : 7 PT restants, 1 tir à force 100.
+		assert.deepEqual(w.actions, ["motivation", "protein", "shoot"])
+		assert.deepEqual(w.trace.at(-1), { shoot: true, tp: 7, strength: 100 })
+		const plan = planLog(lines)
+		assert.deepEqual(plan.boost, [{ name: "motivation", cost: 4 }, { name: "protein", cost: 3 }])
+		assert.deepEqual(plan.tp, { available: 10, planned: 11, gainedFromBoost: 4, remainingIfExecuted: 3 })
+		assert.equal(w.me.tp, 3)
+	}
+})
+
+test("turn 1 without a weapon in contact: boost, then the plan equips and shoots", () => {
 	const w = makeWorld({ turnNumber: 1, equipped: null, meAt: [6, 5], enemyAt: [10, 5] })
-	const lines = captureTurn()
+	const lines = captureTurn(w)
 	assert.deepEqual(w.actions, ["protein", "equip", "shoot"])
-	assert.equal(planLog(lines)?.tp.available, 7)
 	assert.deepEqual(w.trace.at(-1), { shoot: true, tp: 6, strength: 100 })
 	assert.equal(w.me.tp, 2)
+	assert.deepEqual(planLog(lines).boost, [{ name: "protein", cost: 3 }])
+})
+
+test("plan without a shot: the boost is part of it when the enemy can be in range next turn, not beyond", () => {
+	// Distance 14 : hors de portée ce tour (6 + 3), dans la portée utile du boost (6 + 2 × 3 PM + 3 PM adverses = 15).
+	const near = makeWorld({ turnNumber: 1, equipped: null, enemyAt: [19, 5] })
+	const lines = captureTurn(near)
+	assert.deepEqual(near.actions, ["protein", "move", "equip"]) // boost et déplacement du plan, puis l'arme du tour 1
+	assert.deepEqual(planLog(lines).boost, [{ name: "protein", cost: 3 }])
+	assert.equal(near.me.tp, 10 - 3 - 1)
+	const far = makeWorld({ turnNumber: 48, enemyAt: [29, 5] }) // 24 > 15
+	captureTurn(far)
+	assert.equal(far.actions.includes("protein"), false)
+	const brief = makeWorld({ turnNumber: 49, enemyAt: [19, 5],
+		chips: [protein({ features: [{ type: 38, minValue: 90, maxValue: 90, turns: 1 }] })] })
+	captureTurn(brief)
+	assert.equal(brief.actions.includes("protein"), false) // un seul tour : rien à gagner sans tirer
 })
 
 test("a turn with no boost chip is unchanged by the feature; a chip in cooldown or an active boost behaves the same", () => {
-	const baseline = makeWorld({ turnNumber: 42, chips: [] })
-	captureTurn()
-	const cooling = makeWorld({ turnNumber: 43, chips: [protein({ currentCooldown: 2 })] })
-	captureTurn()
-	const active = makeWorld({ turnNumber: 44, effects: [{ type: 38, turns: 1 }] })
-	captureTurn()
+	const baseline = makeWorld({ turnNumber: 50, chips: [] })
+	captureTurn(baseline)
+	const cooling = makeWorld({ turnNumber: 51, chips: [protein({ currentCooldown: 2 })] })
+	captureTurn(cooling)
+	const active = makeWorld({ turnNumber: 52, effects: [{ type: 38, turns: 1 }] })
+	captureTurn(active)
 	assert.deepEqual(baseline.actions, ["shoot", "shoot"]) // 10 PT : 2 tirs de 4 PT
 	assert.deepEqual(cooling.actions, baseline.actions)
 	assert.deepEqual(active.actions, baseline.actions)
@@ -193,183 +256,154 @@ test("a turn with no boost chip is unchanged by the feature; a chip in cooldown 
 	}
 })
 
-test("hurt below 50 %: no pre-cast in contact; exactly 50 %: pre-cast", () => {
-	const hurt = makeWorld({ turnNumber: 45, life: 149 })
-	captureTurn()
+test("hurt below 50 %: a plan that shoots casts no boost; exactly 50 %: it does", () => {
+	const hurt = makeWorld({ turnNumber: 53, life: 149 })
+	captureTurn(hurt)
 	assert.equal(hurt.actions.includes("protein"), false)
-	const half = makeWorld({ turnNumber: 46, life: 150 })
-	captureTurn()
+	assert.equal(hurt.actions.filter((action) => action === "shoot").length, 2)
+	const half = makeWorld({ turnNumber: 54, life: 150 })
+	captureTurn(half)
 	assert.equal(half.actions[0], "protein")
 })
 
 test("the boost is cast once per turn and never again on the following turn while it is active or cooling down", () => {
-	const w = makeWorld({ turnNumber: 47 })
-	captureTurn()
+	const w = makeWorld({ turnNumber: 55 })
+	captureTurn(w)
 	assert.equal(w.actions.filter((action) => action === "protein").length, 1)
 	// tour suivant : même puce (délai 3 en cours), effet encore actif
-	const next = makeWorld({ turnNumber: 48, chips: w.me.chips, effects: w.me.effects })
-	captureTurn()
+	const next = makeWorld({ turnNumber: 56, chips: w.me.chips, effects: w.me.effects })
+	captureTurn(next)
 	assert.equal(next.actions.includes("protein"), false)
 })
 
-test("a refused cast (result 0) is reported and the plan still plays with the real TP", () => {
-	const w = makeWorld({ turnNumber: 49, useChipImpl: () => 0 })
-	captureTurn()
+test("a refused boost (result 0) is reported; the rest of the SAME plan runs with its checks, no second plan", () => {
+	const w = makeWorld({ turnNumber: 57, useChipImpl: () => 0 })
+	const lines = captureTurn(w)
 	assert.equal(w.actions.includes("protein"), false)
-	assert.equal(w.actions.filter((action) => action === "shoot").length, 2)
+	assert.ok(lines.some((text) => text.includes("[Tactical] execution: chip refused: protein, result 0")))
+	assert.deepEqual(w.actions, ["shoot"]) // le tir prévu par ce plan ; pas de replanification à 2 tirs
+	assert.equal(lines.filter((text) => text.includes("plan before execution")).length, 1)
 })
-
-// --- (4) coffres et absence d'ennemi ---------------------------------------------------------------------
 
 test("a chest next to me never triggers the boost; with no real enemy left nothing is cast", () => {
 	class FakeChest {}
 	globalThis.Chest = FakeChest
 	try {
-		const onlyChest = makeWorld({ turnNumber: 50, enemyAt: [9, 5], chestAt: [6, 5], FakeChest })
+		const onlyChest = makeWorld({ turnNumber: 58, enemyAt: [9, 5], chestAt: [6, 5], FakeChest })
 		onlyChest.enemy.life = 0 // l'ennemi réel est mort : il ne reste que le coffre
-		captureTurn()
+		captureTurn(onlyChest)
 		assert.deepEqual(onlyChest.actions, [])
 
-		// coffre proche, vrai ennemi hors contact : la décision suit l'ennemi réel, pas le coffre
-		const far = makeWorld({ turnNumber: 51, enemyAt: [29, 5], chestAt: [6, 5], FakeChest })
-		captureTurn()
-		assert.equal(far.actions.includes("protein"), false) // 24 > 15 : hors de portée même après 2 tours
+		// coffre proche, vrai ennemi hors de portée utile : la décision suit l'ennemi réel, pas le coffre
+		const far = makeWorld({ turnNumber: 59, enemyAt: [29, 5], chestAt: [6, 5], FakeChest })
+		captureTurn(far)
+		assert.equal(far.actions.includes("protein"), false) // 24 > 15
 	} finally {
 		delete globalThis.Chest
 	}
-	const none = makeWorld({ turnNumber: 52, enemyAt: [9, 5] })
+	const none = makeWorld({ turnNumber: 60, enemyAt: [9, 5] })
 	none.enemy.life = 0
 	globalThis.Fight.getNearestEnemy = () => null
-	captureTurn()
+	captureTurn(none)
 	assert.deepEqual(none.actions, [])
 })
 
-// --- (3)(5) cas limites ----------------------------------------------------------------------------------
+// --- le comportement configuré (leekProfile) décide, de bout en bout ---------------------------------------------
 
-function unit({ chips = [protein()], tp = 10, mp = 4, life = 300, strength = 0, effects = [], distance = 8, extra = {} } = {}) {
-	const casts = []
-	const me = {
-		id: 1, name: "me", life, maxLife: 300, tp, mp, strength, science: 0, weapon: machineGun, weapons: [machineGun],
-		chips, effects, distance: () => distance,
-		canUseChip: (chip) => me.tp >= chip.cost,
-		useChip(chip) { casts.push(chip.name); me.tp -= chip.cost; return 1 },
-		...extra
+test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, the default BALANCED does not", () => {
+	const play = (turnNumber) => {
+		const w = makeWorld({ turnNumber, chips: [bandage()], life: 246 }) // 246/300 = 0,82
+		captureTurn(w)
+		return w
 	}
-	return { me, casts, enemy: { id: 2, mp: 3 } }
+	assert.equal(leekProfile.strategyName, "BALANCED")
+	assert.deepEqual([leekProfile.aggression, leekProfile.preferredMinRange, leekProfile.preferredMaxRange], [50, 3, 8])
+	assert.deepEqual([leekProfile.allowHealing, leekProfile.allowShielding, leekProfile.allowHiding], [true, true, true])
+	const balanced = play(61) // seuil de soin BALANCED : perte ≥ 0,20 ; ici 0,18
+	assert.equal(balanced.actions.includes("bandage"), false)
+	assert.equal(balanced.me.life, 246)
+	leekProfile.setRole("DEFENSIVE") // seuil de soin DEFENSIVE : vie ≤ 0,825
+	try {
+		const defensive = play(62)
+		assert.equal(defensive.actions.includes("bandage"), true)
+		assert.equal(defensive.me.life, 276)
+		assert.equal(defensive.actions.filter((action) => action === "shoot").length, 2)
+	} finally {
+		leekProfile.setRole("BALANCED")
+	}
+})
+
+// --- plan B --------------------------------------------------------------------------------------------------
+
+test("plan B: the boost is decided before execution, announced, cast before the attack, and the planned shots follow", () => {
+	const profile = new LeekProfile()
+	const w = makeWorld({ turnNumber: 63, mp: 0 }) // en contact ; sans carte de danger (danger inconnu)
+	const lines = capture(w, () => assert.equal(executeReservePlan(w.me, profile), true))
+	assert.deepEqual(w.actions.slice(0, 2), ["protein", "shoot"])
+	assert.equal(w.actions.filter((action) => action === "shoot").length, 1)
+	const plan = planLog(lines, "[Reserve] plan before execution")
+	assert.deepEqual(plan.boost, [{ chip: "protein", tpCost: 3 }])
+	assert.equal(plan.attack.weaponShotsAtMost, 1) // 10 − 3 = 7 PT : un tir de 4 PT, plus deux
+	assert.equal(plan.resources.boost, 3)
+	assert.deepEqual(plan.order.slice(0, 2), ["approach", "boost"])
+	const shown = w.timeline.findIndex((entry) => entry.includes("[Reserve] plan before execution"))
+	assert.ok(shown >= 0 && shown < w.timeline.findIndex((entry) => entry.startsWith("action:")))
+
+	const killable = makeWorld({ turnNumber: 64, mp: 0, enemyLife: 49 }) // le boost coûterait le coup fatal
+	capture(killable, () => executeReservePlan(killable.me, profile))
+	assert.deepEqual(killable.actions.slice(0, 2), ["shoot", "shoot"])
+	const hurt = makeWorld({ turnNumber: 65, mp: 0, life: 149 }) // sous 50 % de PV : pas de boost avec un tir
+	capture(hurt, () => executeReservePlan(hurt.me, profile))
+	assert.equal(hurt.actions.includes("protein"), false)
+})
+
+test("plan B without a shot: boost with the spare TP only when it covers the next turn and the enemy can be in range", () => {
+	const profile = new LeekProfile()
+	const near = makeWorld({ turnNumber: 66, enemyAt: [19, 5] }) // distance 14 ≤ 15
+	const lines = capture(near, () => executeReservePlan(near.me, profile))
+	assert.equal(near.actions[0], "protein")
+	assert.deepEqual(planLog(lines, "[Reserve] plan before execution").boost, [{ chip: "protein", tpCost: 3 }])
+	const far = makeWorld({ turnNumber: 67, enemyAt: [29, 5] }) // 24 > 15
+	capture(far, () => executeReservePlan(far.me, profile))
+	assert.equal(far.actions.includes("protein"), false)
+	const brief = makeWorld({ turnNumber: 68, enemyAt: [19, 5],
+		chips: [protein({ features: [{ type: 38, minValue: 90, maxValue: 90, turns: 1 }] })] })
+	capture(brief, () => executeReservePlan(brief.me, profile))
+	assert.equal(brief.actions.includes("protein"), false)
+})
+
+// --- modèle : cas limites -------------------------------------------------------------------------------------
+
+function unit({ chips = [protein()], tp = 10, strength = 0, extra = {} } = {}) {
+	return { id: 1, name: "me", life: 300, maxLife: 300, tp, mp: 4, strength, science: 0, weapon: machineGun,
+		weapons: [machineGun], chips, effects: [], ...extra }
 }
-
-test("distance thresholds: contact = max range + MP exactly (cast) and +1 (no cast)", () => {
-	const at = unit({ distance: 6 + 4 })
-	castBoostInContact(at.me, at.enemy)
-	const over = unit({ distance: 6 + 4 + 1 })
-	castBoostInContact(over.me, over.enemy)
-	assert.deepEqual(at.casts, ["protein"])
-	assert.deepEqual(over.casts, [])
-	const withoutMp = unit({ distance: 7, mp: 0 }) // 6 + 0
-	castBoostInContact(withoutMp.me, withoutMp.enemy)
-	assert.deepEqual(withoutMp.casts, [])
-	const spareAt = unit({ distance: 6 + 2 * 4 + 3 })
-	castBoostWithSpareTp(spareAt.me, spareAt.enemy, 4)
-	const spareOver = unit({ distance: 6 + 2 * 4 + 3 + 1 })
-	castBoostWithSpareTp(spareOver.me, spareOver.enemy, 4)
-	assert.deepEqual(spareAt.casts, ["protein"])
-	assert.deepEqual(spareOver.casts, [])
-})
-
-test("the spare-TP reach uses the start-of-turn MP, not the MP left after the plan", () => {
-	const w = unit({ distance: 17, mp: 0 }) // PM dépensés par le plan
-	castBoostWithSpareTp(w.me, w.enemy, 4)
-	assert.deepEqual(w.casts, ["protein"])
-	const blind = unit({ distance: 17, mp: 0 })
-	castBoostWithSpareTp(blind.me, blind.enemy, 0) // portée 6 + 0 + 3 = 9 < 17
-	assert.deepEqual(blind.casts, [])
-})
-
-test("duration: one turn never pays in contact nor with spare TP; two turns do", () => {
-	const one = unit({ chips: [protein({ features: [{ type: 38, minValue: 90, maxValue: 90, turns: 1 }] })], distance: 5 })
-	castBoostInContact(one.me, one.enemy)
-	castBoostWithSpareTp(one.me, one.enemy, 4)
-	assert.deepEqual(one.casts, [])
-	const two = unit({ distance: 5 })
-	castBoostInContact(two.me, two.enemy)
-	assert.deepEqual(two.casts, ["protein"])
-})
 
 test("net-damage break-even pins FUTURE_TURN_WEIGHT: gain 41 pays, gain 39 does not (10 TP, cost 3, 4-TP weapon, 2 turns)", () => {
 	assert.ok(FUTURE_TURN_WEIGHT > 0.72 && FUTURE_TURN_WEIGHT < 0.78)
-	const pays = unit({ chips: [boostChip(41)], strength: 0, distance: 5 })
-	castBoostInContact(pays.me, pays.enemy)
-	const short = unit({ chips: [boostChip(39)], strength: 0, distance: 5 })
-	castBoostInContact(short.me, short.enemy)
-	assert.deepEqual(pays.casts, ["protein"])
-	assert.deepEqual(short.casts, [])
-	const me = unit({ strength: 0 }).me
-	assert.ok(boostNetDamage(me, machineGun, pickBoost(unit({ chips: [boostChip(41)] }).me, 10), 10) > 0)
-	assert.ok(boostNetDamage(me, machineGun, pickBoost(unit({ chips: [boostChip(39)] }).me, 10), 10) < 0)
-})
-
-test("a boost that eats all the TP, or the TP of the only shot, is never cast", () => {
-	const broke = unit({ tp: 3, chips: [protein()] }) // 0 tir avec, 0 tir sans (3 < 4) : rien à amplifier, rien à gagner
-	castBoostInContact(broke.me, broke.enemy)
-	assert.deepEqual(broke.casts, [])
-	const tight = unit({ tp: 4, chips: [protein()] }) // 1 tir sans, 0 avec : −22,5 × 1,1 + 0,75 × 1 × 22,5 × 0,9 = −9,6 < 0
-	castBoostInContact(tight.me, tight.enemy)
-	assert.deepEqual(tight.casts, [])
-	const enough = unit({ tp: 7, chips: [protein()] }) // 1 tir sans comme avec (7 − 3 = 4) : gain pur
-	castBoostInContact(enough.me, enough.enemy)
-	assert.deepEqual(enough.casts, ["protein"])
+	const me = unit()
+	assert.ok(boostNetDamage(me, machineGun, pickBoost(unit({ chips: [boostChip(41)] }), 10), 10) > 0)
+	assert.ok(boostNetDamage(me, machineGun, pickBoost(unit({ chips: [boostChip(39)] }), 10), 10) < 0)
 })
 
 test("pickBoost tolerates missing data: no effects, no science, no features, no chips, odd costs, odd cooldowns", () => {
-	const noEffects = unit({ extra: { effects: undefined } }).me
+	const noEffects = unit({ extra: { effects: undefined } })
 	assert.equal(pickBoost(noEffects, 10).gain, 90)
 	assert.equal(hasActiveStrengthBoost(noEffects), false)
-	const noScience = unit({ chips: [protein({ features: [{ type: 6, minValue: 50, maxValue: 50, turns: 2 }] })], extra: { science: undefined } }).me
+	const noScience = unit({ chips: [protein({ features: [{ type: 6, minValue: 50, maxValue: 50, turns: 2 }] })], extra: { science: undefined } })
 	assert.equal(pickBoost(noScience, 10).gain, 50) // pas de NaN
-	const withScience = unit({ chips: [protein({ features: [{ type: 6, minValue: 50, maxValue: 50, turns: 2 }] })], extra: { science: 100 } }).me
+	const withScience = unit({ chips: [protein({ features: [{ type: 6, minValue: 50, maxValue: 50, turns: 2 }] })], extra: { science: 100 } })
 	assert.equal(pickBoost(withScience, 10).gain, 100) // BUFF_STRENGTH amplifié, brut (38) non amplifié
-	const rawWithScience = unit({ extra: { science: 100 } }).me
+	const rawWithScience = unit({ extra: { science: 100 } })
 	assert.equal(pickBoost(rawWithScience, 10).gain, 90)
-	assert.equal(pickBoost(unit({ chips: [{ id: 1, name: "x", cost: 1, cooldown: 0, currentCooldown: 0 }] }).me, 10), null)
-	assert.equal(pickBoost(unit({ extra: { chips: undefined } }).me, 10), null)
-	assert.equal(pickBoost(unit({ chips: [protein({ cost: 2.5 })] }).me, 10), null)
-	assert.equal(pickBoost(unit({ chips: [protein({ cost: 0 })] }).me, 10), null)
-	assert.equal(pickBoost(unit({ chips: [protein({ cost: 3 })] }).me, 10.5)?.chip.cost, 3)
-	assert.equal(pickBoost(unit({ chips: [protein({ cost: 3 })] }).me, 2.9), null)
+	assert.equal(pickBoost(unit({ chips: [{ id: 1, name: "x", cost: 1, cooldown: 0, currentCooldown: 0 }] }), 10), null)
+	assert.equal(pickBoost(unit({ extra: { chips: undefined } }), 10), null)
+	assert.equal(pickBoost(unit({ chips: [protein({ cost: 2.5 })] }), 10), null)
+	assert.equal(pickBoost(unit({ chips: [protein({ cost: 0 })] }), 10), null)
+	assert.equal(pickBoost(unit({ chips: [protein({ cost: 3 })] }), 10.5)?.chip.cost, 3)
+	assert.equal(pickBoost(unit({ chips: [protein({ cost: 3 })] }), 2.9), null)
 	// même convention que le planificateur (`currentCooldown === 0`) : tout autre état bloque, par prudence
 	for (const cooldown of [-1, 1, "0", undefined, null, Number.NaN]) {
-		assert.equal(pickBoost(unit({ chips: [protein({ currentCooldown: cooldown })] }).me, 10), null, `cooldown ${String(cooldown)}`)
+		assert.equal(pickBoost(unit({ chips: [protein({ currentCooldown: cooldown })] }), 10), null, `cooldown ${String(cooldown)}`)
 	}
-})
-
-test("several boosts: the best NET one is cast in contact, once; the strongest is still picked for spare TP", () => {
-	const small = protein({ id: 8, name: "small", features: [{ type: 38, minValue: 60, maxValue: 60, turns: 2 }] })
-	const big = protein({ id: 9, name: "big", cost: 8, features: [{ type: 38, minValue: 150, maxValue: 150, turns: 2 }] })
-	const rich = unit({ chips: [small, big], distance: 5 })
-	castBoostInContact(rich.me, rich.enemy)
-	assert.deepEqual(rich.casts, ["small"]) // « big » (8 PT) ne laisse aucun tir : gain net négatif
-	const spare = unit({ chips: [small, big], distance: 16 })
-	castBoostWithSpareTp(spare.me, spare.enemy, 4)
-	assert.deepEqual(spare.casts, ["big"]) // PT inutilisés : la plus forte
-	const poor = unit({ chips: [small, big], tp: 7, distance: 5 }) // « big » (8 PT) inabordable
-	castBoostInContact(poor.me, poor.enemy)
-	assert.deepEqual(poor.casts, ["small"])
-})
-
-test("API failures never throw out of the boost functions: distance() throwing, weapons missing, no enemy", () => {
-	const broken = unit({ distance: 5, extra: { distance() { throw new Error("boom") } } })
-	assert.doesNotThrow(() => castBoostInContact(broken.me, broken.enemy))
-	assert.doesNotThrow(() => castBoostWithSpareTp(broken.me, broken.enemy, 4))
-	assert.deepEqual(broken.casts, [])
-	const noWeapons = unit({ distance: 5, extra: { weapons: undefined, weapon: null } })
-	assert.doesNotThrow(() => castBoostInContact(noWeapons.me, noWeapons.enemy))
-	assert.doesNotThrow(() => castBoostWithSpareTp(noWeapons.me, noWeapons.enemy, 4))
-	assert.deepEqual(noWeapons.casts, [])
-	const dead = unit({ life: 0, distance: 5 })
-	castBoostInContact(dead.me, dead.enemy)
-	castBoostWithSpareTp(dead.me, dead.enemy, 4)
-	assert.deepEqual(dead.casts, [])
-	const lonely = unit({ distance: 5 })
-	castBoostWithSpareTp(lonely.me, null, 4)
-	assert.deepEqual(lonely.casts, [])
 })
