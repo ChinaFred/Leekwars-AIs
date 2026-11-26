@@ -11,7 +11,7 @@ Choisis le plus petit circuit qui couvre la demande.
 |---|---|---|
 | Écrire ou corriger le code, réduire le coût en opérations | `developpeur` | `profil-ops` |
 | Valider un changement avant commit ou PUSH | `testeur` | `test-minimal` |
-| Comprendre pourquoi on perd, proposer des alternatives | `stratege` | `analyse-combats` |
+| Juger les décisions tour par tour (PT/PM perdus, choix, chaîne d'actions), proposer des alternatives | `stratege` | `analyse-combats` |
 | Mettre à jour README, stratégie ou ChangeLog | celui qui fait le changement | `doc-light` |
 
 - Changement de code : `developpeur`, puis `testeur`. Le `stratege` n'intervient que si la décision tactique est en jeu.
@@ -24,7 +24,8 @@ Choisis le plus petit circuit qui couvre la demande.
   Les tests importent `dist/` : un `node --test` direct peut tester du code périmé.
 - `npm run typecheck`.
 - `python -m unittest discover -s LWGarden/tests -p "test*.py"` si `LWGarden/` change.
-- `python LWGarden/src/FightSummary.py` : régénère `LWGarden/Data/resume.md` ; `--fight <id>` détaille un combat.
+- `python LWGarden/src/FightSummary.py` : régénère `LWGarden/Data/resume.md` ; `--fight <id> --turns` déroule
+  un combat tour par tour.
 - Combats récents : workflow GitHub « Archive des combats » (`Garden.py archive` : archive, export, résumé),
   puis `git pull`. `python LWGarden/src/Garden.py export` refait export et résumé hors ligne.
 - `npm run agents:sync` après toute modification de `CLAUDE.md` ou de `.claude/agents/`.

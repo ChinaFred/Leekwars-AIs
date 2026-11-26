@@ -5,6 +5,8 @@ Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ;
 ## unknown-version — version inconnue
 Combats : 100 — 73 victoires, 14 défaites, 13 nuls (73 % de victoires), 0 sans logs.
 Ops : pic maximal 98 % (combat 54942202), médiane des pics 42 %.
+Ressources : 1579 tours joués, 688 sans aucune action payante (44 %), 60 % des PM inutilisés, 11 tours interrompus ou en erreur.
+Combats les plus gaspilleurs (tours sans action payante) : 54941300 (11/12, défaite), 54941022 (42/64, nul), 54941210 (42/64, nul), 54941603 (42/64, nul), 54944456 (42/64, nul).
 
 Défaites :
 - 54932503 : 8 tours · vs SK8 · pic ops 40 %
