@@ -1,9 +1,9 @@
 // @version:5.8
-// file version: 19
+// file version: 20
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { logChipInventory } from "../Brain/StrengthBoost.js"
-import { actionHistory } from "../Classes/Context/ActionHistory.js"
+import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"

@@ -65,7 +65,7 @@ ce n'est ni une probabilité de survie ni un minimax.
 
 **Passivité** (contre le refus de combat) : `p = max(0, 1 − 0,5 × (tours passifs − 2))`, soit 1 jusqu'à 2 tours
 passifs, 0,5 au 3e, 0 au 4e (`PASSIVE_TURNS_AT_FULL_RISK`, `PASSIVE_RISK_STEP`). Un tour est **actif** si une de mes
-actions a fait perdre des PV à sa cible, mesurés autour de l'appel natif (`ActionHistory.ts`), quel que soit le soin
+actions a fait perdre des PV à sa cible, mesurés autour de l'appel natif (`StagnationTracker.ts`), quel que soit le soin
 adverse ; tir raté ou absorbé (0 PV), dégât d'allié ou de poison : tour passif. Un tour qui bat la plus petite distance
 à l'ennemi depuis la dernière mort d'un ennemi (approche) gèle le compteur. À `p < 1`, `m` garde le danger accepté sous
 75 % de mes PV (critiques × 1,3 non modélisés) ; `w × H` n'est pas réduit. Le plan B n'applique pas `p`.
@@ -232,7 +232,7 @@ si son contexte est actif.
 Contextes utiles à l'analyse : `PLANNING` (plan avant exécution, replis `[Tactical]`, `[Reserve]`), `THREAT`,
 `REACHABLE`, `MEMORY`, `CHIP` (`[Boost]`), `OPERATIONS` (ligne `Operations:` de fin de tour), `ERROR` (en rouge).
 `ACCESSIBLE_ZONE` et `DANGER_ZONE` affichent les zones sur le terrain avec une pause : à couper hors mise au point.
-Fin de tour (`ActionHistory.ts`, `COMBAT`, 8 tours gardés, tout plan) : `[History] T<tour> TP <utilisés>/<dispo> MP <utilisés>/<dispo>
+Fin de tour (`StagnationTracker.ts`, `COMBAT`, 8 tours gardés, tout plan) : `[History] T<tour> TP <utilisés>/<dispo> MP <utilisés>/<dispo>
 dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`move`, `equip` ; `?` sans retour, `-` non mesurable).
 
 ## Limites connues
