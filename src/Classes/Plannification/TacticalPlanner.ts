@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 30
+// file version: 31
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -390,12 +390,18 @@ function killsLastEnemy(damage: number, target: Entity, enemyCount: number): boo
  * Comparaison d'un candidat décrit par ses seuls critères (sans construire l'objet) : permet de ne créer que les
  * plans qui améliorent le meilleur. Ordre : score, danger, PT dépensés, distance de tir courante puis future (même
  * cible), PM totaux. `better` en est la forme sur un plan complet : une seule règle.
+ * `doomed` (tour condamné, voir `evaluate`) : une cible tuée (dégâts moyens ≥ ses PV) passe AVANT le score ; le reste
+ * du classement est inchangé (soin, protection et case finale gardent leur score : « condamné » reste une estimation).
  */
 function beats(
-	best: TacticalPlan | null, score: number, danger: number, tpUsed: number, target: Entity,
-	firingDistance: number | undefined, futureRouteDistance: number | undefined, totalMp: number
+	best: TacticalPlan | null, doomed: boolean, usefulDamage: number, score: number, danger: number, tpUsed: number,
+	target: Entity, firingDistance: number | undefined, futureRouteDistance: number | undefined, totalMp: number
 ): boolean {
 	if (best === null) return true
+	if (doomed) {
+		const kill = usefulDamage >= target.life
+		if (kill !== (best.usefulDamage >= best.target.life)) return kill
+	}
 	if (score !== best.score) return score > best.score
 	if (danger !== best.danger) return danger < best.danger
 	if (tpUsed !== best.tpUsed) return tpUsed < best.tpUsed
@@ -410,8 +416,8 @@ function beats(
 	return totalMp < best.beforeMp + best.afterMp
 }
 
-function better(candidate: TacticalPlan, best: TacticalPlan | null): boolean {
-	return beats(best, candidate.score, candidate.danger, candidate.tpUsed, candidate.target,
+function better(candidate: TacticalPlan, best: TacticalPlan | null, doomed: boolean): boolean {
+	return beats(best, doomed, candidate.usefulDamage, candidate.score, candidate.danger, candidate.tpUsed, candidate.target,
 		candidate.firingDistance, candidate.futureRouteDistance, candidate.beforeMp + candidate.afterMp)
 }
 
@@ -919,6 +925,18 @@ function evaluate(
 		log(() => `[Tactical] passivity: ${context!.stagnation!.passiveTurns} turns without damage dealt; ` +
 			`risk weight ${weight} x ${riskFactor}, danger accepted under ${PASSIVE_DANGER_LIFE_FRACTION} x life`, LOG_CONTEXT.PLANNING)
 	}
+	// Danger minimal de la zone (sert aussi à la sortie anticipée de `endingsFor`).
+	let minDanger = Infinity
+	for (const value of dangers.values()) minDanger = Math.min(minDanger, value)
+	// Tour condamné : même test que `LETHAL_PENALTY` (`lethal`), vrai sur la case la moins dangereuse pour CHAQUE
+	// protection candidate, donc pour tout plan (le danger exposé croît avec le danger). Alors : cible tuée d'abord
+	// (`beats`), et aucun crédit des tours suivants d'un boost (`F` = 0, avec ou sans tir : un boost ne vaut que par les
+	// dégâts de CE tour). Combat 54969530, tour 10 : protein sans tir (F = 51,3) + cure, 0 dégât.
+	const doomed = support.every((protection) => lethal(me, protection, minDanger, lifeFraction))
+	if (doomed) {
+		log(() => `[Tactical] doomed turn: least danger ${minDanger} is lethal with every protection ` +
+			`(life ${me.life}, fraction ${lifeFraction}); kill first, no future boost credit`, LOG_CONTEXT.PLANNING)
+	}
 	// Boost : composante du plan. `boosts[0]` est toujours « aucun ». Un plan avec tir n'en lance pas sous
 	// `MIN_LIFE_RATIO_FOR_BOOST` de PV ; un plan sans tir seulement si l'ennemi peut être à portée au tour suivant.
 	const boosts = boostVariants(me)
@@ -929,7 +947,7 @@ function evaluate(
 	// Arme de référence du crédit futur quand le plan ne tire pas à l'arme.
 	const referenceWeapon = me.weapon ?? weapons[0] ?? null
 	// Sans tir, le crédit ne dépend pas de la case : la meilleure variante est choisie une fois par protection.
-	const idleTarget = boosts.length > 1 && closest !== null && closestDistance <= boostReach(me, closest) ? closest : null
+	const idleTarget = !doomed && boosts.length > 1 && closest !== null && closestDistance <= boostReach(me, closest) ? closest : null
 	const idleBoosts = support.map((protection) => {
 		let best = { variant: boosts[0]!, credit: 0 }
 		if (idleTarget === null) return best
@@ -967,7 +985,7 @@ function evaluate(
 			const danger = entryDanger[index]!
 			const score = progress - riskCost(me, risk, protection, danger, false, lifeFraction) + weight * protection.heal
 			if (score <= stay || (entry.cost === 0 && protection.chips.length === 0)) continue
-			if (!beats(budget.incumbent, score, danger, protection.cost, target, undefined, undefined, entry.cost)) continue
+			if (!beats(budget.incumbent, doomed, 0, score, danger, protection.cost, target, undefined, undefined, entry.cost)) continue
 			budget.incumbent = {
 				target, shotCell: me.cell, destination: entry.cell, beforeMp: 0, afterMp: entry.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips,
@@ -988,10 +1006,8 @@ function evaluate(
 	}
 	// Distance de tir courante par case (Infinity : inconnue), remplie par l'anticipation ci-dessous.
 	const firing: number[] = entries.map(() => Infinity)
-	// Danger minimal de la zone et plus petite distance de tir parmi les cases qui l'atteignent : quand la fin
-	// trouvée atteint déjà les deux, aucune case plus lointaine du parcours ne peut la remplacer (égalité stricte exigée).
-	let minDanger = Infinity
-	for (const value of entryDanger) minDanger = Math.min(minDanger, value)
+	// Plus petite distance de tir parmi les cases de danger minimal : quand la fin trouvée atteint déjà les deux,
+	// aucune case plus lointaine du parcours ne peut la remplacer (égalité stricte exigée).
 	let minFiring = Infinity
 	// `N` par arme équipée en fin de plan (indice de `nextEquipped`) et par case atteignable, avant le contrôle de
 	// létalité : null tant qu'il n'est pas calculé, ou nul partout. `maxNext[e]` : son maximum sur ma zone.
@@ -1081,7 +1097,7 @@ function evaluate(
 			const score = usefulDamage -
 				riskCost(me, risk, protection, danger, killsLastEnemy(attack.damage, target, enemies.length), lifeFraction) +
 				weight * protection.heal
-			if (!beats(budget.incumbent, score, danger, tpUsed, target, undefined, undefined, shot.cost + ending.cost)) continue
+			if (!beats(budget.incumbent, doomed, usefulDamage, score, danger, tpUsed, target, undefined, undefined, shot.cost + ending.cost)) continue
 			budget.incumbent = {
 				target, shotCell: shot.cell, destination: ending.cell, beforeMp: shot.cost, afterMp: ending.cost,
 				weapon, weaponShots: attack.weaponShots, chips: [], protection: protection.chips,
@@ -1352,7 +1368,7 @@ function evaluate(
 				idle.credit + nextTurn
 			const futureRouteDistance = futureDistance?.[i]
 			const tpUsed = protection.cost + idle.variant.cost
-			if (!beats(progressPlan, score, danger, tpUsed, target, firingOf[i], futureRouteDistance, ending.cost)) continue
+			if (!beats(progressPlan, doomed, 0, score, danger, tpUsed, target, firingOf[i], futureRouteDistance, ending.cost)) continue
 			const candidate: TacticalPlan = {
 				target, shotCell: me.cell, destination: ending.cell, beforeMp: 0, afterMp: ending.cost,
 				weapon: null, weaponShots: 0, chips: [], protection: protection.chips, boost: boostOf(idle.variant),
@@ -1364,7 +1380,7 @@ function evaluate(
 			}
 			progressPlan = candidate
 			if ((ending.cost > 0 || protection.heal > 0 || shieldCredit(protection, danger) > 0 || idle.credit > 0) &&
-				better(candidate, budget.incumbent)) budget.incumbent = candidate
+				better(candidate, budget.incumbent, doomed)) budget.incumbent = candidate
 		}
 	}
 	// Règle de stagnation (voir `stagnationEscape` et `StagnationTracker`) appliquée au plan NORMAL, toujours calculé
@@ -1470,7 +1486,7 @@ function evaluate(
 				const tpUsed = cost + protection.cost + option.equipCost + variant.cost
 				// Tours suivants du boost, plafonnés par les PV qui restent à la cible après ce tour, eux aussi pondérés :
 				// des dégâts remis à plus tard ne valent jamais ceux de ce tour (un boost ne bat pas le coup fatal à égalité).
-				if (attack.damage > 0) {
+				if (attack.damage > 0 && !doomed) {
 					future = Math.min((option.target.life - usefulDamage) * FUTURE_TURN_WEIGHT, option.tables.future[v]!)
 				}
 				const score = usefulDamage - riskCost(me, risk, protection, finalDanger,
@@ -1479,8 +1495,8 @@ function evaluate(
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				// Même départage que le plan de progression (trajet futur, seulement sans tir d'arme à portée).
 				const futureRouteAtEnd = futureRoute?.get(key(ending.cell))
-				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, futureRouteAtEnd,
-					shot.cost + ending.cost)) continue
+				if (!beats(best, doomed, usefulDamage, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd,
+					futureRouteAtEnd, shot.cost + ending.cost)) continue
 				const candidate: TacticalPlan = {
 					target: option.target, shotCell: shot.cell, destination: ending.cell,
 					beforeMp: shot.cost, afterMp: ending.cost,
@@ -1491,7 +1507,7 @@ function evaluate(
 					score, nextTurn
 				}
 				best = candidate
-				if (actionable && better(candidate, budget.incumbent)) budget.incumbent = candidate
+				if (actionable && better(candidate, budget.incumbent, doomed)) budget.incumbent = candidate
 			}
 		}
 	}

@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Tour condamné (tous les plans létaux) : cible tuée avant le score, crédit futur des boosts à 0 ; soin, protection et case finale inchangés (54969530, 54969527, 54969622).
 - 2026-11-26 — Valeur de position `N` : la case finale est créditée de 0,75 × les dégâts possibles au tour suivant depuis elle ; nul si un kill est possible ce tour ou si la case est létale.
 - 2026-11-26 — Boost d'agilité (Étirement) en remplissage : lancé avec les seuls PT que le plan conjoint n'emploie pas ; le workflow de déploiement pose lui-même le tag `leek-*`.
 - 2026-11-26 — Puce offensive après déplacement (Éclair, en ligne) : créditée sur ses cases natives atteignables, revérifiée à l'arrivée ; garde contre l'auto-dégât des puces à zone.
