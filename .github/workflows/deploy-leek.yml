@@ -1,5 +1,7 @@
 # Déploie src/ sur le compte principal Leek Wars.
-# Déclenché par un tag `leek-*` poussé sur un commit validé, ou à la main (Actions > Run workflow).
+# Déclenché à la main (Actions > Run workflow, sur la branche par défaut) : le workflow pose alors lui-même le tag
+# `leek-AAAAMMJJ-HHMM` sur le commit déployé, publié seulement si le déploiement réussit. Un tag `leek-*` poussé
+# directement le déclenche aussi (impossible depuis une session Claude cloud : elle ne peut pousser que sa branche).
 # Garden écrit aussi DEPLOYED.ts à la racine des IA du site : version, date, origine et ligne Stratégie.
 # Secret requis : LEEKWARS_API_KEY (Settings > Secrets and variables > Actions).
 name: Déploiement Leek Wars
@@ -60,10 +62,25 @@ jobs:
           mkdir -p "$(dirname "$PUBLICATIONS")"
           git show "origin/$DEFAULT_BRANCH:$PUBLICATIONS" > "$PUBLICATIONS" || rm -f "$PUBLICATIONS"
 
+      # Posé avant le PUSH pour que DEPLOYED.ts cite le tag (`git tag --points-at HEAD`) ; publié après, si tout réussit.
+      - name: Préparer le tag de déploiement (lancement manuel)
+        if: github.ref_type != 'tag'
+        run: |
+          TAG="leek-$(date -u +%Y%m%d-%H%M)"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              tag -a "$TAG" -m "Déploiement : $(git log -1 --format=%s "$GITHUB_SHA")" "$GITHUB_SHA"
+          echo "DEPLOY_TAG=$TAG" >> "$GITHUB_ENV"
+
       - name: PUSH Garden vers Leek Wars
         env:
           LEEKWARS_API_KEY: ${{ secrets.LEEKWARS_API_KEY }}
         run: python LWGarden/src/Garden.py push
+
+      # Un tag poussé avec GITHUB_TOKEN ne relance pas ce workflow.
+      - name: Publier le tag de déploiement
+        if: env.DEPLOY_TAG != ''
+        run: git push origin "refs/tags/$DEPLOY_TAG"
 
       - name: Enregistrer la publication sur la branche par défaut
         run: |
@@ -75,5 +92,5 @@ jobs:
           if git diff --cached --quiet; then echo "Version déjà enregistrée."; exit 0; fi
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "chore(data): publication ${GITHUB_REF_NAME} (${GITHUB_SHA::12})"
+              commit -m "chore(data): publication ${DEPLOY_TAG:-$GITHUB_REF_NAME} (${GITHUB_SHA::12})"
           git push origin "$DEFAULT_BRANCH"

@@ -72,8 +72,8 @@ Garden enregistre le message du commit publié comme **version de la stratégie*
 Un commit qui modifie `src/**/*.ts` porte donc une ligne `Stratégie:` (effet attendu en combat, valeurs avant et
 après) et une ligne `Tests:` ; le hook `commit-msg` le vérifie (modèle : [.gitmessage](.gitmessage)).
 
-Déploiement depuis GitHub : un tag `leek-*` poussé sur un commit validé lance les tests puis
-`python LWGarden/src/Garden.py push` (compte principal, sans menu ni suppression distante) ; voir
+Déploiement depuis GitHub : le workflow « Déploiement Leek Wars » (lancement manuel sur la branche par défaut, ou tag
+`leek-*` poussé) lance les tests puis `python LWGarden/src/Garden.py push` et pose le tag `leek-*` du déploiement ; voir
 [LWGarden/README.md](LWGarden/README.md#déploiement-sans-menu).
 
 Le workflow « Archive des combats » (lancement manuel) récupère les combats récents et les committe.
