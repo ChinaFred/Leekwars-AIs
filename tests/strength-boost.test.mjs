@@ -6,9 +6,12 @@ globalThis.Debug = { log() {}, pause() {} }
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4, POISON: 5, BUFF_STRENGTH: 6 }
 globalThis.Fight = { turn: 2 }
 
+// Les décisions de boost (lancer ou non) sont prises par les plans : voir tests/strength-boost-turn.test.mjs.
+// Ici : le modèle (puces prêtes, gain net à une arme, part des tours suivants, portée utile).
 const {
-	boostNetDamage, castBoostInContact, castBoostWithSpareTp, hasActiveStrengthBoost, hasActiveTpBoost, logChipInventory,
-	pickBoost, readyTpBoosts, tpBoostNetDamage, FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST
+	boostNetDamage, boostReach, hasActiveStrengthBoost, hasActiveTpBoost, logChipInventory, pickBoost, pickTpBoost,
+	readyTpBoosts, strengthBoostFutureDamage, tpBoostFutureDamage, tpBoostNetDamage, FUTURE_TURN_WEIGHT,
+	MIN_LIFE_RATIO_FOR_BOOST
 } = await import("../dist/Brain/StrengthBoost.js")
 const { strengthBoostTurns } = await import("../dist/Classes/Context/ShotPlan.js")
 const { initLeekLogging, LogConfig } = await import("../dist/Toolbox/Logger.js")
@@ -60,140 +63,42 @@ test("boostNetDamage: a lasting boost pays over the turns it covers, a one-turn 
 	assert.equal(strengthBoostTurns(machineGun), 0)
 })
 
-test("in contact: the boost is cast before the plan when it pays", () => {
-	const w = makeMe()
-	castBoostInContact(w.me, w.enemy)
-	assert.deepEqual(w.casts, ["protein"])
-	assert.equal(w.me.tp, 7)
-})
-
-test("in contact: no cast when far, hurt, with a one-turn boost, already boosted or no enemy", () => {
-	const far = makeMe({ distance: 12 }) // portée 6 + 4 PM = 10
-	castBoostInContact(far.me, far.enemy)
-	const hurt = makeMe({ life: 300 * MIN_LIFE_RATIO_FOR_BOOST - 1 })
-	castBoostInContact(hurt.me, hurt.enemy)
-	const brief = makeMe({ chips: [protein({ features: [{ type: 38, minValue: 80, maxValue: 100, turns: 1 }] })] })
-	castBoostInContact(brief.me, brief.enemy)
-	const active = makeMe({ effects: [{ type: 38, turns: 2 }] })
-	castBoostInContact(active.me, active.enemy)
-	const lonely = makeMe()
-	castBoostInContact(lonely.me, null)
-	for (const w of [far, hurt, brief, active, lonely]) assert.deepEqual(w.casts, [])
-	const healthy = makeMe({ life: 300 * MIN_LIFE_RATIO_FOR_BOOST })
-	castBoostInContact(healthy.me, healthy.enemy)
-	assert.deepEqual(healthy.casts, ["protein"]) // exactement au seuil : autorisé
-})
-
-test("spare TP: cast when the next turn is covered and the enemy may be in range by then", () => {
-	const w = makeMe({ distance: 16 }) // portée 6 + 2 × 4 PM + 3 PM adverses = 17
-	castBoostWithSpareTp(w.me, w.enemy, 4)
-	assert.deepEqual(w.casts, ["protein"])
-	const tooFar = makeMe({ distance: 18 })
-	castBoostWithSpareTp(tooFar.me, tooFar.enemy, 4)
-	const noTp = makeMe({ distance: 10, tp: 2 })
-	castBoostWithSpareTp(noTp.me, noTp.enemy, 4)
-	const brief = makeMe({ distance: 10, chips: [protein({ features: [{ type: 38, minValue: 80, maxValue: 100, turns: 1 }] })] })
-	castBoostWithSpareTp(brief.me, brief.enemy, 4)
-	for (const x of [tooFar, noTp, brief]) assert.deepEqual(x.casts, [])
-})
-
-test("no boost when two unboosted shots already kill the enemy: its life caps the damage", () => {
-	const killable = makeMe()
-	killable.enemy.life = 49 // 2 tirs sans boost = 49,5 ; avec boost : 1 tir de 45 seulement
-	castBoostInContact(killable.me, killable.enemy)
-	assert.deepEqual(killable.casts, [])
-	const sturdy = makeMe()
-	sturdy.enemy.life = 400
-	castBoostInContact(sturdy.me, sturdy.enemy)
-	assert.deepEqual(sturdy.casts, ["protein"])
-})
-
-test("in contact the boost with the best NET damage is cast, not the one with the largest strength", () => {
-	const small = protein({ id: 11, name: "small", cost: 3, features: [{ type: 38, minValue: 60, maxValue: 60, turns: 2 }] })
-	const big = protein({ id: 12, name: "big", cost: 9, features: [{ type: 38, minValue: 100, maxValue: 100, turns: 2 }] })
-	const w = makeMe({ chips: [big, small] })
-	assert.equal(pickBoost(w.me, 10).chip.name, "big") // plus gros gain de force
-	castBoostInContact(w.me, w.enemy)
-	assert.deepEqual(w.casts, ["small"]) // mais la grosse laisse 1 PT : aucun tir ce tour
-})
-
-test("invalid distances or life never trigger a cast", () => {
-	const nan = makeMe({ distance: Number.NaN })
-	castBoostInContact(nan.me, nan.enemy)
-	castBoostWithSpareTp(nan.me, nan.enemy, 4)
-	const noMax = makeMe()
-	noMax.me.maxLife = undefined
-	castBoostInContact(noMax.me, noMax.enemy)
-	const noMp = makeMe({ distance: 10 })
-	castBoostWithSpareTp(noMp.me, noMp.enemy, undefined)
-	for (const w of [nan, noMax, noMp]) assert.deepEqual(w.casts, [])
-})
-
 const tpChip = (gain, extra = {}) => ({
 	id: 30, name: "motivation", cost: 4, cooldown: 5, currentCooldown: 0, minRange: 0, maxRange: 0, needsLos: false,
 	features: [{ type: 32, minValue: gain, maxValue: gain, turns: 3 }], ...extra
 })
 
-test("TP boost in contact: cast when the extra TP buy whole shots over the covered turns", () => {
-	const w = makeMe({ chips: [tpChip(4)] }) // 10 PT : 2 tirs ; 14 PT les 2 tours suivants : 3 tirs
-	castBoostInContact(w.me, w.enemy)
-	assert.deepEqual(w.casts, ["motivation"])
-	assert.equal(w.me.tp, 6) // coût 4 ; les PT gagnés dépendent du moteur, le mock n'en ajoute pas
+test("boostNetDamage: the enemy life caps the damage, so a boost that costs the kill never has a positive net", () => {
+	const { me } = makeMe()
+	const option = pickBoost(me, 10)
+	// 2 tirs sans boost = 49,5 ≥ 49 PV ; avec boost : 1 tir de 45, puis au plus les 4 PV restants.
+	assert.ok(!(boostNetDamage(me, machineGun, option, 10, 49) > 0))
+	assert.ok(boostNetDamage(me, machineGun, option, 10, 400) > 0)
+	// Le plus gros gain de force n'est pas le meilleur gain net : une puce à 9 PT ne laisse aucun tir ce tour.
+	const big = { ...option, chip: protein({ cost: 9 }), gain: 100 }
+	assert.ok(boostNetDamage(me, machineGun, big, 10) < boostNetDamage(me, machineGun, { ...option, gain: 60 }, 10))
 })
 
-test("TP boost: a gain too small to buy another shot is not worth its cost (floor of whole shots)", () => {
-	const small = makeMe({ chips: [tpChip(1)] }) // 11 PT : toujours 2 tirs
-	castBoostInContact(small.me, small.enemy)
-	const alreadyActive = makeMe({ chips: [tpChip(4)], effects: [{ type: 32, turns: 2 }] })
-	castBoostInContact(alreadyActive.me, alreadyActive.enemy)
-	const killable = makeMe({ chips: [tpChip(4)] })
-	killable.enemy.life = 40 // les dégâts sont plafonnés : plus de tirs ne tuent pas davantage
-	castBoostInContact(killable.me, killable.enemy)
-	for (const w of [small, alreadyActive, killable]) assert.deepEqual(w.casts, [])
+test("future part of a boost: FUTURE_TURN_WEIGHT x (turns - 1) full turns, nothing for a one-turn boost", () => {
+	const { me } = makeMe()
+	const strength = pickBoost(me, 10) // +90 force, 2 tours
+	assert.ok(Math.abs(strengthBoostFutureDamage(machineGun, strength, 10) - 2 * 22.5 * 0.9 * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.equal(strengthBoostFutureDamage(machineGun, { ...strength, turns: 1 }, 10), 0)
+	assert.equal(strengthBoostFutureDamage({ ...machineGun, features: [] }, strength, 10), 0)
+	const tp = pickTpBoost(makeMe({ chips: [tpChip(4)] }).me, 10) // +4 PT, 3 tours : 14 PT = 3 tirs au lieu de 2
+	assert.equal(tp.chip.name, "motivation")
+	assert.ok(Math.abs(tpBoostFutureDamage(me, machineGun, tp, 10) - 2 * 22.5 * 1.1 * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.equal(tpBoostFutureDamage(me, machineGun, { ...tp, gain: 1 }, 10), 0) // 11 PT : toujours 2 tirs
+	assert.equal(tpBoostFutureDamage(me, machineGun, tp, 10, 49.5), 0) // 2 tirs tuent déjà
+	assert.equal(pickTpBoost(makeMe().me, 10), null) // protein n'est pas un boost de PT
+	assert.equal(MIN_LIFE_RATIO_FOR_BOOST, 0.5)
 })
 
-test("TP boost: the next turns are valued from the turn-start TP, cast with spare TP only if they pay", () => {
-	const spare = makeMe({ chips: [tpChip(4)], tp: 6, distance: 12 })
-	castBoostWithSpareTp(spare.me, spare.enemy, 4, 10) // PT de départ 10 : 14 PT → 3 tirs
-	assert.deepEqual(spare.casts, ["motivation"])
-	const noGain = makeMe({ chips: [tpChip(1)], tp: 6, distance: 12 })
-	castBoostWithSpareTp(noGain.me, noGain.enemy, 4, 10)
-	const brief = makeMe({ chips: [tpChip(4, { features: [{ type: 32, minValue: 4, maxValue: 4, turns: 1 }] })], tp: 6, distance: 12 })
-	castBoostWithSpareTp(brief.me, brief.enemy, 4, 10)
-	const far = makeMe({ chips: [tpChip(4)], tp: 6, distance: 40 })
-	castBoostWithSpareTp(far.me, far.enemy, 4, 10)
-	for (const w of [noGain, brief, far]) assert.deepEqual(w.casts, [])
-})
-
-test("with a TP and a strength boost, the TP boost is cast first so the strength decision sees the real TP", () => {
-	const w = makeMe({ chips: [protein(), tpChip(4)] })
-	castBoostInContact(w.me, w.enemy)
-	assert.deepEqual(w.casts[0], "motivation")
-})
-
-test("TP boost then strength boost, whatever the order of the chip list, and each only once per turn", () => {
-	// Comme le moteur : le boost de PT ajoute ses PT au lancer (le mock de base ne le fait pas).
-	const gaining = (w) => {
-		const useChip = w.me.useChip
-		w.me.useChip = (chip, target) => {
-			const result = useChip(chip, target)
-			if (chip.name === "motivation") w.me.tp += 4
-			return result
-		}
-		return w
-	}
-	for (const chips of [[protein(), tpChip(4)], [tpChip(4), protein()]]) {
-		const w = gaining(makeMe({ chips }))
-		castBoostInContact(w.me, w.enemy)
-		assert.deepEqual(w.casts, ["motivation", "protein"])
-		assert.equal(w.me.tp, 7) // 10 − 4 + 4 − 3
-		castBoostInContact(w.me, w.enemy) // cooldowns en cours : rien de plus
-		castBoostWithSpareTp(w.me, w.enemy, 4, 10)
-		assert.deepEqual(w.casts, ["motivation", "protein"])
-	}
-	const spare = gaining(makeMe({ chips: [protein(), tpChip(4)], tp: 8, distance: 12 }))
-	castBoostWithSpareTp(spare.me, spare.enemy, 4, 10)
-	assert.deepEqual(spare.casts, ["motivation", "protein"])
+test("boostReach: longest weapon range + two turns of my MP + the enemy MP", () => {
+	const { me, enemy } = makeMe({ mp: 4 })
+	assert.equal(boostReach(me, enemy), 6 + 2 * 4 + 3)
+	assert.equal(boostReach({ ...me, weapon: null, weapons: [{ ...machineGun, maxRange: 9 }] }, enemy), 9 + 8 + 3)
+	assert.equal(boostReach({ ...me, weapon: null, weapons: undefined }, { id: 2 }), 8)
 })
 
 test("hasActiveTpBoost / readyTpBoosts: expired, foreign or force effects do not block; cooldown, cost and an active boost do", () => {
@@ -246,54 +151,6 @@ test("tpBoostNetDamage: whole shots only, capped by the enemy life, a boost give
 	// arme sans dégâts ou sans coût
 	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, features: [] }), 0)
 	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, cost: 0 }), 0)
-})
-
-test("BUFF_TP boost: amplified by my science, so the same chip crosses the payoff threshold with more science", () => {
-	globalThis.Effect.BUFF_TP = 8
-	try {
-		const buff = () => tpChip(4, { features: [{ type: 8, minValue: 1, maxValue: 1, turns: 3 }] })
-		const plain = makeMe({ chips: [buff()] }) // +1 PT : 11 PT, toujours 2 tirs
-		castBoostInContact(plain.me, plain.enemy)
-		assert.deepEqual(plain.casts, [])
-		const learned = makeMe({ chips: [buff()] })
-		learned.me.science = 100 // +2 PT : 12 PT, un 3e tir
-		castBoostInContact(learned.me, learned.enemy)
-		assert.deepEqual(learned.casts, ["motivation"])
-		const active = makeMe({ chips: [buff()], effects: [{ type: 8, turns: 2 }] })
-		active.me.science = 100
-		castBoostInContact(active.me, active.enemy)
-		assert.deepEqual(active.casts, [])
-	} finally {
-		delete globalThis.Effect.BUFF_TP
-	}
-})
-
-test("TP boost with spare TP: valued from the turn-start TP, capped by the enemy life", () => {
-	const gain2 = () => tpChip(4, { features: [{ type: 32, minValue: 2, maxValue: 2, turns: 3 }] })
-	const fromTen = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
-	castBoostWithSpareTp(fromTen.me, fromTen.enemy, 4, 10) // 10 → 12 PT : un 3e tir
-	assert.deepEqual(fromTen.casts, ["motivation"])
-	const fromEight = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
-	castBoostWithSpareTp(fromEight.me, fromEight.enemy, 4, 8) // 8 → 10 PT : 2 tirs dans les deux cas
-	assert.deepEqual(fromEight.casts, [])
-	const sparePtOnly = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
-	castBoostWithSpareTp(sparePtOnly.me, sparePtOnly.enemy, 4) // PT de départ omis = PT restants (6 → 8 : un tir de plus)
-	assert.deepEqual(sparePtOnly.casts, ["motivation"])
-	const killable = makeMe({ chips: [gain2()], tp: 6, distance: 12 })
-	killable.enemy.life = 40 // 2 tirs suffisent déjà
-	castBoostWithSpareTp(killable.me, killable.enemy, 4, 10)
-	assert.deepEqual(killable.casts, [])
-	const active = makeMe({ chips: [gain2()], tp: 6, distance: 12, effects: [{ type: 32, turns: 2 }] })
-	castBoostWithSpareTp(active.me, active.enemy, 4, 10)
-	assert.deepEqual(active.casts, [])
-})
-
-test("a refused cast (canUseChip false) spends nothing", () => {
-	const w = makeMe()
-	w.me.canUseChip = () => false
-	castBoostInContact(w.me, w.enemy)
-	assert.deepEqual(w.casts, [])
-	assert.equal(w.me.tp, 10)
 })
 
 test("the chip inventory is logged once, with identifiers, costs, cooldowns and effect types", () => {

@@ -10,27 +10,26 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 
 1. **Observer** : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, compteur de stagnation.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
-2. **Boost en contact** (`castBoostInContact`), avant le plan : voir « Boosts ».
-3. **`planAct`** (`src/Brain/PlanActScenario.ts`), profil par défaut `BALANCED`, agressivité 50, portée préférée 3–8,
-   soin/bouclier/repli autorisés :
+2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
+   (`Kassbi_Class.ts` : `BALANCED`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés) :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
-     historique** (`Plannification.ts`).
-4. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
-   (dégâts moyens par PT, puis portée la plus longue).
-5. **Boost avec les PT restants** (`castBoostWithSpareTp`), puis mémorisation des PV de fin de tour.
+     historique** (`Plannification.ts`), sans boost.
+3. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
+   (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
-Un plan est entièrement décidé et affiché (`PLANNING`) **avant** la première action. Après le début de l'exécution,
-aucun second plan n'est lancé : un échec arrête la séquence.
+Un plan est entièrement décidé et affiché (`PLANNING`) **avant** la première action, boosts compris : `turn()` ne
+lance rien hors du plan. Après le début de l'exécution, aucun second plan n'est lancé : un échec arrête la séquence.
 
 **Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ;
 elle est suivie à part (`[Chest]`, contexte `MEMORY`).
 
 ## Plan conjoint (`TacticalPlanner.ts`)
 
-Compare en un seul score attaque, protection et déplacement. Un plan = **une cible, une case de tir, au plus une
-arme**, plus des puces offensives et de protection ; l'option sans tir (progression, couvert, support) concourt aussi.
+Compare en un seul score attaque, boost, protection et déplacement. Un plan = **une cible, une case de tir, au plus
+une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support)
+concourt aussi.
 
 **Conditions** : `ReachableCells` et `ThreatMap` du tour courant, non tronquées, danger connu, fini et ≥ 0 sur
 chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par zéro) et on passe au plan B.
@@ -39,7 +38,8 @@ chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par z
 aucune case de ma zone n'est à portée de Manhattan de la cible n'appelle pas le fournisseur natif. Une puce
 offensive n'est créditée que si `me.canUseChip` est vrai depuis la case actuelle.
 
-**Ordre exécuté** : approche → protection → équipement (1 PT) → puces offensives → tirs → déplacement final.
+**Ordre exécuté** : approche → boost (PT puis force) → protection → équipement (1 PT) → puces offensives → tirs →
+déplacement final.
 Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; seul un retour natif > 0 confirme un tir.
 
 ### Score et compromis explicite
@@ -50,10 +50,11 @@ Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; seul 
 | `D` | danger brut de la case finale (carte de danger) |
 | `H` | soin crédité = `min(PV manquants, Σ soin moyen × (1 + sagesse/100))` |
 | `C` | crédit d'armure = `min(D, A + D × R/100)` (`A` bouclier absolu, `R` relatif plafonné à 100) |
-| `w` | poids du risque = facteur de rôle × `(1,5 − agressivité/100)` ; rôle : 0,75 `AGGRESSIVE`, 1 `BALANCED`, 1,25 `DEFENSIVE` |
+| `w` | poids du risque (`riskWeight`, commun au plan B) = facteur de rôle × `(1,5 − agressivité/100)` ; rôle : 0,75 `AGGRESSIVE`, 1 `BALANCED`, 1,25 `DEFENSIVE` ; × `RETREAT_RISK_FACTOR` (2) sous le seuil de repli du rôle |
 | `G` | progrès sans tir = distance gagnée vers la cible (Manhattan, ou trajet futur) |
+| `F` | crédit des tours suivants d'un boost (voir « Boosts ») ; 0 sans boost |
 
-- **Offensif** : `U − R_c + w × H`. **Sans attaque** : `G − R_c + w × H`.
+- **Offensif** : `U − R_c + w × H + F`. **Sans attaque** : `G − R_c + w × H + F`.
 - **Coût de risque** `R_c = w × (D − C)`, plus `LETHAL_PENALTY` (1000) et le dépassement si `D − C ≥ PV + H` :
   la survie prime sur les dégâts.
 - **`R_c = 0`** si le plan tue le **dernier** ennemi vivant avec une marge `KILL_MARGIN` (1,1 × ses PV).
@@ -61,6 +62,12 @@ Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; seul 
 
 Par défaut `w = 1`. Le score échange des dégâts moyens ce tour contre une menace potentielle au tour ennemi :
 ce n'est ni une probabilité de survie ni un minimax.
+
+**Comportement configuré** (seuils du tableau « Seuils par stratégie », `vie` et distance à l'ennemi vivant le plus
+proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et
+que le seuil « Soin » ou « Soin si menace » est atteint ; un **bouclier**, que si le seuil « Bouclier » l'est ; sous
+le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la case finale pèse deux fois plus, donc
+le plan préfère une case sûre et un recul après tir. `RETREAT_RISK_FACTOR` est heuristique, non calibré.
 
 **Anticipation** (un seul ennemi) : la distance de chaque destination à une case de tir ne départage que les
 égalités. **Trajet futur sans tir** : si aucune attaque n'est possible ce tour, un BFS (160 cases, 8 pas, 8 lignes
@@ -105,6 +112,7 @@ Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou 
    613 cases. Recherche limitée à **3 %** des opérations depuis son entrée et aux 80 % globaux.
 2. Attaque : **coût d'approche minimal** ; à coût égal, maximiser `min(PV cible, dégâts × tirs) − w × danger`.
    Un seul item offensif ; une puce offensive seulement si elle est utilisable depuis la case actuelle.
+   Boost décidé ensuite, avant l'exécution, annoncé dans le plan et lancé avant l'attaque (voir « Boosts »).
 3. Sans attaque : progression ou couvert si `G − w × danger` bat le score de rester ; danger inconnu → seul un
    progrès strictement positif.
 4. Supports (soin, bouclier) avec les PT restants, aux seuils du tableau ci-dessous.
@@ -115,25 +123,32 @@ Passé 80 % d'opérations au départ, le plan B tourne en mode dégradé (8 prem
 
 ## Boosts (`src/Brain/StrengthBoost.ts`)
 
-Une puce est un boost de force (`BUFF_STRENGTH`, ou effet 38) ou de PT (`BUFF_TP`, ou effet 32). Une seule puce
-de chaque type par tour, jamais relancée tant que l'effet est actif. Le boost de PT passe avant celui de force.
+Une puce est un boost de force (`BUFF_STRENGTH`, ou effet 38) ou de PT (`BUFF_TP`, ou effet 32). Le boost est une
+**composante du plan** : au plus une puce de chaque type par tour (le plus grand gain), jamais tant que l'effet est
+actif, le boost de PT avant celui de force.
 
-- **En contact, avant le plan** : si je peux tirer ce tour et que mes PV ≥ 50 % (`MIN_LIFE_RATIO_FOR_BOOST`),
-  lancer si le gain net de dégâts est positif. Les tours suivants comptent pour 0,75 (`FUTURE_TURN_WEIGHT`) ;
-  les dégâts sont plafonnés par les PV de l'ennemi. Un boost d'un seul tour ne paie donc pas.
-- **Après le plan** : avec les PT non dépensés, si la durée est ≥ 2 tours et que l'ennemi peut être à portée
-  d'ici là.
+- **Plan conjoint** : 4 variantes au plus (aucun, PT, force, les deux). PT du plan = PT − coûts + PT gagnés
+  (partie entière du gain moyen) ; dégâts calculés avec la force boostée : le gain de ce tour est dans `U`.
+  `F` = `FUTURE_TURN_WEIGHT` (0,75) × (durée − 1) tours pleins de l'arme du plan (force : gain % des dégâts de base ;
+  PT : tirs entiers en plus), plafonné par 0,75 × les PV restants de la cible : un boost ne bat jamais le coup fatal.
+- **Plan avec tir** : pas de boost sous 50 % de PV (`MIN_LIFE_RATIO_FOR_BOOST`). **Plan sans tir** : boost seulement si
+  `F > 0` (durée ≥ 2) et si l'ennemi le plus proche est à portée max de mes armes + 2 × mes PM + ses PM.
+- **Plan B** : avec un tir d'arme, gain net du modèle à une arme (`boostNetDamage`, `tpBoostNetDamage`) > 0 et PV ≥ 50 % ;
+  les tirs prévus sont réduits d'autant. Sinon, règle « sans tir » avec les PT que ni l'attaque ni les supports n'emploient.
+- Sans boost prêt, la recherche ne fait aucun travail de plus (une seule variante).
 
 ## Séquence historique (`Plannification.ts`, `Strategy/*.ts`)
 
-Chemin de compatibilité, et source des seuils de support du plan B. Ordre normal : arme → déplacement → tir ou
+Chemin de compatibilité ; les classes `Strategy` fournissent les seuils du rôle aux trois chemins. Ordre normal : arme → déplacement → tir ou
 puce → bouclier/soin → repli. **Ordre critique** (distance ≤ 8, vie ≤ 60 %, `shouldHide` vrai) : repli → puces →
 tir → déplacement.
 
 ### Seuils par stratégie
 
 `vie` = PV / PV max ; `perte` = 1 − `vie` ; `d` = distance à la cible ; `a` = agressivité / 100 (0,5 par défaut,
-valeur correspondante entre parenthèses).
+valeur correspondante entre parenthèses). **Portée réelle** : soin et bouclier dans le plan conjoint et le plan B ;
+repli dans les trois chemins (poids `w` des plans, ordre critique de la séquence historique) ; puce d'attaque,
+pénalité de portée d'arme et portée préférée max : séquence historique seulement.
 
 | Décision | Balanced | Aggressive | Defensive |
 |---|---|---|---|
@@ -220,5 +235,7 @@ Contextes utiles à l'analyse : `PLANNING` (plan avant exécution, replis `[Tact
   entre deux contrôles.
 - Hypothèses d'API non vérifiées en combat réel : masque `launchType` (`LaunchPattern.ts`), ligne de vue ignorant
   les entités, `entity.strength` incluant les buffs actifs, durée des effets des puces, détection `instanceof Chest`.
-- `KILL_MARGIN` et `LETHAL_PENALTY` sont des choix heuristiques, non calibrés en combat.
+- `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR` et `FUTURE_TURN_WEIGHT` sont heuristiques, non calibrés en combat.
+- Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés
+  par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API : les tests valident la logique, pas la force en combat.

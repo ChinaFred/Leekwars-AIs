@@ -1,9 +1,10 @@
 // @version:5.8
-// file version: 17
+// file version: 18
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
-import { castBoostInContact, castBoostWithSpareTp, logChipInventory } from "../Brain/StrengthBoost.js"
+import { logChipInventory } from "../Brain/StrengthBoost.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+import { LeekProfile } from "../Classes/LeekProfile.js"
 import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
@@ -17,6 +18,18 @@ import { getRandomMessage, SPEECH } from "../Toolbox/Speeches.js"
  */
 export const leekLogConfig = new LogConfig()
 initLeekLogging(leekLogConfig)
+
+/**
+ * Comportement de mon poireau : LE point de réglage, lu par `planAct` à chaque tour. Le rôle (`BALANCED`,
+ * `AGGRESSIVE`, `DEFENSIVE`) et l'agressivité (0–100) fixent le poids du danger et les seuils de soin, de bouclier
+ * et de repli ; la portée préférée minimale définit « trop près » ; les trois options autorisent soin, bouclier,
+ * repli. Effets détaillés : `docs/strategies.md`.
+ */
+export const leekProfile = new LeekProfile()
+leekProfile.setRole("BALANCED")
+leekProfile.setAggression(50)
+leekProfile.setPreferredRange(3, 8)
+leekProfile.setSupportOptions(true, true, true)
 
 let isFirstTurn = true
 
@@ -238,7 +251,11 @@ export function turn(): void {
 			const greeting = getRandomMessage(SPEECH.GREETINGS)
 			log(() => `[Speech] Greeting: "${greeting}"`, LOG_CONTEXT.SPEECH)
 			me.say(greeting)
-			logChipInventory(me)
+			try {
+				logChipInventory(me)
+			} catch (error) {
+				reportError("src/Brain/StrengthBoost.ts", "logChipInventory", error)
+			}
 			isFirstTurn = false
 		}
 
@@ -261,20 +278,15 @@ export function turn(): void {
 		displayDangerZone()
 		observeStagnation(me)
 
-		const mpAtStart = me.mp
-		const tpAtStart = me.tp
-		// Avant le plan : en contact, un boost de force rentable change la force et les PT que le plan verra.
-		castBoostInContact(me, target)
-
-		planAct(me, undefined, {
+		// Toutes les décisions du tour (boosts compris) sont prises dans le plan, avant la première action.
+		planAct(me, leekProfile, {
 			reachable: enemyMemory.getReachable(me.id),
 			threat: enemyMemory.getThreatMap(),
 			stagnation
 		})
 
-		// Après le plan : l'équipement du tour 1 et le boost de force n'utilisent que des PT non dépensés par le plan.
+		// Après le plan : l'équipement du tour 1 n'utilise que des PT non dépensés par le plan.
 		equipOpeningWeapon(me)
-		castBoostWithSpareTp(me, target, mpAtStart, tpAtStart)
 		recordMyTurnEnd(me)
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)
