@@ -633,8 +633,12 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // la limite (aucun correctif prévu) : si ces chiffres changent, la décision d'acceptation est à revoir, pas à masquer.
 // Banque : 16 départs x 5 ennemis (568, 262, 17, 310, 2) x compteur neuf/actif = 160 scénarios par alternance.
 // Depuis la baisse du poids du risque avec la passivité (mesuré) : 0/56, 4/88, 2/98 (avant : 0/0, 18/20, 16/22), et le
-// départ 80 / ennemi 262 tire au tour 9 (avant : jamais en 30 tours).
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 56 }, 2: { slower: 4, faster: 88 }, 3: { slower: 2, faster: 98 } }
+// départ 80 / ennemi 262 tire au tour 9 (avant : jamais en 30 tours). Depuis le terme N du score (valeur de la case
+// finale au tour suivant, mesuré) : 0/62 au lieu de 0/56, les deux autres inchangés ; et la RÉFÉRENCE règle désactivée du
+// départ 80 / ennemi 262 ne tire plus en 30 tours (avant : tour 11) : au tour 9 elle choisit, à danger égal (0), la case
+// 258 (N = 45, tir possible au tour suivant si l'ennemi reste), l'ennemi fuit, et la poursuite ne le rattrape plus. La
+// production passe toujours le compteur (règle activée) : tour 9, inchangé.
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 62 }, 2: { slower: 4, faster: 88 }, 3: { slower: 2, faster: 98 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {
@@ -652,7 +656,7 @@ test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns
 		assert.deepEqual({ slower, faster }, expected, `${still} still turn(s) then a flee move`)
 	}
 	const alternating = () => { let calls = 0; return (k, e) => ++calls % 3 === 0 ? fleeStep(k, e) : e }
-	assert.equal(turnsToFirstShotVsFleeing(80, 262, false, alternating(), false), 11, "reference: rule off shoots at turn 11")
+	assert.equal(turnsToFirstShotVsFleeing(80, 262, false, alternating(), false), Infinity, "reference: rule off never shoots in 30 turns")
 	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 9, "rule on: first shot at turn 9")
 })
 

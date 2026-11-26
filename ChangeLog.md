@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-26 — Valeur de position `N` : la case finale est créditée de 0,75 × les dégâts possibles au tour suivant depuis elle ; nul si un kill est possible ce tour ou si la case est létale.
 - 2026-11-26 — Puces multi-usages : une puce offensive sans cooldown est lancée autant de fois que les PT le permettent (plans et carte de danger, maximum exact arme + puces) ; combat 54965081.
 - 2026-11-26 — Profil `AGGRESSIVE` par défaut (agressivité 50) : poids du risque 0,75 au lieu de 1 ; soin à ≤ 32,5 % de vie, bouclier à ≤ 37,5 %, repli à ≤ 22,5 %.
 - 2026-11-26 — `DEPLOYED.ts` allégé : version, date et origine du déploiement, ligne `Stratégie:` ; plus de message de fusion ni de détail du commit.

@@ -78,7 +78,7 @@ LOG_NOISE = ("Accessible zone", "Danger zone", "[Reachable]", "===", "\n===", "E
              "[Chips]", "[Speech]", "Operations:")
 PLAN_LINE = re.compile(r"^\[(Tactical|Reserve)\] plan before execution (\{.*)$", re.DOTALL)
 PLAN_KEYS = ("tp", "tpAvailable", "mp", "mpAvailable", "weapon", "chips", "protection", "attack",
-             "usefulDamage", "danger", "score", "searchStatus")
+             "usefulDamage", "danger", "nextTurn", "score", "searchStatus")
 MAX_LOG_LINE = 240
 # End-of-turn line written by src/Classes/Context/ActionHistory.ts: exact TP/MP and results.
 HISTORY_LINE = re.compile(

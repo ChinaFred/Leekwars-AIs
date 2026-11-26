@@ -1,10 +1,12 @@
 // @version:5.8
-// file version: 27
+// file version: 29
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
-import { ShotCandidate, baseMeanDamage, chipUsesOf, maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
+import {
+	ShotCandidate, baseMeanDamage, chipUsesOf, isStrengthBoostType, isTpBoostType, maxUsesOf, toCandidate
+} from "../Context/ShotPlan.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import {
@@ -55,6 +57,8 @@ export interface TacticalPlan {
 	/** Danger brut conservé, même si les dégâts moyens dépassent les PV de la cible. */
 	readonly danger: number
 	readonly score: number
+	/** Terme `N` du score : valeur de la case finale pour le tour suivant (voir `NEXT_TURN_WEIGHT`) ; absent = 0. */
+	readonly nextTurn?: number
 	readonly progress?: number
 	readonly progressModel?: "future firing route" | "stagnation walk route"
 	/** Sortie de stagnation : tours sans progrès et distance de MARCHE (BFS) vers une zone de tir, avant/après. */
@@ -93,7 +97,11 @@ interface Skipped { unverified: number; refused: number; noProgress: string | nu
 class Budget {
 	private work = 0
 	private readonly start = typeof System === "undefined" ? 0 : System.operations
+	private readonly fraction: number
 	incumbent: TacticalPlan | null = null
+
+	/** `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`). */
+	constructor(fraction: number = SEARCH_FRACTION) { this.fraction = fraction }
 
 	tick(): void {
 		if (++this.work > TACTICAL_LIMITS.work) {
@@ -106,7 +114,7 @@ class Budget {
 		if (typeof System !== "undefined" &&
 			Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
 			(System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION ||
-				System.operations - this.start >= System.maxOperations * SEARCH_FRACTION)) {
+				System.operations - this.start >= System.maxOperations * this.fraction)) {
 			throw new Unavailable("operations reserve")
 		}
 	}
@@ -348,6 +356,11 @@ function riskCost(
 	return weight * exposed + (exposed >= limit ? LETHAL_PENALTY + exposed - limit : 0)
 }
 
+/** Seuil létal de `riskCost` atteint ? Alors `N` = 0 : aucune valeur future ne rachète une case où je peux mourir. */
+function lethal(me: Me, protection: Protection, danger: number, lifeFraction: number): boolean {
+	return danger - shieldCredit(protection, danger) >= (me.life + protection.heal) * lifeFraction
+}
+
 function killsLastEnemy(damage: number, target: Entity, enemyCount: number): boolean {
 	return enemyCount === 1 && damage >= target.life * KILL_MARGIN
 }
@@ -454,6 +467,163 @@ function futureWeaponRoute(
 	}
 	for (const { cell } of reachable.entries()) if (!distances.has(key(cell))) return null
 	return distances
+}
+
+/**
+ * Terme `N` du score : part créditée des dégâts moyens que la case finale d'un plan permet au tour SUIVANT. Même
+ * esprit que `FUTURE_TURN_WEIGHT` (le contact n'est pas garanti : la cible est supposée immobile). Non calibré.
+ */
+export const NEXT_TURN_WEIGHT = 0.75
+
+/**
+ * Allocation du calcul de `N`, en part de `System.maxOperations` depuis son entrée : au-delà, `N` = 0 pour TOUTES
+ * les cases (jamais un `N` partiel). Politique, pas un coût mesuré ; aucun appel natif de liste de cases n'y est fait.
+ */
+const NEXT_TURN_FRACTION = 0.05
+
+/** Valeur des boosts actifs qui ne couvriront plus mon prochain tour (`turns` = 1 : hypothèse non vérifiée en combat). */
+function expiringBoost(me: Me, isType: (type: number) => boolean): number {
+	let value = 0
+	for (const effect of me.effects ?? []) {
+		if (isType(effect.type) && effect.turns === 1 && effect.value > 0) value += effect.value
+	}
+	return value
+}
+
+/**
+ * Meilleurs dégâts moyens possibles au tour suivant depuis chaque case atteignable (ordre de `entries`), cible
+ * supposée IMMOBILE ; null si aucune case n'en permet. `zones` : items dont la liste native de cases de tir a DÉJÀ
+ * été obtenue ce tour (aucun appel natif ici). Un item est utilisable depuis `c` si une case de sa liste est à au
+ * plus mes PM de MARCHE de `c` (cases libres ; hors de ma zone : `Field.cellFromXY`). Une seule propagation en
+ * largeur pour tous les items (masques de bits), bornée au losange de rayon 2 × PM autour de ma case. Dégâts : maximum
+ * exact par ensemble d'items (sac à dos des puces, une table par ensemble de puces, puis tirs d'une arme au plus,
+ * 1 PT si ce n'est pas l'arme équipée en fin de plan), avec les PT et la force du début de ce tour moins les boosts
+ * qui expirent, boucliers actuels de la cible.
+ * Du plan, seule compte l'arme équipée à la fin : `equipped[0]` est l'arme actuelle, puis chaque autre arme de
+ * `zones` ; `damages[e]` est le tableau pour `equipped[e]`. Ni ses tirs ni ses boosts (gain futur : terme `F`).
+ * Approximation : les items d'un ensemble peuvent demander des cases de tir différentes.
+ */
+interface NextTurn { equipped: Array<Weapon | null>; damages: number[][] }
+
+function nextTurnDamages(
+	me: Me, target: Entity, entries: ReadonlyArray<{ cell: Cell; cost: number }>, entryIndex: ReadonlyMap<number, number>,
+	zones: ReadonlyArray<{ item: Weapon | Chip; isChip: boolean; cells: readonly Cell[] }>, budget: Budget
+): NextTurn | null {
+	const tp = me.tp - Math.floor(expiringBoost(me, isTpBoostType))
+	const strength = me.strength - expiringBoost(me, isStrengthBoostType)
+	const mp = Math.max(0, me.mp)
+	const items: Array<{ candidate: ShotCandidate; isChip: boolean; cells: readonly Cell[] }> = []
+	for (const { item, isChip, cells } of zones) {
+		const candidate = item.cost <= tp ? toCandidate(item, isChip, strength) : null
+		if (candidate) items.push({ candidate, isChip, cells })
+	}
+	if (items.length === 0) return null
+	if (typeof Field === "undefined" || typeof Field.cellFromXY !== "function") throw new Unavailable("no cell lookup")
+	const ox = me.cell.x, oy = me.cell.y
+	const free = (cell: Cell): boolean => !cell.obstacle && (cell.entity === null || cell.entity.id === me.id)
+	const reach = new Map<number, number>()
+	let frontier = new Map<number, { x: number; y: number; bits: number }>()
+	for (let bit = 0; bit < items.length; bit++) {
+		for (const cell of items[bit]!.cells) {
+			budget.tick()
+			const id = key(cell)
+			if (Math.abs(cell.x - ox) + Math.abs(cell.y - oy) > 2 * mp || (!entryIndex.has(id) && !free(cell))) continue
+			reach.set(id, (reach.get(id) ?? 0) | (1 << bit))
+			const seed = frontier.get(id)
+			if (seed) seed.bits |= 1 << bit
+			else frontier.set(id, { x: cell.x, y: cell.y, bits: 1 << bit })
+		}
+	}
+	// Chaque tour de boucle porte d'un pas les bits acquis au tour précédent (instantané : jamais deux pas par tour).
+	// Une case à `step` pas d'une case de tir ne sert que si elle est à ≤ PM − `step` d'une case de ma zone.
+	const open = new Map<number, boolean>()
+	for (let step = 1; step <= mp && frontier.size > 0; step++) {
+		const gained = new Map<number, { x: number; y: number; bits: number }>()
+		for (const { x, y, bits } of frontier.values()) {
+			budget.tick()
+			for (const [dx, dy] of MOVE_NEIGHBOR_OFFSETS) {
+				const nx = x + dx, ny = y + dy
+				if (Math.abs(nx - ox) + Math.abs(ny - oy) > 2 * mp - step) continue
+				const id = nx * 4096 + ny
+				const old = reach.get(id) ?? 0
+				const fresh = bits & ~old
+				if (fresh === 0) continue
+				if (old === 0 && !entryIndex.has(id)) {
+					let walkable = open.get(id)
+					if (walkable === undefined) {
+						const cell = Field.cellFromXY(nx, ny)
+						walkable = !!cell && free(cell)
+						open.set(id, walkable)
+					}
+					if (!walkable) continue
+				}
+				reach.set(id, old | fresh)
+				const entry = gained.get(id)
+				if (entry) entry.bits |= fresh
+				else gained.set(id, { x: nx, y: ny, bits: fresh })
+			}
+		}
+		frontier = gained
+	}
+	const masks = entries.map(({ cell }) => reach.get(key(cell)) ?? 0)
+	const equipped: Array<Weapon | null> = [me.weapon]
+	for (const { candidate, isChip } of items) {
+		if (!isChip && candidate.item !== me.weapon) equipped.push(candidate.item as Weapon)
+	}
+	// Puces : meilleurs dégâts pour un budget ≤ b, une table par ensemble de puces (partagée par les armes et les mains).
+	const chipTables = new Map<number, number[]>()
+	const chipTable = (mask: number): number[] => {
+		let table = chipTables.get(mask)
+		if (table) return table
+		table = new Array<number>(tp + 1).fill(0)
+		for (let bit = 0; bit < items.length; bit++) {
+			const { candidate, isChip } = items[bit]!
+			if (!isChip || (mask & (1 << bit)) === 0) continue
+			const impact = netDamage(candidate, target)
+			const cost = candidate.cost
+			if (candidate.uses >= Math.floor(tp / cost)) {
+				// Lancers non limités par `maxUses` dans ces PT : une passe croissante (la puce peut se cumuler).
+				for (let spent = cost; spent <= tp; spent++) {
+					budget.tick()
+					table[spent] = Math.max(table[spent]!, table[spent - cost]! + impact)
+				}
+			} else for (let cast = 0; cast < candidate.uses; cast++) {
+				for (let spent = tp; spent >= cost; spent--) {
+					budget.tick()
+					table[spent] = Math.max(table[spent]!, table[spent - cost]! + impact)
+				}
+			}
+		}
+		chipTables.set(mask, table)
+		return table
+	}
+	let chipBits = 0
+	for (let bit = 0; bit < items.length; bit++) if (items[bit]!.isChip) chipBits |= 1 << bit
+	let any = false
+	const damages = equipped.map((held) => {
+		const byMask = new Map<number, number>([[0, 0]])
+		return masks.map((mask) => {
+			let best = byMask.get(mask)
+			if (best !== undefined) return best
+			const chips = chipTable(mask & chipBits)
+			best = chips[tp]!
+			for (let bit = 0; bit < items.length; bit++) {
+				const { candidate, isChip } = items[bit]!
+				if (isChip || (mask & (1 << bit)) === 0) continue
+				const impact = netDamage(candidate, target)
+				const left = tp - (candidate.item !== held ? 1 : 0)
+				for (let shots = 1; shots <= candidate.uses && shots * candidate.cost <= left; shots++) {
+					budget.tick()
+					best = Math.max(best, shots * impact + chips[left - shots * candidate.cost]!)
+				}
+			}
+			byMask.set(mask, best)
+			any = any || best > 0
+			return best
+		})
+	})
+	budget.check()
+	return any ? { equipped, damages } : null
 }
 
 interface StagnationInput {
@@ -763,42 +933,81 @@ function evaluate(
 	let minDanger = Infinity
 	for (const value of entryDanger) minDanger = Math.min(minDanger, value)
 	let minFiring = Infinity
-	const endingCache = new Map<number, { cell: Cell; cost: number; danger: number }>()
+	// `N` par arme équipée en fin de plan (indice de `nextEquipped`) et par case atteignable, avant le contrôle de
+	// létalité : null tant qu'il n'est pas calculé, ou nul partout. `maxNext[e]` : son maximum sur ma zone.
+	let nextValues: number[][] | null = null
+	let nextEquipped: Array<Weapon | null> = []
+	let maxNext: number[] = []
+	const nextState = (weapon: Weapon | null): number => nextValues === null ? 0 : Math.max(0, nextEquipped.indexOf(weapon))
+	interface Ending { index: number; cell: Cell; cost: number; danger: number }
+	const endingCache = new Map<number, Ending[]>()
 	const seenStamp: number[] = entries.map(() => 0)
 	let stamp = 0
-	const endingFor = (shot: { cell: Cell; cost: number }): { cell: Cell; cost: number; danger: number } => {
-		const cached = endingCache.get(key(shot.cell))
-		if (cached) return cached
+	/**
+	 * Fins candidates après un tir depuis `shot`, par danger croissant : pour chaque valeur de `N`, la case de moindre
+	 * danger (puis de moindre distance de tir, puis la moins chère en PM), sauf si une case de danger ≤ a un `N`
+	 * supérieur. Le coût de risque croît avec le danger pour toute protection : la meilleure fin en fait partie.
+	 * Sans `N` (ou `N` égal partout) : une seule fin, la case de moindre danger, et la même sortie anticipée.
+	 */
+	const endingsFor = (shot: { cell: Cell; cost: number }, state: number): Ending[] => {
 		const start = entryIndex.get(key(shot.cell))!
+		const cached = endingCache.get(start * 8 + state)
+		if (cached) return cached
+		const values = nextValues ? nextValues[state]! : null
+		const top = values ? maxNext[state]! : 0
 		const queue = [start]
 		const costs = [0]
 		seenStamp[start] = ++stamp
-		let best = start, bestCost = 0
-		let danger = entryDanger[start]!
+		const groups = new Map<number, { index: number; cost: number; danger: number }>()
 		const limit = profile.allowHiding ? me.mp - shot.cost : 0
 		for (let head = 0; head < queue.length; head++) {
 			budget.tick()
 			const index = queue[head]!
 			const value = entryDanger[index]!
-			if (value < danger || (value === danger && firing[index]! < firing[best]!)) {
-				best = index; bestCost = costs[head]!; danger = value
+			const worth = values ? values[index]! : 0
+			const group = groups.get(worth)
+			if (!group || value < group.danger || (value === group.danger && firing[index]! < firing[group.index]!)) {
+				groups.set(worth, { index, cost: costs[head]!, danger: value })
 			}
-			if (danger === minDanger && firing[best]! <= minFiring) break
+			const best = groups.get(top)
+			if (best && best.danger === minDanger && firing[best.index]! <= minFiring) break
 			if (costs[head]! >= limit) continue
-			for (const next of adjacency[index]!) {
-				if (seenStamp[next] === stamp) continue
-				seenStamp[next] = stamp
-				queue.push(next)
+			for (const neighbor of adjacency[index]!) {
+				if (seenStamp[neighbor] === stamp) continue
+				seenStamp[neighbor] = stamp
+				queue.push(neighbor)
 				costs.push(costs[head]! + 1)
 			}
 		}
-		const ending = { cell: entries[best]!.cell, cost: bestCost, danger }
-		endingCache.set(key(shot.cell), ending)
-		return ending
+		const found = [...groups.entries()]
+		const endings = found.filter(([worth, group]) => !found.some(([otherWorth, other]) =>
+			otherWorth > worth && other.danger <= group.danger))
+			.map(([, group]) => ({ index: group.index, cell: entries[group.index]!.cell, cost: group.cost, danger: group.danger }))
+			.sort((a, b) => a.danger - b.danger)
+		endingCache.set(start * 8 + state, endings)
+		return endings
+	}
+	/** `N` d'un plan qui finit sur la case `index`, arme `state` en main ; nul si la case est létale avec cette protection. */
+	const nextValue = (index: number, protection: Protection, state: number): number =>
+		nextValues === null || lethal(me, protection, entryDanger[index]!, lifeFraction) ? 0 : nextValues[state]![index]!
+	/** Fin qui maximise `N` − coût de risque pour cette protection ; à égalité, la moins dangereuse. */
+	const endingFor = (shot: { cell: Cell; cost: number }, protection: Protection, state: number): Ending => {
+		const endings = endingsFor(shot, state)
+		let best = endings[0]!
+		if (endings.length === 1) return best
+		let bestScore = -Infinity
+		for (const ending of endings) {
+			budget.tick()
+			const score = nextValue(ending.index, protection, state) -
+				riskCost(me, risk, protection, ending.danger, false, lifeFraction)
+			if (score > bestScore) { best = ending; bestScore = score }
+		}
+		return best
 	}
 	const retainWeapon = (target: Entity, weapon: Weapon, item: ShotCandidate, shot: { cell: Cell; cost: number }): void => {
 		const equip = weapon === me.weapon ? 0 : 1
-		const ending = endingFor(shot)
+		// Appelé avant le calcul de `N` : une seule fin, la case de moindre danger ; `N` est ajouté ensuite à l'option gardée.
+		const ending = endingsFor(shot, 0)[0]!
 		const danger = ending.danger
 		const states = attacks(me.tp - equip, item, [], target, budget)
 		const choices = attackChoices(states, target, true, budget)
@@ -931,7 +1140,26 @@ function evaluate(
 		for (let i = 0; i < entries.length; i++) {
 			if (entryDanger[i] === minDanger) minFiring = Math.min(minFiring, firing[i]!)
 		}
-		endingCache.clear()
+	}
+	// Terme `N` (un seul ennemi) : dégâts du tour suivant calculés pour TOUTES les cases dans leur propre allocation,
+	// sinon `N` nul pour toutes. Puces : seulement celles que la recherche de ce tour crédite (`canUseChip` vrai depuis
+	// ma case) et dont le cooldown de base (0 ou 1) les laisse prêtes au tour suivant même si le plan les lance.
+	let nextDamages: NextTurn | null = null
+	if (enemies.length === 1) {
+		try {
+			const zones: Array<{ item: Weapon | Chip; isChip: boolean; cells: readonly Cell[] }> = []
+			for (const [weapon, cells] of preparation.weaponCells.get(enemies[0]!) ?? []) zones.push({ item: weapon, isChip: false, cells })
+			for (const { candidate } of prepared[0]!.chips) {
+				const chip = candidate.item as Chip
+				const cells = chipZones.get(chip)
+				if (cells && (chip.cooldown === 0 || chip.cooldown === 1)) zones.push({ item: chip, isChip: true, cells })
+			}
+			nextDamages = nextTurnDamages(me, enemies[0]!, entries, entryIndex, zones, new Budget(NEXT_TURN_FRACTION))
+		} catch (error) {
+			const cause = error instanceof Error ? error.message : String(error)
+			log(() => `[Tactical] next-turn value unavailable (${cause}): N = 0 for every cell`, LOG_CONTEXT.PLANNING)
+		}
+		budget.check()
 	}
 	const firingDistance = (target: Entity, cell: Cell): number | undefined => {
 		if (target !== prepared[0]?.target) return undefined
@@ -946,6 +1174,86 @@ function evaluate(
 	// Si la case hypothétique est déjà accessible ce tour, conserver le progrès
 	// Manhattan existant ; la distance sert seulement à départager les égalités.
 	const futureProgress = futureRoute && futureRoute.get(key(me.cell))! > me.mp ? futureRoute : null
+	// Une table exacte par cible/arme/masque de puces utilisables, pas par case : `tables[0]` à ma force actuelle,
+	// `tables[1]` à la force boostée (seulement si une variante de force existe) ; `future` : crédit par variante.
+	interface Offense { tables: Array<Array<AttackChoice | undefined>>; future: number[] }
+	interface OffenseOption { target: Entity; weapon: Weapon | null; equipCost: number; tables: Offense }
+	const attackCache = new Map<string, Offense>()
+	const offenses: Array<OffenseOption[] | undefined> = []
+	/** Options d'attaque depuis la case de tir `entries[s]` (mémoïsées : préparées une fois, lues par le classement). */
+	const offenseAt = (s: number): OffenseOption[] => {
+		const known = offenses[s]
+		if (known) return known
+		const shot = entries[s]!
+		// Depuis la case de tir, pas depuis l'origine : interdit de réutiliser deux fois les mêmes PM.
+		// Les supports n'améliorent pas les dégâts : une seule table par cible/case/arme suffit
+		// pour TOUS leurs budgets résiduels (les états sont indexés par coût exact).
+		const offense: OffenseOption[] = []
+		for (let enemyIndex = 0; enemyIndex < prepared.length; enemyIndex++) {
+			const enemy = prepared[enemyIndex]!
+			const usableChips = enemy.chips.filter((chip) => chip.cells.has(key(shot.cell))).map((chip) => chip.candidate)
+			const mask = enemy.chips.reduce((bits, chip, i) => chip.cells.has(key(shot.cell)) ? bits | (1 << i) : bits, 0)
+			const options = [null, ...enemy.weapons]
+			for (let optionIndex = 0; optionIndex < options.length; optionIndex++) {
+				const option = options[optionIndex]!
+				budget.tick()
+				if (option !== null && (option.candidate === null || !option.cells.has(key(shot.cell)))) continue
+				const equipCost = option !== null && option.weapon !== me.weapon ? 1 : 0
+				if (equipCost > me.tp) continue
+				const cacheKey = `${enemyIndex}:${optionIndex}:${mask}`
+				let tables = attackCache.get(cacheKey)
+				if (!tables) {
+					const table = (weapon: ShotCandidate | null, chips: readonly ShotCandidate[]) => attackChoices(
+						attacks(maxTp - equipCost, weapon, chips, enemy.target, budget), enemy.target, option !== null, budget)
+					tables = {
+						tables: [table(option?.candidate ?? null, usableChips)],
+						future: attackBoosts.map((variant) => variant.cost === 0 ? 0 :
+							boostFuture(me, variant, option?.weapon ?? referenceWeapon, enemy.target.life))
+					}
+					if (strengthGain > 0) {
+						const boosted = (item: Weapon | Chip, isChip: boolean): ShotCandidate | null =>
+							toCandidate(item, isChip, me.strength + strengthGain)
+						tables.tables.push(table(option ? boosted(option.weapon, false) : null,
+							usableChips.map((chip) => boosted(chip.item, true)).filter((chip) => chip !== null)))
+					}
+					attackCache.set(cacheKey, tables)
+				}
+				offense.push({ target: enemy.target, weapon: option?.weapon ?? null, equipCost, tables })
+			}
+		}
+		offenses[s] = offense
+		return offense
+	}
+	// `N` = `NEXT_TURN_WEIGHT` × min(PV de la cible − `U_max`, dégâts du tour suivant depuis la case), où `U_max` est le
+	// plus grand dégât utile qu'un plan quelconque peut infliger CE tour (toutes cases de tir, armes et boosts, sans
+	// protection ni danger). `N` ne dépend donc que de la case finale : renoncer à un tir coûte ses dégâts pleins, et si
+	// un coup fatal est possible ce tour `N` est nul partout (classement identique à celui sans `N`).
+	if (nextDamages !== null) {
+		const target = enemies[0]!
+		let maxUseful = 0
+		if (hasOffense) for (let s = 0; s < entries.length && maxUseful < target.life; s++) {
+			for (const option of offenseAt(s)) for (const variant of attackBoosts) {
+				budget.tick()
+				const choice = option.tables.tables[variant.strength ? 1 : 0]![me.tp - variant.cost + variant.tpGain - option.equipCost]
+				if (choice) maxUseful = Math.max(maxUseful, Math.min(target.life, choice.attack.damage))
+			}
+		}
+		const remaining = target.life - maxUseful
+		if (remaining > 0) {
+			nextEquipped = nextDamages.equipped
+			nextValues = nextDamages.damages.map((row) => row.map((damage) => NEXT_TURN_WEIGHT * Math.min(remaining, damage)))
+			maxNext = nextValues.map((row) => Math.max(...row))
+			// Les options complètes gardées avant ce point (sans `N`) reçoivent le leur : la suite compare des scores avec `N`.
+			if (budget.incumbent) {
+				const kept = budget.incumbent
+				const nextTurn = nextValue(entryIndex.get(key(kept.destination))!,
+					support.find((protection) => protection.chips === kept.protection) ?? support[0]!,
+					nextState(kept.weapon ?? me.weapon))
+				if (nextTurn > 0) budget.incumbent = { ...kept, score: kept.score + nextTurn, nextTurn }
+			}
+		}
+	}
+	endingCache.clear()
 	// Sans attaque connue, progression/couvert/support sont AUSSI un plan complet.
 	// Une légalité de puce refusée/non vérifiée n'autorise pas une approche de tir fictive.
 	let progressPlan: TacticalPlan | null = null
@@ -968,7 +1276,9 @@ function evaluate(
 			if (!profile.allowHiding && geometric[i]! <= 0 && !same(ending.cell, me.cell)) continue
 			const progress = progressOf[i]!
 			const danger = entryDanger[i]!
-			const score = progress - riskCost(me, risk, protection, danger, false, lifeFraction) + weight * protection.heal + idle.credit
+			const nextTurn = nextValue(i, protection, 0)
+			const score = progress - riskCost(me, risk, protection, danger, false, lifeFraction) + weight * protection.heal +
+				idle.credit + nextTurn
 			const futureRouteDistance = futureDistance?.[i]
 			const tpUsed = protection.cost + idle.variant.cost
 			if (!beats(progressPlan, score, danger, tpUsed, target, firingOf[i], futureRouteDistance, ending.cost)) continue
@@ -979,7 +1289,7 @@ function evaluate(
 				progressModel: futureProgress ? "future firing route" : undefined,
 				firingDistance: firingOf[i],
 				futureRouteDistance,
-				score
+				score, nextTurn
 			}
 			progressPlan = candidate
 			if ((ending.cost > 0 || protection.heal > 0 || shieldCredit(protection, danger) > 0 || idle.credit > 0) &&
@@ -1050,57 +1360,19 @@ function evaluate(
 		if (result === null && progressPlan && skipped.noProgress === null) skipped.noProgress = "no improving progress"
 		return result
 	}
-	// Une table exacte par cible/arme/masque de puces utilisables, pas par case : `tables[0]` à ma force actuelle,
-	// `tables[1]` à la force boostée (seulement si une variante de force existe) ; `future` : crédit par variante.
-	interface Offense { tables: Array<Array<AttackChoice | undefined>>; future: number[] }
-	const attackCache = new Map<string, Offense>()
 	let best: TacticalPlan | null = progressPlan
 	let actionable = false
-	for (const shot of entries) {
+	for (let s = 0; s < entries.length; s++) {
+		const shot = entries[s]!
 		budget.tick()
-		// Depuis la case de tir, pas depuis l'origine : interdit de réutiliser deux fois les mêmes PM.
-		// Les supports n'améliorent pas les dégâts : une seule table par cible/case/arme suffit
-		// pour TOUS leurs budgets résiduels (les états sont indexés par coût exact).
-		const offense: Array<{ target: Entity; weapon: Weapon | null; equipCost: number; tables: Offense }> = []
-		for (let enemyIndex = 0; enemyIndex < prepared.length; enemyIndex++) {
-			const enemy = prepared[enemyIndex]!
-			const usableChips = enemy.chips.filter((chip) => chip.cells.has(key(shot.cell))).map((chip) => chip.candidate)
-			const mask = enemy.chips.reduce((bits, chip, i) => chip.cells.has(key(shot.cell)) ? bits | (1 << i) : bits, 0)
-			const options = [null, ...enemy.weapons]
-			for (let optionIndex = 0; optionIndex < options.length; optionIndex++) {
-				const option = options[optionIndex]!
-				budget.tick()
-				if (option !== null && (option.candidate === null || !option.cells.has(key(shot.cell)))) continue
-				const equipCost = option !== null && option.weapon !== me.weapon ? 1 : 0
-				if (equipCost > me.tp) continue
-				const cacheKey = `${enemyIndex}:${optionIndex}:${mask}`
-				let tables = attackCache.get(cacheKey)
-				if (!tables) {
-					const table = (weapon: ShotCandidate | null, chips: readonly ShotCandidate[]) => attackChoices(
-						attacks(maxTp - equipCost, weapon, chips, enemy.target, budget), enemy.target, option !== null, budget)
-					tables = {
-						tables: [table(option?.candidate ?? null, usableChips)],
-						future: attackBoosts.map((variant) => variant.cost === 0 ? 0 :
-							boostFuture(me, variant, option?.weapon ?? referenceWeapon, enemy.target.life))
-					}
-					if (strengthGain > 0) {
-						const boosted = (item: Weapon | Chip, isChip: boolean): ShotCandidate | null =>
-							toCandidate(item, isChip, me.strength + strengthGain)
-						tables.tables.push(table(option ? boosted(option.weapon, false) : null,
-							usableChips.map((chip) => boosted(chip.item, true)).filter((chip) => chip !== null)))
-					}
-					attackCache.set(cacheKey, tables)
-				}
-				offense.push({ target: enemy.target, weapon: option?.weapon ?? null, equipCost, tables })
-			}
-		}
+		const offense = offenseAt(s)
 		if (!same(shot.cell, me.cell) &&
 			!offense.some((o) => (o.tables.tables[0]![maxTp - o.equipCost]?.attack.damage ?? 0) > 0)) continue
-		// D − crédit(D) est monotone : même destination minimale pour tous les supports.
-		const ending = endingFor(shot)
-		const finalDanger = ending.danger
 		for (let p = 0; p < support.length; p++) {
 			const protection = support[p]!
+			// La fin dépend de la case de tir, de la protection et de l'arme en main à la fin, pas du boost. Sans `N`,
+			// D − crédit(D) étant monotone, c'est la même case de moindre danger pour tous les supports.
+			const picked: Array<Ending | undefined> = []
 			for (const option of offense) for (let v = 0; v < attackBoosts.length; v++) {
 				let variant = attackBoosts[v]!
 				// Le boost est payé d'abord ; le reste (PT gagnés compris) finance protection, équipement et attaque.
@@ -1117,6 +1389,11 @@ function evaluate(
 				}
 				// Sans repli autorisé, un déplacement avant tir doit permettre des dégâts utiles.
 				if (!profile.allowHiding && !(attack.damage > 0) && !same(shot.cell, me.cell)) continue
+				const state = attack.weaponShots > 0 ? nextState(option.weapon) : 0
+				let ending = picked[state]
+				if (!ending) picked[state] = ending = endingFor(shot, protection, state)
+				const finalDanger = ending.danger
+				const nextTurn = nextValue(ending.index, protection, state)
 				if (attack.damage > 0 || protection.heal > 0 || shieldCredit(protection, finalDanger) > 0) actionable = true
 				const usefulDamage = Math.min(option.target.life, attack.damage)
 				const tpUsed = cost + protection.cost + option.equipCost + variant.cost
@@ -1126,7 +1403,8 @@ function evaluate(
 					future = Math.min((option.target.life - usefulDamage) * FUTURE_TURN_WEIGHT, option.tables.future[v]!)
 				}
 				const score = usefulDamage - riskCost(me, risk, protection, finalDanger,
-					killsLastEnemy(attack.damage, option.target, enemies.length), lifeFraction) + weight * protection.heal + future
+					killsLastEnemy(attack.damage, option.target, enemies.length), lifeFraction) + weight * protection.heal +
+					future + nextTurn
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				if (!beats(best, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd, undefined,
 					shot.cost + ending.cost)) continue
@@ -1137,7 +1415,7 @@ function evaluate(
 					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
 					boost: boostOf(variant), tpUsed, usefulDamage, danger: finalDanger,
 					firingDistance: firingDistanceAtEnd,
-					score
+					score, nextTurn
 				}
 				best = candidate
 				if (actionable && better(candidate, budget.incumbent)) budget.incumbent = candidate
@@ -1197,7 +1475,8 @@ function execute(me: Me, plan: TacticalPlan): void {
 			? "native cells/current permission; range/LOS checked in selection, native permission rechecked at execution"
 			: "no attack selected",
 		usefulDamage: plan.usefulDamage, danger: currentState() ? plan.danger : null,
-		score: currentState() ? plan.score : null, stateCurrent: currentState(),
+		score: currentState() ? plan.score : null, nextTurn: currentState() ? plan.nextTurn ?? 0 : null,
+		stateCurrent: currentState(),
 		progress: plan.progress ?? 0, progressModel: plan.progressModel ?? "Manhattan",
 		stagnation: plan.stagnation ?? null,
 		searchStatus: plan.searchStatus ?? "complete search",
