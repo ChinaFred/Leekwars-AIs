@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { ReachableCells } from "./ReachableCells.js"
@@ -21,13 +21,14 @@ import {
  * coûte quelques appels de `canHit` (un par item offensif) et un calcul de plan ; non mesuré en ops réelles.
  * Au-delà, la carte est marquée `truncated` : seules les cases de X entièrement évaluées (pour tous les
  * ennemis) sont conservées, les autres sont absentes (donc jamais présentées comme « sûres »).
+ * 8 000 → 16 000 avec `TACTICAL_LIMITS.cells` = 113 : 113 cases × 113 cases de tir (ennemi à 7 PM) = 12 769 paires.
  */
-export const MAX_THREAT_PAIRS = 8000
+export const MAX_THREAT_PAIRS = 16000
 
 /**
  * Plafond d'opérations de la construction (au-delà, la carte est `truncated`) : le plafond global de recherche,
  * `SEARCH_GLOBAL_FRACTION` de `System.maxOperations`, comme la recherche tactique et le plan B qui ne démarrent
- * plus passé ce seuil. Sans lui, 8 000 paires pouvaient dépasser à elles seules le total du tour (erreur
+ * plus passé ce seuil. Sans lui, `MAX_THREAT_PAIRS` paires pouvaient dépasser à elles seules le total du tour (erreur
  * d'exécution, aucune action) ; avec lui, la carte s'arrête et le planificateur se replie sur `operations reserve`.
  * Contrôlé une fois par case X (au plus les cases de tir de chaque ennemi entre deux contrôles). Sans `System` : aucun plafond d'ops.
  */

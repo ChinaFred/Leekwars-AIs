@@ -1,13 +1,14 @@
 // @version:5.8
-// file version: 20
+// file version: 21
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
-import { logChipInventory } from "../Brain/StrengthBoost.js"
+import { decideMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
+import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalPlanner.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, isLogEnabled, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
@@ -228,6 +229,33 @@ function displayDangerZone(): void {
 	}
 }
 
+/**
+ * Boost de PM : seule action décidée AVANT le plan, parce qu'elle en change les entrées (cases atteignables, carte de
+ * danger). Décision et motif (`decideMpBoost`) journalisés avant le lancer ; puis les deux cartes sont recalculées avec
+ * les PM et PT réels, que le lancer ait réussi ou non. Une erreur est journalisée sans interrompre le tour.
+ */
+function castMpBoost(me: Me): void {
+	try {
+		const decision = decideMpBoost(me, enemyMemory.getReachable(me.id), aliveEnemies(), TACTICAL_LIMITS.cells)
+		const option = decision.option
+		if (option === null) {
+			if (decision.reason !== "") {
+				log(() => `[Boost] MP: not cast: ${decision.reason}`, LOG_CONTEXT.CHIP)
+			}
+			return
+		}
+		const chip = option.chip
+		log(() => `[Boost] MP: casting ${chip.name} (+${option.gain} MP, ${chip.cost} TP) before the plan: ${decision.reason}`,
+			LOG_CONTEXT.CHIP)
+		const result = actionHistory.track(me, chip, me, () => me.useChip(chip, me))
+		log(() => `[Boost] MP: ${chip.name} result ${result}; now ${me.mp} MP, ${me.tp} TP`, LOG_CONTEXT.CHIP)
+		observeReachableCells(me)
+		observeThreatMap(me)
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "castMpBoost", error)
+	}
+}
+
 function recordMyTurnEnd(me: Me): void {
 	try {
 		enemyMemory.endMyTurn(me, Fight.turn)
@@ -280,8 +308,10 @@ export function turn(): void {
 		observeThreatMap(me)
 		displayDangerZone()
 		observeStagnation(me)
+		// Après l'ouverture de l'historique (le lancer y figure), avant le plan (il reçoit les cartes recalculées).
+		castMpBoost(me)
 
-		// Toutes les décisions du tour (boosts compris) sont prises dans le plan, avant la première action.
+		// Toutes les autres décisions du tour (boosts de force et de PT compris) sont prises dans le plan.
 		planAct(me, leekProfile, {
 			reachable: enemyMemory.getReachable(me.id),
 			threat: enemyMemory.getThreatMap(),

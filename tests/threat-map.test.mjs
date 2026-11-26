@@ -471,6 +471,25 @@ test("an empty reachable set or no enemy gives a map with zero danger and no fai
 	assert.equal(map.safestCells().length, 13)
 })
 
+test("pair cap default: 113 cells (7 MP, open ground) against a 7 MP enemy are fully evaluated; an 8 MP enemy truncates", () => {
+	const gun = weapon({ minRange: 1, maxRange: 40 })
+	const build = (enemyMp) => {
+		const grid = makeGrid(41, 21)
+		const { me, myReach } = setupMe(grid, [10, 10], 7)
+		const { input } = addEnemy(grid, me, 2, [28, 10], { mp: enemyMp, weaponItem: gun })
+		return { myReach, input, map: buildThreatMap(me, myReach, [input], 1) }
+	}
+	const seven = build(7)
+	assert.deepEqual([seven.myReach.size, seven.input.reachable.size], [113, 113])
+	assert.equal(seven.map.pairsEvaluated, 113 * 113) // 12 769 : au-delà de l'ancien plafond de 8 000
+	assert.equal(seven.map.truncated, false)
+	assert.equal(seven.map.size, 113)
+	const eight = build(8) // 113 × 145 = 16 385 paires : le garde-fou coupe toujours, les cases non évaluées sont absentes
+	assert.equal(eight.map.truncated, true)
+	assert.equal(eight.map.pairsEvaluated, MAX_THREAT_PAIRS)
+	assert.ok(eight.map.size < 113)
+})
+
 test("pair cap: the map is truncated, unevaluated cells are absent (never shown as safe)", () => {
 	const grid = makeGrid(21, 21)
 	const { me, myReach } = setupMe(grid, [5, 10], 2) // 13 cases

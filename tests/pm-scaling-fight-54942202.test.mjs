@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { evaluateTacticalPlans, executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { evaluateTacticalPlans, executeTacticalPlan, TACTICAL_LIMITS } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { buildThreatMap, GeometricShotCells, MAX_THREAT_PAIRS } from "../dist/Classes/Context/ThreatMap.js"
@@ -301,7 +301,7 @@ test("the grouped threat-map provider path gives the same map, pairs and line-of
 	} finally { done() }
 })
 
-test("budget guards degrade cleanly as the MP grow on an open arena: known reason at 7 MP, pairs bounded, no exception", () => {
+test("budget guards on an open arena: 7 MP (113 cells) stays in the joint plan, 8 MP falls back with a known reason, pairs bounded", () => {
 	try {
 		const sizes = []
 		for (const mp of [4, 5, 6, 7, 8]) {
@@ -310,10 +310,18 @@ test("budget guards degrade cleanly as the MP grow on an open arena: known reaso
 			sizes.push(w.context.reachable.size)
 			assert.ok(map.pairsEvaluated <= MAX_THREAT_PAIRS, `${mp} MP: ${map.pairsEvaluated} pairs`)
 			const result = w.evaluate()
-			if (w.context.reachable.size > 85) assert.equal(result.reason, "cells/PT bound", `${mp} MP`)
-			else assert.notEqual(result.reason, "cells/PT bound", `${mp} MP`)
-			assert.ok(result.reason === "complete search" || result.plan === null, `${mp} MP: ${result.reason}`)
+			// Jusqu'à 7 PM (5 PM + bottes) : carte de danger complète et recherche conjointe menée à son terme.
+			if (mp <= 7) {
+				assert.equal(map.truncated, false, `${mp} MP`)
+				assert.equal(result.reason, "complete search", `${mp} MP`)
+				assert.ok(result.plan, `${mp} MP`)
+			} else {
+				assert.ok(w.context.reachable.size > TACTICAL_LIMITS.cells, `${mp} MP`)
+				assert.equal(result.reason, "cells/PT bound", `${mp} MP`)
+				assert.equal(result.plan, null, `${mp} MP`)
+			}
 		}
+		assert.equal(TACTICAL_LIMITS.cells, 113)
 		// Un losange complet : 2 mp² + 2 mp + 1 cases (41, 61, 85, 113, 145) tant que la carte ne le coupe pas.
 		assert.deepEqual(sizes, [41, 61, 85, 113, 145])
 	} finally { done() }
