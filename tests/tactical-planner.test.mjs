@@ -651,7 +651,7 @@ test("active turn feeds the stagnation counter: observed once at the start of th
 	stagnation.observe = function (...args) { observed.push(args); return observe.apply(this, args) }
 	stagnation.noteOffense = function () { offense.push(true); return noteOffense.apply(this) }
 	// Tour précédent dans l'historique partagé : une de mes actions a retiré 20 PV à sa cible.
-	const { actionHistory } = await import("../dist/Classes/Context/ActionHistory.js")
+	const { actionHistory } = await import("../dist/Classes/Context/StagnationTracker.js")
 	const hit = { id: -1, life: 50 }
 	try {
 		initLeekLogging(new LogConfig().setAll(false))

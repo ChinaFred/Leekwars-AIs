@@ -135,11 +135,22 @@ class UnattendedPushTests(unittest.TestCase):
             return code, FightArchive.load_publications(config["data_folder"])
 
     def test_clean_sources_are_deployed_and_recorded_without_prompt_or_deletion(self):
-        api = UnattendedApi(ais=[{"path": "old"}], codes={"old": "x"})
+        api = UnattendedApi(ais=[{"path": "old"}, {"path": "main.ts"}],
+                            codes={"old": "x", "main.ts": "previous"})
         code, publications = self.push(git_state(), api)
         self.assertEqual(code, 0)
         self.assertEqual([record["commit"] for record in publications], ["a" * 40])
-        self.assertIn("old", api.codes)
+        self.assertEqual((api.codes["old"], api.codes["main.ts"]), ("x", "code"))
+
+    def test_api_key_push_writes_nothing_when_an_ai_would_have_to_be_created(self):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "main.ts", "code")
+            write(root, "new.ts", "code")
+            config = {"AIs_folder": root, "accounts": [], "data_folder": os.path.join(root, "data")}
+            api = UnattendedApi(ais=[{"path": "main.ts"}], codes={"main.ts": "previous"})
+            with patch.object(FightArchive, "read_git_state", return_value=git_state()):
+                code = Garden.push_unattended(api, {"LEEKWARS_API_KEY": "key"}, config)
+        self.assertEqual((code, api.codes, api.created_ais), (1, {"main.ts": "previous"}, []))
 
     def test_refusals_deploy_nothing(self):
         for state, key, expected in ((git_state(dirty=True), "key", 3), (git_state(), "", 2),

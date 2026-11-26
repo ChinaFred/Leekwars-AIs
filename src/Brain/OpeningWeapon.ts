@@ -1,6 +1,6 @@
 // @version:5.8
-// file version: 2
-import { track } from "../Classes/Context/ActionHistory.js"
+// file version: 3
+import { track } from "../Classes/Context/StagnationTracker.js"
 import { reportError } from "../Toolbox/Debug.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 

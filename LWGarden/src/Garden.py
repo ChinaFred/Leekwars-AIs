@@ -130,7 +130,8 @@ def push_unattended(api=None, environ=None, config=None):
     print("Unattended PUSH of {0} ({1}) to {2}".format(
         git_state["commit"][:12], git_state["subject"], login))
     try:
-        summary = deploy_local_ais(api, config["AIs_folder"])
+        api_key = (os.environ if environ is None else environ).get("LEEKWARS_API_KEY", "").strip()
+        summary = deploy_local_ais(api, config["AIs_folder"], allow_create=not api_key)
     except (RuntimeError, ValueError) as error:
         print("PUSH failed: {0}".format(error))
         return 1
@@ -467,8 +468,11 @@ def push_all_ais(api, secondaries, root_folder, confirm_delete=None, on_publishe
             on_published(farmer2["login"], summary)
 
 
-def deploy_local_ais(api, root_folder, confirm_delete=None):
+def deploy_local_ais(api, root_folder, confirm_delete=None, allow_create=True):
     """Create or update local LeekScript and TypeScript files on the account.
+
+    With allow_create=False, nothing is written if an AI or folder would have to be
+    created: a partial deployment leaves imports pointing at missing files.
 
     Returns the counts of changes and a hash of the deployed sources.
     """
@@ -505,6 +509,14 @@ def deploy_local_ais(api, root_folder, confirm_delete=None):
         key=lambda path: (path.count("/"), path),
         reverse=True
     )
+    if not allow_create:
+        missing = sorted((local_file_path_set - existing_files)
+                         | (local_folder_paths - existing_folders - {""}))
+        if missing:
+            raise RuntimeError(
+                "nothing was deployed: these AIs or folders do not exist on the account and an "
+                "API key cannot create them. Create them by hand on Leek Wars (empty), or keep "
+                "the code in an existing file: " + ", ".join(missing))
     delete_remote_only = False
     if remote_only_files or remote_only_folders:
         if confirm_delete is None:

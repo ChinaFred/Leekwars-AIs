@@ -131,7 +131,7 @@ class GardenIntegrationTests(unittest.TestCase):
                         if name == "DEPLOYED.ts":
                             return FakeResponse(ok=False, content="wrong_token")
                         return super().create_ai(folder, name, version)
-            api = api_class()
+            api = api_class(ais=[{"path": "main.ts"}], codes={"main.ts": "old"})
             with tempfile.TemporaryDirectory() as root:
                 write(root, "main.ts", "code")
                 config = {"AIs_folder": root, "accounts": [],

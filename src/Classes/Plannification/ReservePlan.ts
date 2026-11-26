@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
@@ -9,7 +9,7 @@ import {
 	tpBoostNetDamage
 } from "../../Brain/StrengthBoost.js"
 import { TacticalContext, TacticalPreparation, riskWeight } from "./TacticalPlanner.js"
-import { track } from "../Context/ActionHistory.js"
+import { track } from "../Context/StagnationTracker.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 

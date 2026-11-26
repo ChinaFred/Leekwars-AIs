@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 15
+// file version: 16
 import { Action } from "./Action.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -7,7 +7,7 @@ import { MovementBehavior, MOVEMENT_BEHAVIOR } from "../Strategy/MovementBehavio
 import { globalCombatLogger } from "../../Toolbox/CombatLogger.js"
 import { log, LOG_CONTEXT, LogContext, LogText } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY } from "./ExecutionBudget.js"
-import { track } from "../Context/ActionHistory.js"
+import { track } from "../Context/StagnationTracker.js"
 
 export class Plannification {
 	readonly actions: Action[] = []
