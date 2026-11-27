@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 38
+// file version: 39
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
@@ -12,7 +12,7 @@ import {
 } from "./TacticalTypes.js"
 import {
 	AttackChoice, BoostVariant, PASSIVE_DANGER_LIFE_FRACTION, Protection, attackChoices, attacks, beats, better, boostFuture,
-	boostVariants, killsLastEnemy, lethal, netDamage, posture, protections, riskCost, riskWeight, shieldCredit
+	boostVariants, killsLastEnemy, lethal, netDamage, posture, protections, riskCost, riskWeight, shieldCredit, woundedRiskFactor
 } from "./TacticalScore.js"
 import {
 	NEXT_TURN_FRACTION, NEXT_TURN_WEIGHT, NextTurn, futureWeaponRoute, nextTurnDamages
@@ -149,12 +149,14 @@ function evaluate(
 	// poids d'approche `a` de `G` et `N`, règle du recul sans tir et arme du trajet futur.
 	const stance = posture(profile, 1 / NEXT_TURN_WEIGHT)
 	const approach = stance.approach
-	const riskFactor = context?.stagnation?.riskFactor ?? 1
+	const wounded = woundedRiskFactor(enemies[0])
+	const riskFactor = Math.min(context?.stagnation?.riskFactor ?? 1, wounded)
 	const passivity = Math.max(riskFactor, stance.passivityFloor)
 	const risk = weight * passivity
 	const lifeFraction = riskFactor < 1 ? PASSIVE_DANGER_LIFE_FRACTION : 1
 	if (riskFactor < 1) {
-		log(() => `[Tactical] passivity: ${context!.stagnation!.passiveTurns} turns without damage dealt; ` +
+		log(() => `[Tactical] ${wounded < 1 ? `wounded enemy (${enemies[0]!.life}/${enemies[0]!.maxLife} HP)` :
+			`passivity: ${context!.stagnation!.passiveTurns} turns without damage dealt`}; ` +
 			`risk weight ${weight} x ${passivity}, danger accepted under ${PASSIVE_DANGER_LIFE_FRACTION} x life`, LOG_CONTEXT.PLANNING)
 	}
 	// Danger minimal de la zone (sert aussi à la sortie anticipée de `endingsFor`).

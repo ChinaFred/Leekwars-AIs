@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Ennemi sous 30 % de PV : poids du risque à 0 pour le poursuivre (garde létal à 75 % des PV).
 - 2026-11-27 — Stagnation : plafond de route progressif (4 % × tours bloqués, max 30 %) + repli ; fractions d'ops dans `Budgets.ts`.
 - 2026-11-27 — Zone visée complète : recherche bornée (une à quelques paires par case au lieu de toutes les cases de tir), mêmes dégâts ; arrêt à 50 % des opérations (20 % avant), coût dans le log.
 - 2026-11-27 — Piège du coffre : coffre à portée et ennemi plus proche que moi → tir sur le coffre puis fuite du coffre avec tous les PM (`ChestTrap.ts`).
