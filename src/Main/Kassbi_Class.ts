@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 29
+// file version: 31
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -10,7 +10,7 @@ import { LeekProfile } from "../Classes/LeekProfile.js"
 import { nearestEnemy } from "../Classes/Context/Targets.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
-import { getRandomMessage, SPEECH } from "../Toolbox/Speeches.js"
+import { getRandomMessage, SPEECH, takeLeekLifeLines } from "../Toolbox/Speeches.js"
 
 /**
  * Configuration de journalisation de mon poireau : créée avec TOUS les contextes actifs et installée dès
@@ -30,7 +30,7 @@ initLeekLogging(leekLogConfig)
  */
 export const leekProfile = new LeekProfile()
 leekProfile.setRole("AGGRESSIVE")
-leekProfile.setAggression(50)
+leekProfile.setAggression(100)
 leekProfile.setSupportOptions(true, true, true)
 
 let isFirstTurn = true
@@ -41,6 +41,24 @@ function guarded(name: string, action: () => void): void {
 		action()
 	} catch (error) {
 		reportError("src/Main/Kassbi_Class.ts", name, error)
+	}
+}
+
+/** Le jeu n'affiche que 2 `say` par tour : au-delà, chacun coûte 1 PT pour rien. */
+const MAX_SAYS_PER_TURN = 2
+let saysThisTurn = 0
+
+function say(me: Me, message: string): void {
+	me.say(message)
+	saysThisTurn++
+}
+
+/** Fin de tour : un `say` du récit du poireau par PT non utilisé, dans la limite des `say` restants du tour. */
+function tellLeekLife(me: Me): void {
+	const count = Math.min(me.tp, MAX_SAYS_PER_TURN - saysThisTurn)
+	for (const line of takeLeekLifeLines(Math.max(0, count))) {
+		log(() => `[Speech] Leek life: "${line}"`, LOG_CONTEXT.SPEECH)
+		say(me, line)
 	}
 }
 
@@ -62,7 +80,7 @@ function announceTurn(me: Me): void {
 	if (isFirstTurn) {
 		const greeting = getRandomMessage(SPEECH.GREETINGS)
 		log(() => `[Speech] Greeting: "${greeting}"`, LOG_CONTEXT.SPEECH)
-		me.say(greeting)
+		say(me, greeting)
 		try {
 			logChipInventory(me)
 		} catch (error) {
@@ -78,7 +96,7 @@ function announceTurn(me: Me): void {
 		if (target.life > 0 && target.maxLife > 0 && lifePercentage <= 15) {
 			const taunt = getRandomMessage(SPEECH.TAUNTS)
 			log(() => `[Speech] Taunt (${lifePercentage.toFixed(1)}% HP): "${taunt}"`, LOG_CONTEXT.SPEECH)
-			me.say(taunt)
+			say(me, taunt)
 		}
 	}
 }
@@ -87,6 +105,7 @@ export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Class.ts", "turn", () => {
 		const me = Fight.me
 		log(`\n=== KASSBI TURN START ===`, LOG_CONTEXT.SYSTEM)
+		saysThisTurn = 0
 		// Journal et paroles : une erreur y est journalisée, le tour continue vers l'observation et le plan.
 		guarded("announceTurn", () => announceTurn(me))
 
@@ -108,6 +127,8 @@ export function turn(): void {
 		recordMyTurnEnd(me)
 		// Ligne `[History]` du tour, avant la ligne d'opérations : son coût est compris dans le total.
 		actionHistory.end()
+		// Après l'historique : les PT restants sont ceux que le plan n'a pas utilisés.
+		guarded("tellLeekLife", () => tellLeekLife(me))
 
 		log(`=== KASSBI TURN END ===\n`, LOG_CONTEXT.SYSTEM)
 		// En dernier : le total inclut tout sauf ce log (quelques opérations).

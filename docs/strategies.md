@@ -15,7 +15,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 1. **Observer** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 100, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
@@ -96,8 +96,13 @@ Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester blo
 - **Déclenchement** : `STAGNATION_TURNS` = 2 tours sans progrès, ennemis **immobiles** sur ces tours, et plan normal
   **bloqué** (ni tir, ni déplacement, ni protection) ou sortie déjà engagée.
 - **Destination** : case atteignable dont la distance de **marche** vers une zone de tir est strictement plus courte
-  (BFS inverse, 613 cases au plus, 2 % des opérations), même si Manhattan augmente, avec un danger ≤ celui de la case
+  (BFS inverse, 613 cases au plus), même si Manhattan augmente, avec un danger ≤ celui de la case
   actuelle ; à `p = 0`, toute case de danger inférieur à 75 % de mes PV. Sinon maintien, motivé dans le journal.
+- **Plafond d'opérations du BFS** (`OPS_BUDGET`, `Toolbox/Budgets.ts`) : 4 % par tour bloqué (le premier tour où la sortie
+  agit compte 1), multiplié par ce nombre, au plus 30 %, jamais au-delà de 80 % du total. Avant : 2 % fixes, atteints à
+  chaque tour (combat 54994953, zone de tir à 25 cases : 61 tours immobiles). Coût réel du BFS non mesuré.
+- **Repli** si le BFS s'arrête sur ce plafond : avancer vers la case atteignable la plus proche de la cible (Manhattan,
+  mêmes règles de danger et de cases visitées). Le maintien « safety first » n'est annoncé que si un danger écarte une case plus proche.
 - **Fin d'épisode** : dégât, record de proximité, tir réel prévu ou ennemi qui bouge. Les cases visitées pendant
   l'épisode ne sont pas revisitées pour progresser ; une retraite vers un danger strictement inférieur reste permise.
 - **Limites acceptées** : contre un ennemi qui alterne immobilité et fuite, le premier tir peut être retardé ;

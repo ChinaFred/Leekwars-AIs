@@ -1,5 +1,6 @@
 // @version:5.8
 // file version: 3
+import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { ReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { ShotCandidate, isStrengthBoostType, isTpBoostType, toCandidate } from "../Context/ShotPlan.js"
@@ -91,7 +92,7 @@ export const NEXT_TURN_WEIGHT = 0.75
  * Allocation du calcul de `N`, en part de `System.maxOperations` depuis son entrée : au-delà, `N` = 0 pour TOUTES
  * les cases (jamais un `N` partiel). Politique, pas un coût mesuré ; aucun appel natif de liste de cases n'y est fait.
  */
-export const NEXT_TURN_FRACTION = 0.05
+export const NEXT_TURN_FRACTION = OPS_BUDGET.NEXT_TURN
 
 /** Valeur des boosts actifs qui ne couvriront plus mon prochain tour (`turns` = 1 : hypothèse non vérifiée en combat). */
 function expiringBoost(me: Me, isType: (type: number) => boolean): number {
