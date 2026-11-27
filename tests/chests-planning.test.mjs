@@ -5,7 +5,8 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4
 globalThis.Color = { rgb: () => 0 }
 globalThis.Debug = { log() {}, pause() {} }
 
-const { evaluateTacticalPlans, executeTacticalPlan } = await import("../dist/Classes/Plannification/TacticalPlanner.js")
+const { evaluateTacticalPlans } = await import("../dist/Classes/Plannification/TacticalPlanner.js")
+const { executeTacticalPlan } = await import("../dist/Classes/Plannification/TacticalExecution.js")
 const { EnemyMemory } = await import("../dist/Classes/Context/EnemyMemory.js")
 const { aliveEnemies } = await import("../dist/Classes/Context/Targets.js")
 const { LeekProfile } = await import("../dist/Classes/LeekProfile.js")

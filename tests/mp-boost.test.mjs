@@ -11,7 +11,7 @@ globalThis.Fight = { turn: 1 }
 const { turn } = await import("../dist/Main/Kassbi_Class.js")
 const { decideMpBoost, pickMpBoost } = await import("../dist/Brain/StrengthBoost.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
-const { TACTICAL_LIMITS } = await import("../dist/Classes/Plannification/TacticalPlanner.js")
+const { TACTICAL_LIMITS } = await import("../dist/Classes/Plannification/TacticalTypes.js")
 
 const machineGun = {
 	id: 38, name: "machine_gun", cost: 4, minRange: 1, maxRange: 6, needsLos: false, maxUses: -1,

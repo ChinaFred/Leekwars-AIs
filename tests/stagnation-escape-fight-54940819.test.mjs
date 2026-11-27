@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { executeTacticalPlan, PASSIVE_DANGER_LIFE_FRACTION } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { PASSIVE_DANGER_LIFE_FRACTION } from "../dist/Classes/Plannification/TacticalScore.js"
+import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
 import { ActionHistory, actionHistory, HISTORY_TURNS } from "../dist/Classes/Context/StagnationTracker.js"
 import { getLogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
 import { planAct } from "../dist/Brain/PlanActScenario.js"

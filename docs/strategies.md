@@ -32,7 +32,7 @@ plan, `turn()` ne lance que le boost de PM (il en change les entrées). Exécuti
 ## Plan conjoint (`TacticalPlanner.ts`)
 
 Compare en un seul score attaque, boost, protection et déplacement. Un plan = **une cible, une case de tir, au plus
-une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support) concourt aussi.
+une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support) concourt aussi. Code : recherche dans `TacticalPlanner.ts`, types et bornes `TacticalTypes.ts`, score `TacticalScore.ts`, tour suivant `TacticalNextTurn.ts`, stagnation `TacticalStagnation.ts`, exécution `TacticalExecution.ts`.
 
 **Conditions** : `ReachableCells` et `ThreatMap` du tour courant, non tronquées, danger connu, fini et ≥ 0 sur
 chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par zéro) et on passe au plan B.
@@ -90,7 +90,7 @@ La distance à une case de tir ne départage que les égalités. **Trajet futur 
 
 ### Sortie de stagnation
 
-Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
+Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
 
 - **Tour sans progrès** : ni dégâts infligés, ni nouveau record de proximité à l'ennemi le plus proche. Rester immobile ou osciller compte de la même façon.
 - **Déclenchement** : `STAGNATION_TURNS` = 2 tours sans progrès, ennemis **immobiles** sur ces tours, et plan normal
@@ -108,8 +108,8 @@ Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqu�
 
 | Borne | Valeur | Fichier |
 |---|---|---|
-| `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalPlanner.ts` |
-| Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalPlanner.ts` |
+| `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalTypes.ts` |
+| Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalTypes.ts` |
 | Arrêt de la recherche (global) | 80 % du total, partagé avec le plan B et la carte de danger (`SEARCH_GLOBAL_FRACTION`) | `ExecutionBudget.ts` |
 | Garde d'exécution | continuer si `max − ops > 3 % × max + 2 × plus gros segment observé` (`TAIL_FRACTION`) | `ExecutionBudget.ts` |
 

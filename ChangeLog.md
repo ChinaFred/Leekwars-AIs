@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Plan conjoint découpé en six fichiers `Tactical*.ts` (90 Ko → 47 Ko pour `TacticalPlanner.ts`) : aucun changement de comportement.
 - 2026-11-27 — Repli sans tir refusé : un recul sans dégâts vers une case plus sûre cède au meilleur plan à dégâts sous 0,75 × PV de danger (hors seuil de repli, tour condamné) ; sinon il est gardé.
 - 2026-11-26 — Tour condamné (tous les plans létaux) : cible tuée avant le score, crédit futur des boosts à 0 ; soin, protection et case finale inchangés (54969530, 54969527, 54969622).
 - 2026-11-26 — Valeur de position `N` : la case finale est créditée de 0,75 × les dégâts possibles au tour suivant depuis elle ; nul si un kill est possible ce tour ou si la case est létale.

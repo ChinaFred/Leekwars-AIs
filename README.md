@@ -29,7 +29,7 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 | `src/Brain/` | Scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
 | `src/Classes/Context/` | Ce que l'IA sait du combat : mémoire de l'adversaire, cases atteignables, carte de danger, stagnation, cibles |
 | `src/Classes/Items/` | Armes, puces et effets |
-| `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner`), plan B (`ReservePlan`), budget d'opérations, séquence historique |
+| `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations, séquence historique |
 | `src/Classes/Strategy/` | Seuils par rôle (`Aggressive`, `Balanced`, `Defensive`) et comportements de déplacement |
 | `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, utilitaires |
 | `src/Tests/` | Scripts de test exécutés dans le jeu |
