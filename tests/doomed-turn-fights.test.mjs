@@ -199,7 +199,7 @@ function arena(name, dangerOverride = {}, change = {}) {
 		[cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: dangerOf.get(cell.id), breakdown: [] }])),
 	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: 1, pairsEvaluated: 0, lineOfSightCalls: 0 })
 	const profile = new LeekProfile()
-	profile.setRole("AGGRESSIVE"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole(state.role ?? "AGGRESSIVE"); profile.setAggression(50); profile.setPreferredRange(3, 8)
 	profile.setSupportOptions(true, true, true)
 	const logs = []
 	const print = console.log
@@ -228,12 +228,13 @@ const plan = (shotCell, destination, weapon, shots, chips, boost, protection, tp
 // reste. 54969530:10 : rock depuis 145 à la place de protein, cure gardé (pas de coup fatal possible : cible à 83 PV sous
 // casque 15, maximum rock + shotgun = 61,8). 54969527:6 : protein + rock (65,85), sans motivation. 54969622:8 : plus de
 // protein ; spark x 3 (43,2) demanderait de finir en 176 (danger 210 au lieu de 144) : le score garde le repli, 10 PT libres.
+// Scores recalculés avec la posture AGGRESSIVE (facteur de rôle de `w` 0,75 -> 0,5) : mêmes plans, seuls les scores changent.
 const EXPECTED = {
-	"54969530:8": plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 177.975, -1115.71),
-	"54969530:10": plan(145, 164, null, 0, ["rock"], [], ["cure"], 9, 31.2, 234.75, -1171.11),
-	"54969527:6": plan(414, 396, null, 0, ["rock"], ["protein"], [], 8, 65.85, 361.125, -1377.12),
-	"54969622:7": plan(193, 193, null, 0, ["spark"], [], ["cure", "helmet"], 10, 14.4, 222, -1202.35),
-	"54969622:8": plan(193, 175, null, 0, [], [], [], 0, 0, 144, -1175)
+	"54969530:8": plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 177.975, -1085.46),
+	"54969530:10": plan(145, 164, null, 0, ["rock"], [], ["cure"], 9, 31.2, 234.75, -1122.92),
+	"54969527:6": plan(414, 396, null, 0, ["rock"], ["protein"], [], 8, 65.85, 361.125, -1286.84),
+	"54969622:7": plan(193, 193, null, 0, ["spark"], [], ["cure", "helmet"], 10, 14.4, 222, -1161.1),
+	"54969622:8": plan(193, 175, null, 0, [], [], [], 0, 0, 144, -1139)
 }
 
 for (const name of Object.keys(TURNS)) {
@@ -263,7 +264,7 @@ test("a protection that brings one cell under the lethal threshold: not a doomed
 	// (150 - 15 = 135 < 96 + 42). Le plan reste celui d'avant le changement : soin, casque, repli, aucun tir.
 	const w = arena("54969530:8", { 126: 150 })
 	assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [])
-	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 150, -51.6))
+	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 150, -23.81))
 })
 
 // RECUL SANS TIR (plan sans dégâts qui s'éloigne de la cible vers une case moins dangereuse). Plans joués dans les combats,
@@ -276,25 +277,47 @@ test("a protection that brings one cell under the lethal threshold: not a doomed
 // de danger (0,75 x PV), sauf seuil de repli du rôle ou soin / protection utile dans le plan ; sans un tel plan, gardé. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
 const SPARKS = ["spark", "spark", "spark"]
 const REFUSED = /^\[Tactical\] retreat without damage refused: /
+// Posture du rôle (profil du combat : AGGRESSIVE, `w` 0,75 -> 0,5, `a` 1,25, recul `advance`) : scores recalculés ; les
+// plans à dégâts sont les mêmes. Colonnes : lignes `retreat without damage refused`, lignes `aggressive posture`, plan.
+const ADVANCED = /^\[Tactical\] aggressive posture: retreat without damage refused: /
 const RETREAT_CASES = [
-	// 54969622:2 : spark est absorbé par le helmet adverse (aucun plan à dégâts) : le repli du combat est GARDÉ. Une première
-	// version le remplaçait par protein + 1 pas d'avance (danger 184) ; s'exposer sans tirer n'est pas le but de la règle.
-	["54969622:2", 0, plan(233, 161, null, 0, [], ["protein"], [], 3, 0, 0, 47.3)],
-	["54969622:3", 1, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -87.12)],
-	["54976625:3", 1, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 7.26)],
-	["54976625:4", 1, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, -21.9)],
-	["54974628:3", 1, plan(427, 409, null, 0, SPARKS, [], [], 9, 11.88, 118, -76.62)],
+	// 54969622:2 : spark est absorbé par le helmet adverse (aucun plan à dégâts). BALANCED garde le repli du combat (test
+	// des trois rôles ci-dessous) ; AGGRESSIVE le remplace par protein + 1 pas d'avance (danger 184 < 0,75 x PV, 0 dégât) :
+	// changement VOULU de la posture, plus exposé que le repli (effet en combat non mesuré).
+	["54969622:2", 0, 1, plan(233, 217, null, 0, [], ["protein"], [], 3, 0, 184, -39.45), "replaced by an advance (AGGRESSIVE posture)"],
+	["54969622:3", 1, 0, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -35.7)],
+	// 54976625:3 : à `w` = 0,5 les sparks sont en tête d'eux-mêmes (47,86), plus de recul à refuser.
+	["54976625:3", 0, 0, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 47.86), "not needed: the damaging plan leads"],
+	["54976625:4", 1, 0, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, 18.7)],
+	["54974628:3", 1, 0, plan(427, 409, null, 0, SPARKS, [], [], 9, 11.88, 118, -47.12)],
 	// Garde de non-régression : « tir puis recul » (rock + shotgun depuis 361, fin en 414), plan du combat, inchangé.
-	["54969527:5", 0, plan(361, 414, "shotgun", 1, ["rock"], [], [], 10, 61.8, 181.365, -27.87)]
+	["54969527:5", 0, 0, plan(361, 414, "shotgun", 1, ["rock"], [], [], 10, 61.8, 181.365, 29.05)]
 ]
-for (const [name, refused, expected] of RETREAT_CASES) {
-	test(`combat ${name.replace(":", ", turn ")}: retreat without damage ${refused ? "replaced by a damaging plan" : "not replaced (plan of the fight)"}`, () => {
+for (const [name, refused, advanced, expected, label] of RETREAT_CASES) {
+	test(`combat ${name.replace(":", ", turn ")}: retreat without damage ${label ?? (refused ? "replaced by a damaging plan" : "not replaced (plan of the fight)")}`, () => {
 		const w = arena(name)
 		assert.deepEqual(w.zone, w.logged, "reachable zone = the one logged in the fight")
 		assert.equal(w.logs.filter(line => REFUSED.test(line)).length, refused)
+		assert.equal(w.logs.filter(line => ADVANCED.test(line)).length, advanced)
 		assert.deepEqual(w.plan, expected)
 	})
 }
+
+test("posture, retreat without a shot: same turn of a fight, the three roles differ (DEFENSIVE hides, BALANCED shoots or hides, AGGRESSIVE shoots or advances)", () => {
+	const seen = (name, role) => {
+		const w = arena(name, {}, { role })
+		return [w.plan.destination, w.plan.chips.length, w.plan.danger,
+			w.logs.filter(line => REFUSED.test(line)).length, w.logs.filter(line => ADVANCED.test(line)).length]
+	}
+	// 54976625:4 (sparks possibles, 43,2 dégâts à danger 130) : DEFENSIVE recule en 277 sans tirer, jamais filtré.
+	assert.deepEqual(seen("54976625:4", "DEFENSIVE"), [277, 0, 0, 0, 0])
+	assert.deepEqual(seen("54976625:4", "BALANCED"), [169, 3, 130, 1, 0])
+	assert.deepEqual(seen("54976625:4", "AGGRESSIVE"), [169, 3, 130, 1, 0])
+	// 54969622:2 (aucun plan à dégâts : spark absorbé) : seul AGGRESSIVE avance (217, danger 184) ; les autres reculent en 161.
+	assert.deepEqual(seen("54969622:2", "DEFENSIVE"), [161, 0, 0, 0, 0])
+	assert.deepEqual(seen("54969622:2", "BALANCED"), [161, 0, 0, 0, 0])
+	assert.deepEqual(seen("54969622:2", "AGGRESSIVE"), [217, 0, 184, 0, 1])
+})
 
 test("retreat without damage: replaced only by a damaging plan under the danger margin; kept with a useful heal or when no such plan exists", () => {
 	// 54976625, tour 4 : rester en 223 (danger 130), reculer en 277 (danger 0, distance 12 -> 15), ou 2 PM + spark x 3 puis
@@ -304,9 +327,11 @@ test("retreat without damage: replaced only by a damaging plan under the danger 
 	const cases = [
 		["life 174: sparks under the margin replace the retreat", {}, { life: 174 }, 169, SPARKS, [], 1],
 		["life 173 (130 >= 0.75 x 173): retreat kept", {}, { life: 173 }, 277, [], [], 0],
-		["no damaging plan (0 TP): retreat kept, never an advance without a shot", {}, { tp: 0 }, 277, [], [], 0],
+		// AGGRESSIVE (posture `advance`) : sans plan à dégâts, l'avance en 168 remplace le recul (ligne `aggressive posture`).
+		["no damaging plan (0 TP): AGGRESSIVE advances instead of the retreat", {}, { tp: 0 }, 168, [], [], 0],
 		["retreat + useful heal (cure, life 120): not a filtered retreat", low, { life: 120, cooldowns: { protein: 1 } }, 277, [], ["cure"], 0],
-		["same without the heal: sparks replace the retreat", low, { life: 120, cooldowns: { protein: 1, cure: 1 } }, 187, SPARKS, [], 1]
+		// À `w` = 0,5 (AGGRESSIVE) et danger 60, les sparks sont en tête d'eux-mêmes : aucun recul à refuser.
+		["same without the heal: sparks lead on their own", low, { life: 120, cooldowns: { protein: 1, cure: 1 } }, 187, SPARKS, [], 0]
 	]
 	for (const [label, danger, change, destination, chips, protection, refused] of cases) {
 		const w = arena("54976625:4", danger, change)

@@ -48,23 +48,39 @@ test("seed 754: a shield that covers nothing does not buy the retreat, and an ad
 
 test("the retreat is replaced only by a damaging plan under the margin; never with several enemies, under the role threshold, or by a move without damage", () => {
 	// Arme 1-5 (2 tirs de 10), ennemi à 7, 10 PT, 4 PM : 2 PM d'approche, tir depuis (2,0) (danger 60 comme ma case), U 20 ; ou recul
-	// de 3 cases (danger 0). Le score préfère le recul (20 - 45 + N 15 < 0).
+	// de 3 cases (danger 0). Le score préfère le recul (BALANCED, w = 1 : 20 - 60 + N 15 < 0).
+	// Profil BALANCED depuis la posture du rôle (référence inchangée du filtre ; seuil de repli : vie <= 0,40 à distance <= 8).
+	// Avec le profil de production (AGGRESSIVE, w = 0,5, a = 1,25) les tirs sont en tête d'eux-mêmes (20 - 30 + 18,75 > 0) et,
+	// sans plan à dégâts, l'avance remplace le recul : lignes AGGRESSIVE en fin de tableau.
 	const gun = { name: "gun", cost: 4, damage: 10, minRange: 1, maxRange: 5, maxUses: -1, needsLos: false }
-	const base = (o) => ({ ...spec(1), size: 14, obstacles: [], maxLife: 400, life: 400, weapons: [gun], equipped: 0, chips: [], support: none, profile: PROD,
+	const BALANCED = { ...PROD, role: "BALANCED" }
+	const base = (o) => ({ ...spec(1), size: 14, obstacles: [], maxLife: 400, life: 400, weapons: [gun], equipped: 0, chips: [], support: none, profile: BALANCED,
 		stag: null, tp: 10, mp: 4, turn: 5, strength: 0, enemies: [{ x: 7, y: 0, life: 300, absoluteShield: 0, relativeShield: 0, mp: 4, range: 6 }],
 		danger: (cell) => dist(cell, { x: 7, y: 0 }) >= 10 ? 0 : 60, ...o })
 	const second = { x: 0, y: 13, life: 300, absoluteShield: 0, relativeShield: 0, mp: 4, range: 6 }
-	for (const [label, change, damage, refused] of [
-		["one enemy, full life: replaced by the shots", {}, 20, 1],
-		["two enemies (G only measures the first one): kept", { enemies: [base({}).enemies[0], second] }, 0, 0],
-		["no damaging plan (0 TP): kept, not replaced by an advance or a side step", { tp: 0 }, 0, 0],
-		["just above the AGGRESSIVE retreat threshold (104/400 at distance 7): replaced", { life: 104 }, 20, 1],
-		["at the threshold (100/400): kept", { life: 100 }, 0, 0],
-		["danger margin, 81 life (60 < 0.75 x 81): replaced", { life: 81, maxLife: 81 }, 20, 1],
-		["danger margin, 80 life (60 >= 0.75 x 80): kept", { life: 80, maxLife: 80 }, 0, 0]
+	const ADVANCED = "[Tactical] aggressive posture: retreat without damage refused"
+	for (const [label, change, damage, destination, refused, advanced] of [
+		["one enemy, full life: replaced by the shots", {}, 20, [2, 0], 1, 0],
+		["two enemies (G only measures the first one): kept", { enemies: [base({}).enemies[0], second] }, 0, [-3, 0], 0, 0],
+		["no damaging plan (0 TP): kept, not replaced by an advance or a side step", { tp: 0 }, 0, [-3, 0], 0, 0],
+		["just above the BALANCED retreat threshold (161/400 at distance 7): replaced", { life: 161 }, 20, [2, 0], 1, 0],
+		["at the threshold (160/400): kept", { life: 160 }, 0, [-3, 0], 0, 0],
+		["danger margin, 81 life (60 < 0.75 x 81): replaced", { life: 81, maxLife: 81 }, 20, [2, 0], 1, 0],
+		["danger margin, 80 life (60 >= 0.75 x 80): kept", { life: 80, maxLife: 80 }, 0, [-3, 0], 0, 0],
+		["DEFENSIVE: the retreat without a shot is never filtered", { profile: { ...PROD, role: "DEFENSIVE" } }, 0, [-3, 0], 0, 0],
+		["AGGRESSIVE: the shots lead on their own, nothing to refuse", { profile: PROD }, 20, [2, 0], 0, 0],
+		["AGGRESSIVE, no damaging plan (0 TP): the advance replaces the retreat", { profile: PROD, tp: 0 }, 0, [4, 0], 0, 1],
+		["AGGRESSIVE, 0 TP, 80 life (60 >= 0.75 x 80): no advance under the margin, retreat kept", { profile: PROD, tp: 0, life: 80, maxLife: 80 }, 0, [-3, 0], 0, 0],
+		["AGGRESSIVE, 0 TP, just above its retreat threshold (104/400): the advance replaces the retreat", { profile: PROD, tp: 0, life: 104 }, 0, [4, 0], 0, 1],
+		["AGGRESSIVE, 0 TP, at its retreat threshold (100/400): kept", { profile: PROD, tp: 0, life: 100 }, 0, [-3, 0], 0, 0],
+		// Sans la garde, l'avance vers la case visitée serait refusée ensuite par la règle de stagnation : plan nul.
+		["AGGRESSIVE, 0 TP, advance cell (4,0) already visited by a stagnation exit: retreat kept, not a null plan", { profile: PROD, tp: 0,
+			stag: { count: 0, stillTurns: 0, passive: 0, engaged: false, record: 1, visited: [[4, 0]] } }, 0, [-3, 0], 0, 0],
+		["AGGRESSIVE, 0 TP, two enemies: kept", { profile: PROD, tp: 0, enemies: [base({}).enemies[0], second] }, 0, [-3, 0], 0, 0]
 	]) {
 		const r = run(M, base(change))
-		assert.deepEqual([r.plan.U, r.plan.dest, r.refused], [damage, damage ? [2, 0] : [-3, 0], refused], label)
+		assert.deepEqual([r.plan.U, r.plan.dest, r.refused, r.logs.filter((l) => l.startsWith(ADVANCED)).length],
+			[damage, destination, refused, advanced], label)
 	}
 })
 

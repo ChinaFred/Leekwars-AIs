@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -159,13 +159,56 @@ export function shieldCredit(protection: Protection, danger: number): number {
 export const RETREAT_RISK_FACTOR = 2
 
 /**
- * Poids du risque, commun au plan conjoint et au plan B : facteur de rôle × (1,5 − agressivité / 100), multiplié
- * par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `strategy.shouldHide` le demande (`distance` :
- * Manhattan à l'ennemi vivant le plus proche ; « trop près » dépend de `profile.preferredMinRange`).
+ * Posture du rôle configuré (`profile.strategyName`) : LE seul endroit où le rôle règle le plan conjoint, en plus des
+ * seuils de `Strategy/*.ts`. `BALANCED` est la référence (comportement d'avant la posture). Valeurs heuristiques, NON
+ * calibrées en combat.
+ * - `risk` : facteur de rôle du poids du risque `w` (voir `riskWeight`, commun au plan B).
+ * - `approach` : facteur de rôle du poids d'approche `a` (voir `posture`), appliqué à `G` et à `N` dans le score.
+ * - `passivityFloor` : plancher du facteur de passivité `p` (0 : le danger finit par ne plus peser).
+ * - `retreat` : recul sans dégâts en tête d'une recherche complète. `free` : jamais filtré ; `damage` : cède à un plan
+ *   à dégâts sous la marge ; `advance` : de plus, sans un tel plan, cède à une avance ou à une protection sur place.
+ * - `routeWeapon` : arme visée par le trajet futur. `first` : ordre de l'inventaire ; `damage` : meilleurs dégâts
+ *   moyens sur un tour ; `range` : plus longue portée max.
+ */
+export interface RolePosture {
+	risk: number
+	approach: number
+	passivityFloor: number
+	retreat: "free" | "damage" | "advance"
+	routeWeapon: "first" | "damage" | "range"
+}
+const BALANCED_POSTURE: RolePosture = { risk: 1, approach: 1, passivityFloor: 0, retreat: "damage", routeWeapon: "first" }
+const AGGRESSIVE_POSTURE: RolePosture = { risk: 0.5, approach: 1.25, passivityFloor: 0, retreat: "advance", routeWeapon: "damage" }
+const DEFENSIVE_POSTURE: RolePosture = { risk: 1.5, approach: 0.75, passivityFloor: 0.5, retreat: "free", routeWeapon: "range" }
+function rolePosture(profile: LeekProfile): RolePosture {
+	return profile.strategyName === "AGGRESSIVE" ? AGGRESSIVE_POSTURE :
+		profile.strategyName === "DEFENSIVE" ? DEFENSIVE_POSTURE : BALANCED_POSTURE
+}
+
+/** Plancher du poids d'approche `a` : même très prudent, un profil garde la moitié du progrès. Non calibré. */
+export const APPROACH_WEIGHT_MIN = 0.5
+
+/**
+ * Posture du profil pour le plan conjoint. `approach` y devient le poids d'approche `a` = facteur de rôle ×
+ * (0,5 + agressivité / 100), borné à [`APPROACH_WEIGHT_MIN`, `approachMax`]. L'appelant passe
+ * `approachMax` = 1 / `NEXT_TURN_WEIGHT` : le poids effectif de `N` ne dépasse jamais 1 (des dégâts remis au tour
+ * suivant ne valent jamais plus que ceux de ce tour). `BALANCED` à agressivité 50 : `a` = 1.
+ */
+export function posture(profile: LeekProfile, approachMax: number): RolePosture {
+	const role = rolePosture(profile)
+	return {
+		...role,
+		approach: Math.max(APPROACH_WEIGHT_MIN, Math.min(approachMax, role.approach * (0.5 + profile.aggression / 100)))
+	}
+}
+
+/**
+ * Poids du risque, commun au plan conjoint et au plan B : facteur de rôle (`RolePosture.risk`) × (1,5 − agressivité /
+ * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `strategy.shouldHide` le demande
+ * (`distance` : Manhattan à l'ennemi vivant le plus proche ; « trop près » dépend de `profile.preferredMinRange`).
  */
 export function riskWeight(profile: LeekProfile, strategy: LeekStrategy, lifeRatio: number, distance: number): number {
-	const weight = (profile.strategyName === "DEFENSIVE" ? 1.25 :
-		profile.strategyName === "AGGRESSIVE" ? 0.75 : 1) * (1.5 - profile.aggression / 100)
+	const weight = rolePosture(profile).risk * (1.5 - profile.aggression / 100)
 	return profile.allowHiding && strategy.shouldHide(lifeRatio, distance, profile.preferredMinRange)
 		? weight * RETREAT_RISK_FACTOR : weight
 }
