@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -291,8 +291,8 @@ export class EnemyMemory {
 	/**
 	 * Zone visée du tour (voir `buildTargetZone`) : toutes les cases que les ennemis de la carte de danger courante
 	 * peuvent toucher, atteignables par moi ou non. Calculée À LA DEMANDE (affichage), jamais stockée ni lue par le
-	 * planificateur ; reprend les cases de la carte de danger et partage son cache de ligne de vue. Null sans carte
-	 * de danger du tour.
+	 * planificateur ; reprend les cases de la carte de danger (telles quelles, case de tir comprise) et partage son
+	 * cache de ligne de vue. Null sans carte de danger du tour.
 	 */
 	computeTargetZone(me: Pick<Entity, "id" | "cell">): ThreatMap | null {
 		const known = this.threatMap
