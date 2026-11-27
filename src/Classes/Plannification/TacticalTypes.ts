@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 1
+// file version: 3
+import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
@@ -47,8 +48,8 @@ export interface TacticalPlan {
 	/** Terme `N` du score : valeur de la case finale pour le tour suivant (voir `NEXT_TURN_WEIGHT`) ; absent = 0. */
 	readonly nextTurn?: number
 	readonly progress?: number
-	readonly progressModel?: "future firing route" | "stagnation walk route"
-	/** Sortie de stagnation : tours sans progrès et distance de MARCHE (BFS) vers une zone de tir, avant/après. */
+	readonly progressModel?: "future firing route" | "stagnation walk route" | "stagnation approach"
+	/** Sortie de stagnation : tours sans progrès et distance de MARCHE (BFS) vers une zone de tir, avant/après (repli `approach` : Manhattan à la cible). */
 	readonly stagnation?: { readonly turns: number; readonly walkBefore: number; readonly walkAfter: number }
 	/** Distance dans le graphe courant vers une case de tir native, si connue. */
 	readonly firingDistance?: number
@@ -74,7 +75,7 @@ export const TACTICAL_LIMITS = {
  * combat 54939649, tours 4 et 5, la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147
  * alors que le planificateur complet choisissait une case sûre. Aucun coût réel mesuré : politique, pas borne moteur.
  */
-const SEARCH_FRACTION = 0.30
+const SEARCH_FRACTION = OPS_BUDGET.TACTICAL_SEARCH
 
 /** Compteurs de l'évaluation : puces écartées, et cause d'un plan nul sans progrès (sinon raison générique). */
 export interface Skipped { refused: number; noProgress: string | null }

@@ -2,14 +2,51 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 0be4b89 — chore(merge): fusion de Master (piège du coffre) dans la zone visée
+Compte Kassbi, publié le 2026-11-27T15:05:56Z.
+Combats : 12 — 10 victoires, 1 défaites, 1 nuls (83 % de victoires), 0 sans logs.
+Ops : pic maximal 77 % (combat 54995102), médiane des pics 49 %.
+Ressources : 147 tours joués, 76 sans aucune action payante (52 %), 67 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 64 % inutilisés sur 1493 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54994953 (63/64, nul), 54994276 (9/19, victoire), 54994980 (1/5, victoire), 54996965 (1/5, victoire), 54995131 (1/7, victoire).
+
+Défaites :
+- 54995102 : 4 tours · vs AntoineMouchamps · pic ops 77 %
+
+## 9737131 — chore(merge): fusion de Master (portée préférée supprimée)
+Compte Kassbi, publié le 2026-11-27T14:37:09Z.
+Stratégie : aucun changement de comportement en jeu.
+Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 39 % (combat 54993792), médiane des pics 38 %.
+Ressources : 12 tours joués, 1 sans aucune action payante (8 %), 32 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 30 % inutilisés sur 126 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54993794 (1/7, victoire), 54993792 (0/5, victoire).
+
+## d81e6a6 — chore(merge): fusion de Master (zone visée, posture par rôle)
+Compte Kassbi, publié le 2026-11-27T14:17:12Z.
+Stratégie : aucun changement de comportement (zone visée affichée au même moment).
+Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 39 % (combat 54992889), médiane des pics 39 %.
+Ressources : 18 tours joués, 5 sans aucune action payante (28 %), 53 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 55 % inutilisés sur 185 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54992889 (5/12, victoire), 54993249 (0/6, victoire).
+
+## 3cdee5d — chore(merge): fusion de Master (posture par rôle) dans la zone visée
+Compte Kassbi, publié le 2026-11-27T13:55:23Z.
+Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 38 % (combat 54992852), médiane des pics 37 %.
+Ressources : 18 tours joués, 3 sans aucune action payante (17 %), 67 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 35 % inutilisés sur 186 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54992852 (1/5, victoire), 54992730 (2/13, victoire).
+
 ## e70198f — refactor(tactique): plan conjoint découpé en six fichiers Tactical*
 Compte Kassbi, publié le 2026-11-27T13:17:27Z.
 Stratégie : aucun changement de comportement ; déplacement pur vers
-Combats : 1 — 1 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 36 % (combat 54991104), médiane des pics 36 %.
-Ressources : 10 tours joués, 1 sans aucune action payante (10 %), 22 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 43 % inutilisés sur 97 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54991104 (1/10, victoire).
+Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 45 % (combat 54991325), médiane des pics 40 %.
+Ressources : 14 tours joués, 1 sans aucune action payante (7 %), 24 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 42 % inutilisés sur 136 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54991104 (1/10, victoire), 54991325 (0/4, victoire).
 
 ## 4563ada — fix(tactique): repli sans tir remplacé seulement par un plan à dégâts
 Compte Kassbi, publié le 2026-11-27T08:44:53Z.
@@ -23,73 +60,3 @@ Combats les plus gaspilleurs (tours sans action payante) : 54990964 (6/12, défa
 Défaites :
 - 54981768 : 11 tours · vs Poireaufesseur · pic ops 13 %
 - 54990964 : 12 tours · vs TheCésar · pic ops 62 %
-
-## 9fa57c2 — fix(tactique): tour condamné sans boost crédité, kill prioritaire
-Compte Kassbi, publié le 2026-11-26T21:51:51Z.
-Stratégie : tour condamné = seuil létal atteint sur la case de moindre danger avec chaque protection candidate ; alors une cible tuée (dégâts moyens ≥ ses PV) passe avant le score et le crédit futur F des boosts vaut 0 avec ou sans tir (avant : F jusqu'à 0,75 × PV de la cible). Soin, protection et case finale inchangés ; hors tour condamné, aucun changement. Rejeux : 54969530 T10 cure + rock (31,2 attendus au lieu de 0), 54969527 T6 protein + rock (65,85 au lieu de 42,75), 54969622 T8 repli seul ; 54969530 T8 et 54969622 T7 identiques.
-Combats : 11 — 6 victoires, 5 défaites, 0 nuls (55 % de victoires), 0 sans logs.
-Ops : pic maximal 88 % (combat 54979777), médiane des pics 43 %.
-Ressources : 167 tours joués, 46 sans aucune action payante (28 %), 43 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 50 % inutilisés sur 1685 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54979777 (20/31, défaite), 54972471 (17/55, victoire), 54972543 (2/8, victoire), 54976625 (2/9, défaite), 54974628 (2/10, défaite).
-
-Défaites :
-- 54972647 : 7 tours · vs PoisRond · pic ops 42 %
-- 54972715 : 15 tours · vs Massko · pic ops 48 %
-- 54974628 : 11 tours · vs Poireaufesseur · pic ops 43 %
-- 54976625 : 10 tours · vs Albertus · pic ops 72 %
-- 54979777 : 35 tours · vs Destan · pic ops 88 %
-
-## 28942a4 — chore(merge): Master (boost d'agilité, tag du workflow) dans la branche
-Compte Kassbi, publié le 2026-11-26T21:15:47Z.
-Combats : 28 — 24 victoires, 3 défaites, 1 nuls (86 % de victoires), 0 sans logs.
-Ops : pic maximal 67 % (combat 54969294), médiane des pics 29 %.
-Ressources : 308 tours joués, 54 sans aucune action payante (18 %), 49 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 46 % inutilisés sur 3116 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54969550 (22/53, victoire), 54969537 (3/10, victoire), 54969301 (2/8, victoire), 54969533 (2/8, victoire), 54969622 (2/8, défaite).
-
-Défaites :
-- 54969527 : 6 tours · vs Yanolo · pic ops 37 %
-- 54969530 : 10 tours · vs Mivaugue · pic ops 63 %
-- 54969622 : 8 tours · vs LeekMyVegetable · pic ops 48 %
-
-## 09838c1 — fix(tactique): historique des actions dans un fichier existant
-Compte Kassbi, publié le 2026-11-26T17:36:51Z.
-Stratégie : aucun changement de comportement par rapport à f418b84 (passivité tirée des dégâts mesurés de mes actions, poids du risque 1 / 0,5 / 0 à 2 / 3 / 4 tours passifs, marge de 0,75 x (PV + soin) à poids réduit, ligne [History] en fin de tour) ; seul l'emplacement du code change.
-Combats : 1 — 1 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 44 % (combat 54965081), médiane des pics 44 %.
-Ressources : 7 tours joués, 0 sans aucune action payante (0 %), 31 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 40 % inutilisés sur 73 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54965081 (0/7, victoire).
-
-## b7c7b61 — refactor(plan): createStrategy dans LeekProfile.ts, sans nouveau fichier
-Compte Kassbi, publié le 2026-11-26T10:44:25Z.
-Stratégie : aucun changement de comportement.
-Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
-Ops : pic maximal 39 % (combat 54953080), médiane des pics 39 %.
-Ressources : 64 tours joués, 6 sans aucune action payante (9 %), 46 % des PM inutilisés, 0 tours interrompus ou en erreur.
-Combats les plus gaspilleurs (tours sans action payante) : 54953080 (6/64, nul).
-
-## unknown-version — version inconnue
-Combats : 128 — 92 victoires, 23 défaites, 13 nuls (72 % de victoires), 0 sans logs.
-Ops : pic maximal 98 % (combat 54942202), médiane des pics 43 %.
-Ressources : 1787 tours joués, 751 sans aucune action payante (42 %), 57 % des PM inutilisés, 11 tours interrompus ou en erreur.
-Combats les plus gaspilleurs (tours sans action payante) : 54941300 (11/12, défaite), 54931868 (5/7, victoire), 54941022 (42/64, nul), 54941210 (42/64, nul), 54941603 (42/64, nul).
-
-Défaites :
-- 54932341 : 11 tours · vs EnSahWolf · pic ops 62 %
-- 54932503 : 8 tours · vs SK8 · pic ops 40 %
-- 54933977 : 16 tours · vs Opex · pic ops 85 %
-- 54941018 : 11 tours · vs MimiRigonne · pic ops 56 %
-- 54941056 : 6 tours · vs Nanméoui · pic ops 74 %
-- 54941300 : 13 tours · vs OneJus · pic ops 72 %
-- 54941308 : 11 tours · vs Coyotte · pic ops 77 %
-- 54942202 : 7 tours · vs Shangrill · pic ops 98 %
-- 54944549 : 45 tours · vs CousinOignon · pic ops 65 %
-- 54944699 : 25 tours · vs PrototypeA04 · pic ops 71 %
-- 54944700 : 18 tours · vs KrazyKlick · pic ops 44 %
-- 54944834 : 11 tours · vs Sanguinaire67 · pic ops 26 %
-- 54944844 : 23 tours · vs gryka · pic ops 38 %
-- 54946689 : 21 tours · vs Poireaufesseur · pic ops 24 %
-- 54946723 : 9 tours · vs Sanguinaire67 · pic ops 33 %
-- … et 8 plus anciennes.

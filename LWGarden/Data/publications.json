@@ -1,24 +1,5 @@
 [
  {
-  "id": "4563ada",
-  "account": "Kassbi",
-  "published_at": 1795769093,
-  "published_at_iso": "2026-11-27T08:44:53Z",
-  "commit": "4563adafba526a4bb09d35f4b0d6769c7a42db4a",
-  "committed_at": 1795768737,
-  "subject": "fix(tactique): repli sans tir remplacé seulement par un plan à dégâts",
-  "message": "fix(tactique): repli sans tir remplacé seulement par un plan à dégâts\n\nPourquoi : dans 44795b5, 86 % des replis refusés étaient remplacés par un pas de côté ou une avance sans tir ; en duel simulé (10 tours, ennemi immobile) ils exposaient plus (+19 % et +24 % de danger avant le premier dégât) sans l'avancer, seuls les remplaçants à dégâts étant bénéfiques (100 duels sur 100 plus tôt).\nStratégie: le repli sans dégâts en tête ne cède plus qu'au meilleur plan qui inflige des dégâts (U > 0) sous 0,75 × (PV + soin), marge levée si le plan tue le dernier ennemi ; avance, pas de côté, protection seule ou boost seul ne le remplacent plus (avant : tout plan qui « agit »). Exclusions inchangées : seuil de repli du rôle, tour condamné, plusieurs ennemis, recherche interrompue ; repli avec soin ou bouclier utile libre. Rejeux : 54976625 T3-T4, 54969622 T3, 54974628 T3 gardent 3 sparks ; 54969622 T2 (spark absorbé) redevient le repli.\nTests: npm test (724/724), npm run typecheck, npm run docs:check ; campagne aléatoire production : 130 décisions modifiées, 0 plan nul, 0 tour vide, 0 fin létale nouvelle ; duel simulé : premier dégât plus tôt 150/150. Opérations non mesurées.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bWZxAW5GwRAGbU2w1",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 1,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "e70198f",
   "account": "Kassbi",
   "published_at": 1795785447,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 5,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "f01d6d4",
+  "account": "Kassbi",
+  "published_at": 1795805871,
+  "published_at_iso": "2026-11-27T18:57:51Z",
+  "commit": "f01d6d405760a86fe43bbc918a34d802d26155a8",
+  "committed_at": 1795805811,
+  "subject": "fix(stagnation): recherche de route à plafond progressif et repli",
+  "message": "fix(stagnation): recherche de route à plafond progressif et repli\n\nStratégie: la sortie de stagnation n'abandonnait plus la route à chaque tour sur un plafond fixe de 2 % des opérations (combat 54994953 : 63 tours à 0 PM). Plafond avant/après : 2 % fixes -> 4 % x (tours bloqués - 1 + 1), borné à 30 % et à 80 % du budget du tour ; si la recherche s'arrête, avance vers la case atteignable la plus proche (mêmes règles de danger). Fractions d'opérations regroupées dans src/Toolbox/Budgets.ts (OPS_BUDGET), sans changement de valeur hors stagnation.\nTests: npm test, npm run typecheck (tests/stagnation-route-allowance.test.mjs : échoue sans le correctif).\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cr7yHgS5mcTRkpiXU",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 7,
    "deleted_files": 0,
    "deleted_folders": 0
   }

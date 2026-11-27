@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 15
+// file version: 16
+import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
@@ -28,7 +29,7 @@ function phase(me: Me, name: string, details: () => unknown): void {
 /** Bornes de travail, PAS des mesures d'ops. Pas de produit départ/tir/destination. */
 export const RESERVE_LIMITS = { enemies: 4, weapons: 4, chips: 8, cells: 500, nativeCells: 613, lateCells: 8 } as const
 // Recherche seulement : l'exécution utilise la réserve globale, pas ce chronomètre.
-const SEARCH_FRACTION = 0.03
+const SEARCH_FRACTION = OPS_BUDGET.RESERVE_SEARCH
 
 interface Shot {
 	target: Entity
