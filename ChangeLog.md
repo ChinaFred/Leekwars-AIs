@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Code mort supprimé : `simpleActionSequence.ts`, `Computations.ts`, `Helpers.ts` et leurs tests (importés par aucune IA).
 - 2026-11-27 — Rangement : `castMpBoost` dans `StrengthBoost.ts`, attribution des coffres par la constante `NEVER_ATTRIBUTE_DAMAGE` ; aucun changement de comportement.
 - 2026-11-27 — Tour robuste : préambule et historique protégés à part, ennemis vivants lus une fois par observation (5 → 1 appel), `Kassbi_test` joue avec le contexte de `Kassbi_Class`.
 - 2026-11-27 — Observation du tour sortie du point d'entrée : `src/Brain/TurnObservation.ts` (mémoires, cartes, stagnation) ; `Kassbi_Class.ts` 332 → 122 lignes, aucun changement de comportement.

@@ -2,16 +2,6 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { DangerInfo } from "../dist/Classes/Context/DangerInfo.js"
-import { copyArray } from "../dist/Toolbox/Helpers.js"
-
-test("copyArray returns a shallow copy", () => {
-	const item = { id: 1 }
-	const original = [item]
-	const copy = copyArray(original)
-
-	assert.notEqual(copy, original)
-	assert.equal(copy[0], item)
-})
 
 test("DangerInfo preserves defaults and adds only weights", () => {
 	const first = new DangerInfo(4, 12, 3, 5, 2)

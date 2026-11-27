@@ -31,7 +31,7 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 | `src/Classes/Items/` | Armes, puces et effets |
 | `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations, séquence historique |
 | `src/Classes/Strategy/` | Seuils par rôle (`Aggressive`, `Balanced`, `Defensive`) et comportements de déplacement |
-| `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, utilitaires |
+| `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, rapports d'erreur et mesure d'opérations, paroles |
 | `src/Tests/` | Scripts de test exécutés dans le jeu |
 | `tests/` | Tests Node (`*.test.mjs`) sur des mondes simulés ; ils importent `dist/` |
 | `types/` | `leekwars.d.ts` : sous-ensemble local de l'API du jeu |

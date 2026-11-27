@@ -25,22 +25,7 @@ globalThis.Fight = {
 
 const constants = await import("../dist/Toolbox/Constants.js")
 const debug = await import("../dist/Toolbox/Debug.js")
-const computations = await import("../dist/Toolbox/Computations.js")
 const speeches = await import("../dist/Toolbox/Speeches.js")
-
-test("combat computations retain damage, shield, and field-boundary rules", () => {
-	const actor = { strength: 100 }
-	const target = { agility: 50, absoluteShield: 2, relativeShield: 20 }
-	const gear = {
-		features: [{ type: 1, minValue: 4, maxValue: 8 }]
-	}
-
-	assert.equal(computations.getDamagesFromEffect(gear.features), 10)
-	assert.equal(computations.computePossibleDealtDamages(actor, target, gear), 13)
-	assert.equal(computations.getAbsoluteShield(target), 2)
-	assert.equal(computations.isInsideWorld(17, 0), true)
-	assert.equal(computations.isInsideWorld(17, 1), false)
-})
 
 test("debug helpers report operation use and preserve debug color constants", () => {
 	assert.equal(constants.COLORS.DEBUG, colors.at(-1))
