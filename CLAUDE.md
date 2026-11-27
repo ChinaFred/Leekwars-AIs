@@ -53,7 +53,7 @@ Choisis le plus petit circuit qui couvre la demande.
 ## Sécurité
 
 - N'expose jamais de mot de passe, jeton ou secret. N'ouvre pas `LWGarden/src/config.json`.
-- Commit et push sur ta branche de session (`claude/*`) : permis dès que `npm run typecheck` et `npm test` passent.
+- Commit et push sur n'importe quelle branche : permis dès que `npm run typecheck` et `npm test` passent.
   Fusion dans `Master` et PUSH Garden : seulement sur demande explicite.
 - Déploiement sur Leek Wars : seulement quand l'utilisateur valide une version ou demande « déploie sur leek »,
   par le workflow « Déploiement Leek Wars » qui pose le tag `leek-*` (skill `deploie-leek`), jamais à chaque push.
