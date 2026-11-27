@@ -1,12 +1,12 @@
 // @version:5.8
-// file version: 6
+// file version: 8
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
 import { BoostItem, Buff, Catalog, SupportItem } from "./BookCatalog.js"
 import { EnemyMover } from "./BookEnemyModel.js"
 import { BookObjective, TurnOutcome } from "./BookObjective.js"
 import { STANDOFF_NEVER_EXPOSED } from "./BookStandoff.js"
-import { Boost, Combo, EMPTY_COMBO, Shield, shapeOf } from "./CombatBook.js"
+import { Boost, CombatTable, Combo, EMPTY_COMBO, SHAPE, Shield, shapeOf } from "./CombatBook.js"
 import { KILL_MARGIN, LETHAL_PENALTY } from "./TacticalScore.js"
 
 /**
@@ -27,6 +27,12 @@ export const REFINE_KEEP = 12
 export const DAMAGE_TAKEN_FRACTION = 0.5
 /** Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus : le tour 2 calcule aussi ses cases atteignables. */
 export const NODE_COST_MARGIN = 2
+/**
+ * Crédit d'un boost de force posé SANS tir (voir `idleBoostCredit`) : part des dégâts supplémentaires du boost sur les tours
+ * où il sert, à 0,75 comme les autres crédits de tours futurs (`FUTURE_TURN_WEIGHT`). Durées relevées dans fight.json : protein 2
+ * tours, motivation 3 (le tour du lancer compte pour 1 ; l'effet est retiré au début de mon tour suivant la durée).
+ */
+export const IDLE_BOOST_SHOT_WEIGHT = 0.75
 /** Multiplicateur d'un coup critique (CRITICAL_FACTOR officiel = 1,3), chance = agilité / 1000. */
 const CRITICAL_FACTOR = 1.3
 
@@ -105,6 +111,8 @@ export interface Plan {
 	readonly critical: number
 	/** Plus petite distance d'ennemi depuis ma case de départ (pour le progrès). */
 	readonly startDistance: number
+	/** Crédit d'un boost de force sans tir de cette variante (0 sinon) ; compté seulement si aucun tour suivant n'est simulé. */
+	readonly idleCredit: number
 }
 
 export interface TurnStep {
@@ -126,6 +134,8 @@ export interface TurnStep {
 	/** Limite létale appliquée (PV + soin, × acceptation du duel) : pour le journal. */
 	readonly limit: number
 	readonly score: number
+	/** Crédit d'un boost de force posé sans tir : ajouté au score du faisceau seulement s'il reste à un tour (voir `runBeam`). */
+	readonly idleCredit: number
 	/** Clé de distinction : actions et cases. */
 	readonly key: string
 	/** Clé des seules actions (items, boosts, soins, cible) : sert à la diversité du faisceau et au regroupement. */
@@ -255,7 +265,7 @@ function stepOf(env: BeamEnv, p: Plan): TurnStep {
 	return {
 		target: p.target, shotCell: p.shotCell, finalCell: p.finalCell, beforeMp: p.beforeMp, afterMp: p.afterMp, combo: p.combo, net: p.net,
 		boosts: variant.boosts, supports: p.supports, tpGain: variant.tpGain, tpUsed, danger, outcome, lethal, limit, score,
-		key: `${p.finalCell.id}:${p.shotCell.id}:${group}`, group, plan: p
+		idleCredit: p.combo.items.length === 0 ? p.idleCredit : 0, key: `${p.finalCell.id}:${p.shotCell.id}:${group}`, group, plan: p
 	}
 }
 
@@ -383,7 +393,7 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 	const startNearest = nearestAlive(state.enemies, state.cell)!
 	const shieldOf = (enemy: SimEnemy): Shield => ({ relative: enemy.enemy.relativeShield || 0, absolute: enemy.enemy.absoluteShield || 0 })
 	// Une résolution par (variante de boost, cible), pas par case : table à lire et facteurs (`CombatBook.resolveBoost`).
-	const prepared = variants.map((variant, variantIdx) => {
+	const preparedBase = variants.map((variant, variantIdx) => {
 		let agility = catalog.base.agility
 		const boosts: Boost[] = []
 		for (const buff of [...state.buffs, ...variant.buffs]) {
@@ -395,7 +405,18 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 			resolved: alive.map((enemy) => book.resolveBoost(stats, boosts, 0, shieldOf(enemy)))
 		}
 	})
+	const prepared = preparedBase.map((entry) => ({ ...entry, idle: 0 }))
 	const query = { distance: 0, los: false, shape: 0, tp: 0, mask, held: state.held }
+	// Crédit d'un boost de force sans tir, au tour 1 seulement (les tours simulés valent les boosts pour de vrai).
+	const nearestNow = nearestAlive(state.enemies, state.cell)!
+	const nearestIdx = alive.indexOf(nearestNow.enemy)
+	const idleOf = (index: number): number => {
+		const pv = prepared[index]!
+		const boost = pv.variant.boosts.find((candidate) => candidate.stat === "strength")
+		if (k !== 0 || boost === undefined) return 0
+		return idleBoostCredit(env, nearestNow.distance, nearestNow.enemy, boost.turns, prepared[0]!, pv, nearestIdx, mask, state.held)
+	}
+	prepared.forEach((entry, index) => { entry.idle = idleOf(index) })
 	const readAt = (plan: Plan, tp: number): { combo: Combo; net: number } => {
 		const enemy = plan.target!
 		const dx = plan.shotCell.x - enemy.cell.x
@@ -436,7 +457,7 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 				sink.push(stepOf(env, {
 					state, k, target: combo.items.length > 0 ? enemy : null, enemyIdx, variantIdx: pv.variantIdx, shotCell: cell, finalCell: cell,
 					beforeMp: entry.cost, afterMp: 0, combo, net, variant: pv.variant, supports: [], critical: pv.critical,
-					startDistance: startNearest.distance
+					startDistance: startNearest.distance, idleCredit: pv.idle
 				}))
 			}
 		}
@@ -469,6 +490,34 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 		const support = bestSupport(env, state, k, best, readAt)
 		if (support !== null) sink.push(support)
 	}
+}
+
+/**
+ * Crédit d'un boost de force posé sans tir. Un boost compte pour de vrai quand le tour suivant est simulé ; sinon (niveau 2
+ * non ouvert) un plan « boost seul » vaudrait le plan vide. Contact estimé : l'ennemi avance de ses PM et moi des miens, le
+ * premier tir est possible au tour `s` = max(1, ⌈(distance − mes PM − portée max) / (mes PM + ses PM)⌉) ; le boost de durée `d`
+ * (le tour du lancer compte pour 1) couvre `d − s` tours de tir. Crédit = `IDLE_BOOST_SHOT_WEIGHT` × `d − s` × gain de dégâts
+ * du meilleur tour de tir avec ce boost (au meilleur éloignement, tous mes PT, plafonné aux PV de la cible). 0 si `d − s` ≤ 0.
+ */
+function idleBoostCredit(
+	env: BeamEnv, distance: number, target: SimEnemy, duration: number,
+	plain: { resolved: ReadonlyArray<{ table: CombatTable; netFactor: number }>; critical: number },
+	boosted: { resolved: ReadonlyArray<{ table: CombatTable; netFactor: number }>; critical: number },
+	enemyIdx: number, mask: number, held: number
+): number {
+	const book = env.catalog.book
+	const contact = Math.max(1, Math.ceil((distance - env.mp - book.maxDistance) / (env.mp + target.enemy.mp)))
+	const covered = duration - contact
+	if (covered <= 0) return 0
+	let gain = 0
+	for (let d = 1; d <= book.maxDistance; d++) {
+		const query = { distance: d, los: true, shape: SHAPE.LINE, tp: env.catalog.base.tp, mask, held }
+		const a = plain.resolved[enemyIdx]!
+		const b = boosted.resolved[enemyIdx]!
+		env.budget.tick(1)
+		gain = Math.max(gain, b.table.read(query).total * b.netFactor * boosted.critical - a.table.read(query).total * a.netFactor * plain.critical)
+	}
+	return IDLE_BOOST_SHOT_WEIGHT * covered * Math.min(gain, target.life)
 }
 
 function nextState(env: BeamEnv, state: SimState, step: TurnStep): SimState {
@@ -561,6 +610,10 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 		reached = k + 1
 		nodeOps = (env.budget.ops() - startOps) / nodes.length
 	}
+	// Un seul tour simulé : le boost posé sans tir n'a pas de tour suivant où payer, son crédit estimé le remplace. Seulement
+	// s'il n'y a aucun tir non létal ce tour-ci : un boost seul ne doit jamais l'emporter sur un tir (combat 55005891, tour 2).
+	const shootable = beam.some((node) => node.steps[0] !== undefined && node.steps[0].outcome.damage > 0 && !node.steps[0].lethal)
+	if (reached === 1 && !shootable) beam = selectNodes(beam.map((node) => ({ ...node, score: node.score + (TURN_WEIGHTS[0] ?? 1) * (node.steps[0]?.idleCredit ?? 0) })), width)
 	return { best: reached > 0 ? beam[0] ?? null : null, beam: reached > 0 ? beam : [], depth: reached, cut, skipped }
 }
 

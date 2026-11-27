@@ -198,3 +198,65 @@ test("work units of the beam by width and depth (counted iterations, not game op
 	const w = world({ chips: [rock(), protein(2), cure()] })
 	assert.ok(planBeam(w.me, w.context, w.profile, { width: 5, deepen: true, depth: 3 }).work < 500000)
 })
+
+// --- boost de force posé sans tir (faille B) -------------------------------------------------------------------------------------
+const sparkChip = () => chip(20, "spark", 3, 0, [feature(1, 12, 12)], { maxRange: 10 })
+
+test("idle boost: far from the enemy (17), a strength boost is cast when it covers the first expected shot", async () => {
+	const { IDLE_BOOST_SHOT_WEIGHT } = await import("../dist/Classes/Plannification/BookBeam.js")
+	assert.equal(IDLE_BOOST_SHOT_WEIGHT, 0.75)
+	// Distance 17, spark portée 10, mes PM 5, ceux de l'ennemi 3 : premier tir au tour 1 (17 - 5 - 3 - 5 = 4 <= 10) ; protein dure 2 tours
+	// (le tour du lancer compte pour 1) : il couvre ce tir.
+	const w = world({ me: [2, 5], mp: 5, enemies: [[19, 5, 1000]], chips: [protein(2), sparkChip()] })
+	const run = planBeam(w.me, w.context, w.profile, { depth: 1 })
+	const step = run.result.best.steps[0]
+	assert.deepEqual(step.boosts.map((b) => b.chip.name), ["protein"], "the boost is cast although nothing can be shot this turn")
+	assert.equal(step.combo.items.length, 0)
+	assert.ok(step.idleCredit > 0)
+	assert.equal(run.result.depth, 1)
+})
+
+test("idle boost: no credit when the effect ends before the first shot, or when the contact is too far", () => {
+	for (const [label, turns, enemy] of [["effect of one turn", 1, [19, 5, 1000]], ["contact too late", 2, [24, 10, 1000]]]) {
+		const w = world({ me: [0, 0], mp: 5, enemies: [enemy], chips: [protein(turns), sparkChip()] })
+		const step = planBeam(w.me, w.context, w.profile, { depth: 1 }).result.best.steps[0]
+		assert.deepEqual(step.boosts, [], label)
+		assert.equal(step.idleCredit, 0, label)
+	}
+})
+
+test("idle boost: with the next turn simulated (depth 2) the credit is not added a second time", () => {
+	const w = world({ me: [2, 5], mp: 5, enemies: [[19, 5, 1000]], chips: [protein(2), sparkChip()] })
+	const one = planBeam(w.me, w.context, w.profile, { depth: 1 }).result.best
+	const w2 = world({ me: [2, 5], mp: 5, enemies: [[19, 5, 1000]], chips: [protein(2), sparkChip()] })
+	const two = planBeam(w2.me, w2.context, w2.profile, { depth: 2, deepen: true }).result
+	assert.equal(two.depth, 2)
+	assert.ok(two.best.score < one.score * 3, "level-2 scores are real simulated damage, not the sum of the estimate")
+})
+
+test("idle boost: no credit when a non-lethal shot exists this turn, even a bad one (a boost alone never beats a shot, 55005891 turn 2)", () => {
+	// Distance 15, spark portée 10, PM 5 : seul tirer depuis la case 7 est possible, dans une zone de danger 100 (non létal, score -11,6).
+	// Sans la garde « aucun tir », le plan « protein seul » reçoit 0,75 x gain (+19,8) et passe devant le repos ; avec elle, aucun score n'est majoré.
+	const w = world({ me: [2, 5], mp: 5, enemies: [[17, 5, 1000]], chips: [protein(2), sparkChip()], danger: (c) => (Math.abs(c.x - 17) + Math.abs(c.y - 5) <= 10 ? 100 : 0) })
+	const { beam, depth } = planBeam(w.me, w.context, w.profile, { depth: 1 }).result
+	assert.equal(depth, 1)
+	assert.ok(beam.some((node) => node.steps[0].outcome.damage > 0 && !node.steps[0].lethal), "a non-lethal shot is in the beam")
+	assert.ok(beam.some((node) => node.steps[0].idleCredit > 0), "the credit exists but is not applied")
+	for (const node of beam) assert.equal(node.score, node.steps[0].score, "no idle credit added")
+})
+
+test("boost durations in the archived fight 55005067: protein lasts 2 turns, motivation 3, removed at the start of my turn that follows", async () => {
+	const { readFileSync } = await import("node:fs")
+	const f = JSON.parse(readFileSync(new URL("../LWGarden/Data/fights/55005067/fight.json", import.meta.url), "utf8"))
+	const added = new Map(), removed = []
+	let turn = 0, entity = null
+	for (const a of f.data.actions) {
+		if (a[0] === 6) turn = a[1]
+		else if (a[0] === 7) entity = a[1]
+		else if (a[0] === 302 && entity === 0 && (a[5] === 38 || a[5] === 32) && a[3] === 0) added.set(a[2], { type: a[5], turns: a[7], turn })
+		else if (a[0] === 303 && added.has(a[1])) removed.push({ ...added.get(a[1]), removedTurn: turn, removedBy: entity })
+	}
+	const protein = removed.filter((r) => r.type === 38)
+	assert.ok(protein.length >= 2)
+	for (const r of protein) { assert.equal(r.turns, 2); assert.equal(r.removedTurn - r.turn, 2); assert.equal(r.removedBy, 0, "removed in my own turn section") }
+})

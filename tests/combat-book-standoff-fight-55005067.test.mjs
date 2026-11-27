@@ -333,17 +333,17 @@ test("archived fights: the duel counter stays silent on won fights (one window a
 		const foes = f.data.leeks.filter((l) => l.team !== me.team)
 		const life = new Map(f.data.leeks.map((l) => [l.id, l.life])), max = new Map(life)
 		const tracker = new StandoffTracker()
-		let turn = 0, dealt = 0, active = 0, started = false
+		let turn = 0, dealt = 0, active = 0, started = false, firstTurn = null
 		for (const a of f.data.actions) {
 			if (a[0] === 6) turn = a[1]
 			else if (a[0] === 7 && a[1] === me.id) {
 				tracker.observe(turn || 1, life.get(me.id), foes.map((l) => ({ life: life.get(l.id), maxLife: max.get(l.id) })), started ? dealt : 0)
-				if (tracker.active) active++
+				if (tracker.active) { active++; firstTurn ??= turn || 1 }
 				started = true; dealt = 0
 			} else if (a[0] === 101) { life.set(a[1], life.get(a[1]) - a[2]); if (foes.some((l) => l.id === a[1])) dealt += a[2] }
 			else if (a[0] === 103) life.set(a[1], Math.min(max.get(a[1]), life.get(a[1]) + a[2]))
 		}
-		return { active, won: f.winner === me.team }
+		return { active, firstTurn, won: f.winner === me.team }
 	}
 	const won = [54992730, 54992852, 54992889, 54993249, 54993792, 54993794, 54994276, 54994900, 54994980, 54995032, 54995061, 54995131,
 		54995196, 54995840, 54996965, 54997175]
@@ -388,4 +388,35 @@ test("step 3 wiring: the beam gets 30 % of the operations in an AGGRESSIVE duel,
 	assert.equal(fraction("AGGRESSIVE", undefined), 0.25)
 	assert.equal(fraction("AGGRESSIVE", new StandoffTracker()), 0.25, "no duel noticed yet")
 	assert.equal(fraction("DEFENSIVE", duel(6)), 0.25, "DEFENSIVE ignores the duel")
+})
+
+test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9, then most turns; 55005897 (won in 14 turns) never", async () => {
+	// Même rejeu que ci-dessus. Fixe le tour de déclenchement : à PV adverses de début de tour et dégâts du tour précédent, la
+	// fenêtre de 6 tours est pleine au tour 6 mais les dégâts bruts n'atteignent 15 % des PV max qu'à partir du tour 9.
+	const { readFileSync } = await import("node:fs")
+	const replayDuel = (id) => {
+		const f = JSON.parse(readFileSync(new URL(`../LWGarden/Data/fights/${id}/fight.json`, import.meta.url), "utf8"))
+		const me = f.data.leeks.find((l) => l.farmer === 98285)
+		const foes = f.data.leeks.filter((l) => l.team !== me.team && l.type !== 3)
+		const life = new Map(f.data.leeks.map((l) => [l.id, l.life])), max = new Map(life)
+		const tracker = new StandoffTracker()
+		let turn = 0, dealt = 0, started = false
+		const activeTurns = []
+		for (const a of f.data.actions) {
+			if (a[0] === 6) turn = a[1]
+			else if (a[0] === 7 && a[1] === me.id) {
+				tracker.observe(turn || 1, life.get(me.id), foes.map((l) => ({ life: life.get(l.id), maxLife: max.get(l.id) })), started ? dealt : 0)
+				if (tracker.active) activeTurns.push(turn || 1)
+				started = true; dealt = 0
+			} else if (a[0] === 101) { life.set(a[1], life.get(a[1]) - a[2]); if (foes.some((l) => l.id === a[1])) dealt += a[2] }
+			else if (a[0] === 103) life.set(a[1], Math.min(max.get(a[1]), life.get(a[1]) + a[2]))
+		}
+		return { activeTurns, win: f.winner === me.team, turns: f.report.duration }
+	}
+	const draw = replayDuel(55005067)
+	assert.equal(draw.activeTurns[0], 9, "the counter fires at turn 9")
+	assert.ok(draw.activeTurns.length >= 40)
+	const won = replayDuel(55005897)
+	assert.equal(won.win, true)
+	assert.deepEqual(won.activeTurns, [], "no duel in a fight won without one")
 })
