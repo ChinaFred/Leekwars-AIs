@@ -342,6 +342,7 @@ async function playTurn(config, options) {
 	const lines = []
 	// `[History]` : le tour et la passivité viennent de l'état partagé du module (un tour de plus à chaque monde).
 	console.log = (...args) => lines.push(args.join(" ").replace(/#\d+/g, "#N").replace(/\be\d+\b/g, "eN")
+		.replace(/^\[Speech\] Leek life: ".*"$/, "[Speech] Leek life: N")
 		.replace(/"(target|id|awayFrom)":\d+/g, '"$1":N')
 		.replace(/^\[History\] T\d+ (.*) passive \d+ \|/, "[History] TN $1 passive N |"))
 	try {
@@ -386,7 +387,8 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 		assert.equal(lines[0], "\n=== KASSBI TURN START ===")
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
 		assert.equal(lines.at(-2), "=== KASSBI TURN END ===\n")
-		assert.equal(lines.at(-3), "[History] TN TP 4/10 MP 0/3 dealt 22 taken 0 passive N | machine_gun:1:22")
+		assert.equal(lines.at(-3), "[Speech] Leek life: N")
+		assert.equal(lines.at(-4), "[History] TN TP 4/10 MP 0/3 dealt 22 taken 0 passive N | machine_gun:1:22")
 		assert.ok(lines.some((line) => line.startsWith("[Tactical] plan before execution")))
 		assert.ok(lines.some((line) => line.startsWith("[Reachable] me:")))
 		assert.ok(lines.some((line) => line.startsWith("[Threat] ")))
