@@ -123,6 +123,8 @@ Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 30 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
 
+Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, 2 à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Aucun seuil ci-dessus n'en dépend.
+
 ## Plan B (`ReservePlan.ts`)
 
 Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou interrompu. **Pas un optimum.**
