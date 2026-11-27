@@ -10,7 +10,7 @@ globalThis.Fight = { turn: 1 }
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { planShots, toCandidate, sortByRatio, strengthBoostOf, tpBoostOf } = await import("../dist/Classes/Context/ShotPlan.js")
 const {
-	buildThreatMap, GeometricShotCells, MAX_SIGHT_CACHE, MAX_THREAT_BOOSTS, MAX_THREAT_WEAPONS
+	buildTargetZone, buildThreatMap, GeometricShotCells, MAX_SIGHT_CACHE, MAX_THREAT_BOOSTS, MAX_THREAT_WEAPONS
 } = await import("../dist/Classes/Context/ThreatMap.js")
 const { EnemyMemory } = await import("../dist/Classes/Context/EnemyMemory.js")
 
@@ -318,6 +318,33 @@ test("randomised equivalence (fixed seeds): the map equals a naive max over cell
 	assert.ok(multiEnemy > 50 && stationary > 50, `multi ${multiEnemy} stationary ${stationary}`)
 	// Objectif de l'optimisation : nettement moins d'appels canHit que la référence naïve.
 	assert.ok(actual < reference * 0.5, `canHit calls ${actual} vs naive ${reference}`)
+})
+
+test("target zone (fixed seeds): per cell and per enemy, the same damage as the exhaustive danger map over every free cell", () => {
+	let touched = 0
+	let zonePairs = 0
+	let exhaustivePairs = 0
+	for (let seed = 2000; seed < 2150; seed++) {
+		const sc = randomScenario(seed)
+		const inputs = sc.enemies.map((e) => ({ ...e.input, reachable: reach(e.ent, e.mp, sc.me.id) }))
+		const free = sc.grid.free()
+		const everywhere = { truncated: false, size: free.length, entries: () => free.map((cell) => ({ cell, cost: -1 })).values() }
+		const reference = buildThreatMap(sc.me, everywhere, inputs, 1, { maxPairs: Number.POSITIVE_INFINITY })
+		const zone = buildTargetZone(sc.me, inputs, 1)
+		assert.equal(zone.truncated, false, `seed ${seed}`)
+		for (const entry of reference.entries()) {
+			const where = `seed ${seed} cell ${entry.cell.x},${entry.cell.y}`
+			assert.equal(zone.dangerAt(entry.cell) ?? 0, entry.danger, where)
+			assert.deepEqual(zone.breakdownAt(entry.cell).map((threat) => [threat.enemyId, threat.damage]),
+				entry.breakdown.map((threat) => [threat.enemyId, threat.damage]), where)
+			if (entry.danger > 0) touched++
+		}
+		assert.equal(zone.size, [...reference.entries()].filter((entry) => entry.danger > 0).length, `seed ${seed}`)
+		zonePairs += zone.pairsEvaluated
+		exhaustivePairs += reference.pairsEvaluated
+	}
+	assert.ok(touched > 10000, `touched ${touched}`)
+	assert.ok(zonePairs * 4 < exhaustivePairs, `pairs ${zonePairs} vs ${exhaustivePairs}`)
 })
 
 test("without any boost the optimised map equals the naive one, shot cell and plan included", () => {

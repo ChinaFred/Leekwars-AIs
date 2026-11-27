@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
@@ -229,8 +229,8 @@ function displayDangerZone(): void {
 /**
  * Affichage visuel (contexte TARGET_ZONE) de la zone visée : toutes les cases que les ennemis peuvent toucher, que je
  * puisse les atteindre ou non. Calculée ici, à la demande, et jamais transmise à planAct : contexte inactif = aucun
- * calcul ; actif, son seul effet sur le plan est le nombre d'opérations déjà consommées (plafond
- * `TARGET_ZONE_OPERATIONS_FRACTION`, marques non comprises).
+ * calcul ; actif, son seul effet sur le plan est le nombre d'opérations déjà consommées (écrit dans le log
+ * `Target zone:` ; plafond `TARGET_ZONE_OPERATIONS_FRACTION`, marques non comprises).
  */
 function displayTargetZone(me: Me): void {
 	guarded("displayTargetZone", () => {

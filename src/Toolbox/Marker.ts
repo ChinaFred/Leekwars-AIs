@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 //
 // Sorties VISUELLES du terrain : seul module de `src/` autorisé à appeler `Debug.mark`, `Debug.markText`,
 // `Debug.clearMarks`, `Debug.pause` et `Debug.show` (voir tests/logging-policy.test.mjs). Le texte, lui,
@@ -223,10 +223,23 @@ export function showDangerZone(map: ThreatMap | null | undefined): void {
 /**
  * Zone visée (`buildTargetZone` : toutes les cases qu'un ennemi peut toucher, atteignables par moi ou non). Même
  * séquence et mêmes réglages (`MARKER_SETTINGS`) que `showDangerZone`, sous le contexte `TARGET_ZONE`, avec le log
- * `Target zone: <n> cells, max <x>`. Sans pause, son clearMarks initial efface les marques de la zone de danger.
+ * `Target zone: <n> cells, max <x> (<évaluées>/<candidates> candidates evaluated, <p> pairs, <l> LoS, <o> ops)` ;
+ * une zone coupée par un garde-fou l'écrit en tête de parenthèse : `(TRUNCATED: <évaluées>/<candidates> …)`.
+ * Sans pause, son clearMarks initial efface les marques de la zone de danger.
  */
 export function showTargetZone(map: ThreatMap | null | undefined): void {
 	showThreatZone(map, LOG_CONTEXT.TARGET_ZONE, "Target zone")
+}
+
+/** Suffixe du log d'une zone : bilan du calcul si la carte le porte (zone visée), sinon la seule mention de troncature. */
+function zoneDetail(map: ThreatMap): string {
+	const evaluated = map.evaluatedCells
+	if (evaluated === null || evaluated === undefined) {
+		return map.truncated ? " (truncated)" : ""
+	}
+	const operations = map.operations === null || map.operations === undefined ? "" : `, ${map.operations} ops`
+	return ` (${map.truncated ? "TRUNCATED: " : ""}${evaluated}/${map.candidateCells} candidates evaluated, ` +
+		`${map.pairsEvaluated} pairs, ${map.lineOfSightCalls} LoS${operations})`
 }
 
 function showThreatZone(map: ThreatMap | null | undefined, context: LogContext, label: string): void {
@@ -265,7 +278,7 @@ function showThreatZone(map: ThreatMap | null | undefined, context: LogContext, 
 		}
 
 		clearAllMarks(context)
-		log(() => `${label}: ${map.size} cells, max ${maxDanger.toFixed(1)}${map.truncated ? " (truncated)" : ""}`, context)
+		log(() => `${label}: ${map.size} cells, max ${maxDanger.toFixed(1)}${zoneDetail(map)}`, context)
 		tiers.forEach((cells, tier) => {
 			if (cells.length > 0) {
 				markCells(cells, () => rgb(DANGER_TIER_COLORS_RGB[tier] as readonly [number, number, number]), context)
