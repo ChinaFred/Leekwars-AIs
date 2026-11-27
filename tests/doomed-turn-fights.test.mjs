@@ -27,7 +27,16 @@ const FIGHTS = {
 	54969622: { enemyMp: 5, obstacles: { 14: 2, 40: 2, 62: 2, 64: 2, 70: 1, 77: 2, 88: 2, 90: 2, 96: 1, 102: 1, 104: 1,
 		114: 1, 139: 1, 148: 2, 157: 1, 170: 1, 172: 2, 188: 2, 211: 1, 218: 2, 228: 1, 242: 1, 250: 1, 259: 2, 263: 1, 264: 2,
 		278: 2, 283: 1, 285: 2, 327: 2, 350: 1, 351: 2, 365: 1, 379: 1, 388: 1, 420: 1, 421: 2, 433: 2, 442: 1, 454: 1, 465: 2,
-		479: 1, 486: 1, 487: 1, 488: 2, 494: 2, 504: 2, 510: 1, 520: 1, 527: 2, 550: 1, 567: 1, 585: 1, 600: 1, 606: 1 } }
+		479: 1, 486: 1, 487: 1, 488: 2, 494: 2, 504: 2, 510: 1, 520: 1, 527: 2, 550: 1, 567: 1, 585: 1, 600: 1, 606: 1 } },
+	54976625: { enemyMp: 4, obstacles: { 7: 2, 19: 2, 33: 1, 43: 1, 57: 2, 62: 2, 72: 1, 90: 2, 99: 2, 101: 1, 104: 1, 115: 1,
+		155: 1, 161: 2, 167: 2, 172: 1, 208: 1, 209: 2, 215: 1, 220: 1, 231: 2, 240: 2, 261: 2, 265: 1, 288: 2, 309: 1, 312: 1,
+		326: 2, 339: 2, 342: 2, 375: 1, 394: 1, 399: 1, 405: 2, 429: 2, 466: 1, 475: 1, 480: 1, 495: 2, 504: 2, 510: 2, 536: 2,
+		544: 1, 556: 1, 579: 1, 584: 1, 604: 1, 608: 1, 610: 1 } },
+	54974628: { enemyMp: 4, obstacles: { 2: 2, 30: 1, 44: 2, 49: 2, 64: 2, 69: 2, 80: 2, 88: 1, 89: 2, 113: 1, 114: 1, 131: 2,
+		134: 1, 150: 1, 153: 1, 165: 2, 203: 1, 204: 1, 214: 2, 225: 2, 230: 1, 239: 2, 244: 1, 254: 1, 264: 2, 266: 2, 269: 2,
+		272: 1, 289: 2, 293: 1, 296: 1, 314: 2, 319: 1, 323: 1, 326: 2, 330: 1, 339: 1, 355: 1, 357: 2, 379: 2, 380: 1, 388: 1,
+		399: 1, 400: 1, 401: 2, 432: 1, 434: 1, 446: 2, 449: 1, 451: 1, 456: 2, 462: 1, 468: 1, 492: 2, 501: 1, 515: 1, 538: 2,
+		549: 1, 558: 1, 567: 1, 570: 1, 576: 1, 585: 1, 590: 1, 595: 1, 605: 1 } }
 }
 
 // État au début du tour de Kassbi. `cooldowns` : puces pas prêtes ; `shield` : bouclier absolu de l'ennemi (helmet) ;
@@ -47,6 +56,34 @@ const TURNS = {
 	"54969622:8": { me: 193, life: 77, maxLife: 358, enemy: 287, enemyLife: 171, shield: 0, cooldowns: { cure: 1, helmet: 2 },
 		danger: { 144: [140, 175, 210], 162: [158, 193], 210: [141, 176, 246], 222: [159, 177, 194, 195, 212, 213, 229, 230, 247],
 			325.5: [124, 142, 143, 160, 178, 248] } }
+}
+
+// Tours « recul sans tir » (mêmes relevés ; `boost` : force de mon protein lancé au tour précédent, dernier tour de
+// l'effet ; `relative` : bouclier relatif adverse). 54969527:5 : « tir puis recul », garde de non-régression.
+const RETREATS = {
+	"54969622:2": { me: 233, life: 375, maxLife: 375, enemy: 414, enemyLife: 175, shield: 15, cooldowns: {},
+		danger: { 0: [143, 161, 178, 196, 213, 231, 248, 266], 184: [145, 146, 147, 163, 164, 181, 182, 199, 200, 214, 217, 232,
+			249, 267, 284], 267: [144, 162, 179, 180, 197, 215], 330: [198, 233, 268], 416.6: [216, 234, 251, 252, 269, 270, 286,
+			287, 288, 304, 305, 321, 322, 323] } },
+	"54969622:3": { me: 161, life: 375, maxLife: 375, enemy: 359, enemyLife: 175, shield: 15, relative: 5, boost: 97,
+		cooldowns: { protein: 2 },
+		danger: { 0: [73, 74, 76, 141, 176, 246], 184: [91, 92, 93, 109, 110, 111, 124, 142, 159, 177, 194, 195, 212, 229, 230,
+			232, 247], 207: [127, 128, 160, 213, 248, 249], 267: [126], 269: [145, 146, 178, 214], 284: [163, 181, 196, 231],
+			330: [143, 144], 416.6: [161, 162, 179, 180, 197, 198, 215, 216, 233, 251] } },
+	"54976625:3": { me: 169, life: 381, maxLife: 381, enemy: 268, enemyLife: 395, shield: 0, boost: 81, cooldowns: { protein: 2 },
+		danger: { 0: [83, 118, 119, 136, 153, 154, 171, 188, 189, 206, 223, 224, 241, 259], 130: [82, 100, 133, 135, 150, 151,
+			152, 168, 169, 170, 186, 187, 203, 204, 205, 221, 222, 239], 189: [238, 256], 191: [255], 320.4: [114, 132, 149] } },
+	"54976625:4": { me: 223, life: 381, maxLife: 381, enemy: 252, enemyLife: 395, shield: 0, cooldowns: { protein: 1 },
+		danger: { 0: [137, 173, 190, 207, 225, 242, 243, 260, 277, 295, 313], 130: [135, 151, 152, 154, 168, 169, 171, 186, 188,
+			189, 203, 206, 223, 224, 241, 259, 276, 293, 294, 311], 189: [133, 205, 222, 310], 191: [239, 256, 274],
+			207: [136, 153], 247: [170], 270: [187], 320.4: [204, 221, 238, 273] } },
+	"54974628:3": { me: 496, life: 381, maxLife: 381, enemy: 291, enemyLife: 335, shield: 21, boost: 88, cooldowns: { protein: 2 },
+		danger: { 0: [406, 441, 476, 511, 546, 547, 548, 550, 551, 564, 565, 566, 568, 581, 582, 583, 584, 586], 118: [407, 408,
+			409, 424, 425, 442, 443, 459, 477, 479, 480, 494, 496, 498, 512, 513, 514, 516, 529, 530, 531, 532, 533],
+			155: [426, 460, 478, 495, 497], 169: [461], 182.1: [410, 427, 444, 445] } },
+	"54969527:5": { me: 378, life: 372, maxLife: 372, enemy: 289, enemyLife: 319, shield: 15, cooldowns: { protein: 1 },
+		danger: { 181.365: [414], 212: [396, 428], 361.125: [307, 324, 325, 342, 343, 344, 358, 359, 361, 376, 377, 378, 379,
+			393, 394, 395, 397, 411, 412, 413, 429, 430, 431, 446, 448, 449, 463, 466, 467] } }
 }
 
 function buildGrid(obstacles) {
@@ -87,9 +124,9 @@ const chip = (id, name, cost, cooldown, minRange, maxRange, features, extra = {}
 	({ id, name, cost, cooldown, currentCooldown: 0, minRange, maxRange, launchType: 7, maxUses: -1, needsLos: true, area: 1,
 		features, ...extra })
 
-function arena(name, dangerOverride = {}) {
+function arena(name, dangerOverride = {}, change = {}) {
 	const turn = Number(name.split(":")[1])
-	const fight = FIGHTS[name.split(":")[0]], state = TURNS[name]
+	const fight = FIGHTS[name.split(":")[0]], state = { ...(TURNS[name] ?? RETREATS[name]), ...change }
 	delete globalThis.System
 	globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5,
 		ABSOLUTE_SHIELD: 6, BUFF_MP: 7, BUFF_TP: 8, DEBUFF: 9, POISON: 13, RAW_BUFF_TP: 32, RAW_BUFF_STRENGTH: 38 }
@@ -134,16 +171,17 @@ function arena(name, dangerOverride = {}) {
 	]
 	for (const item of myChips) item.currentCooldown = state.cooldowns[item.name] ?? 0
 	const me = {
-		id: 103947, name: "Kassbi", cell: cells[state.me], life: state.life, maxLife: state.maxLife, strength: 20, wisdom: 0,
-		agility: 10, resistance: 10, science: 0, magic: 0, level: 25, absoluteShield: 0, relativeShield: 0, tp: 10, mp: 5,
-		weapon: shotgun, weapons: [neutrino, shotgun], chips: myChips, launchedEffects: [], effects: [],
+		id: 103947, name: "Kassbi", cell: cells[state.me], life: state.life, maxLife: state.maxLife, strength: 20 + (state.boost ?? 0), wisdom: 0,
+		agility: 10, resistance: 10, science: 0, magic: 0, level: 25, absoluteShield: 0, relativeShield: 0, tp: state.tp ?? 10, mp: 5,
+		weapon: shotgun, weapons: [neutrino, shotgun], chips: myChips, launchedEffects: [],
+		effects: state.boost ? [{ type: 38, value: state.boost, turns: 1 }] : [],
 		canUseWeapon(target, item = this.weapon) { return !!item && this.tp >= item.cost && target.life > 0 && hits(this.cell, target.cell, item) },
 		canUseChip(item, target) { return item.currentCooldown === 0 && this.tp >= item.cost && target.life > 0 && hits(this.cell, target.cell, item) },
 		chipCells(item, target) { return cells.filter(cell => !cell.obstacle && hits(cell, target.cell, item)) }
 	}
 	const enemy = { id: 1, name: "enemy", cell: cells[state.enemy], life: state.enemyLife, maxLife: state.enemyLife,
 		mp: fight.enemyMp, tp: 10, weapon: weapon(38, "machine_gun", 4, 1, 6, 1, 3, [feature(1, 10, 15)]), weapons: [], chips: [],
-		absoluteShield: state.shield, relativeShield: 0, effects: [], launchedEffects: [] }
+		absoluteShield: state.shield, relativeShield: state.relative ?? 0, effects: [], launchedEffects: [] }
 	for (const entity of [me, enemy]) { entity.cell.entity = entity; entity.cell.empty = false }
 	if (fight.chest !== undefined) { cells[fight.chest].entity = { id: 2, name: "iron_chest" }; cells[fight.chest].empty = false }
 	globalThis.Fight = { turn, me, getNearestEnemy: () => enemy, getAliveEnemies: () => [enemy], getEnemies: () => [enemy],
@@ -169,7 +207,7 @@ function arena(name, dangerOverride = {}) {
 	let result
 	try { result = evaluateTacticalPlans(me, profile, { reachable, threat }) } finally { console.log = print }
 	const plan = result.plan
-	return { zone, logged: [...dangerOf.keys()].sort((a, b) => a - b), logs, reason: result.reason, me, enemy, plan: plan && {
+	return { zone, logged: [...dangerOf.keys()].sort((a, b) => a - b), logs, reason: result.reason, me, enemy, raw: plan, cells, plan: plan && {
 		shotCell: plan.shotCell.id, destination: plan.destination.id, weapon: plan.weapon?.name ?? null, shots: plan.weaponShots,
 		chips: plan.chips.map(item => item.name), boost: (plan.boost?.chips ?? []).map(item => item.name),
 		protection: plan.protection.map(item => item.name), tpUsed: plan.tpUsed,
@@ -226,4 +264,54 @@ test("a protection that brings one cell under the lethal threshold: not a doomed
 	const w = arena("54969530:8", { 126: 150 })
 	assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [])
 	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 150, -51.6))
+})
+
+// RECUL SANS TIR (plan sans dégâts qui s'éloigne de la cible vers une case moins dangereuse). Plans joués dans les combats,
+// reproduits par cette reconstruction avant le changement, score compris :
+//   54969622:2  protein, repli 233 -> 161 (distance 12 -> 16, danger 330 -> 0), score 47,3 (helmet adverse : spark = 0 dégât)
+//   54969622:3  repli 161 -> 141 (11 -> 16, danger 416,6 -> 0), 0 PT, score 0
+//   54976625:3  repli 169 -> 223 (12 -> 15, danger 130 -> 0), score 32,4 (N seul) ; 54976625:4 : 223 -> 277, idem
+//   54974628:3  repli 496 -> 550 (12 -> 15, danger 118 -> 0), score 0
+// Maintenant refusé (ligne `retreat without shot refused`) sauf seuil de repli du rôle, soin ou protection dans le plan,
+// ou aucun plan admis non létal. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
+const SPARKS = ["spark", "spark", "spark"]
+const REFUSED = /^\[Tactical\] retreat without shot refused: /
+const RETREAT_CASES = [
+	["54969622:2", 1, plan(233, 217, null, 0, [], ["protein"], [], 3, 0, 184, -85.7)],
+	["54969622:3", 1, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -87.12)],
+	["54976625:3", 1, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 7.26)],
+	["54976625:4", 1, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, -21.9)],
+	["54974628:3", 1, plan(427, 409, null, 0, SPARKS, [], [], 9, 11.88, 118, -76.62)],
+	// Garde de non-régression : « tir puis recul » (rock + shotgun depuis 361, fin en 414), plan du combat, inchangé.
+	["54969527:5", 0, plan(361, 414, "shotgun", 1, ["rock"], [], [], 10, 61.8, 181.365, -27.87)]
+]
+for (const [name, refused, expected] of RETREAT_CASES) {
+	test(`combat ${name.replace(":", ", turn ")}: retreat without a shot ${refused ? "refused" : "not in play (shot then retreat unchanged)"}`, () => {
+		const w = arena(name)
+		assert.deepEqual(w.zone, w.logged, "reachable zone = the one logged in the fight")
+		assert.equal(w.logs.filter(line => REFUSED.test(line)).length, refused)
+		assert.deepEqual(w.plan, expected)
+	})
+}
+
+test("retreat without a shot: allowed under the role's retreat threshold, with a protection, or when nothing else survives", () => {
+	// 54976625, tour 4, sans tir possible (0 PT, ou spark en cooldown) : rester en 223 (danger 130), avancer, ou reculer en
+	// 277 (danger 0, distance 12 -> 15). `low` : dangers non nuls ramenés à 60 (aucune case létale). Ennemi en 218 : distance 10.
+	const low = Object.fromEntries(Object.entries(RETREATS["54976625:4"].danger)
+		.flatMap(([value, ids]) => Number(value) > 0 ? ids.map(id => [id, 60]) : []))
+	const off = { spark: 1, rock: 1, protein: 1, motivation: 1, helmet: 1, cure: 1 }
+	const cases = [
+		["full life (enemy slower than me, 4 MP < 5: no exemption): refused, advance at equal danger", {}, { tp: 0 }, 168, [], 1],
+		["every other plan lethal (life 120 <= danger 130), not a doomed turn: allowed", {}, { tp: 0, life: 120 }, 277, [], 0],
+		["retreat + heal (cure): allowed", low, { tp: 4, life: 120, cooldowns: { ...off, cure: 0 } }, 277, ["cure"], 0],
+		["same without the heal: refused", low, { tp: 4, life: 120, cooldowns: off }, 133, [], 1],
+		["AGGRESSIVE retreat threshold (distance 10, life 95/381 <= 25 %): allowed", low, { tp: 0, life: 95, enemy: 218 }, 277, [], 0],
+		["just above it (96/381): refused", low, { tp: 0, life: 96, enemy: 218 }, 273, [], 1]
+	]
+	for (const [label, danger, change, destination, protection, refused] of cases) {
+		const w = arena("54976625:4", danger, change)
+		assert.deepEqual([w.plan.destination, w.plan.protection, w.plan.usefulDamage, w.logs.filter(line => REFUSED.test(line)).length],
+			[destination, protection, 0, refused], label)
+		assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [], label)
+	}
 })

@@ -657,7 +657,11 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // qu'avant, règle activée ou non). Départ 80 / ennemi 262 : règle désactivée 11, règle activée 8 (avant : 9).
 // Avec en plus le terme N du score (valeur de la case finale au tour suivant, mesuré) : 0/50, 0/72, 0/66 ; plus aucun
 // scénario plus lent dans cette banque ; départ 80 / ennemi 262 inchangé (11 et 8).
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 50 }, 2: { slower: 0, faster: 72 }, 3: { slower: 0, faster: 66 } }
+// Depuis le refus du recul sans tir vers une case plus sûre (mesuré) : 0/46, 0/68, 0/62. Moins de « plus rapides » parce
+// que la référence sans la règle tire plus tôt : 4 scénarios par alternance (ennemis 262 / départ 119 et 310 / départ 504)
+// reculaient sans tirer au tour 1 et tirent maintenant au tour 1, règle activée ou non. Sur les 704 scénarios des banques
+// de ce fichier (480 alternance, 160 fuite, 64 statiques), aucun premier tir plus tardif qu'avant ; 80 / 262 inchangé.
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 46 }, 2: { slower: 0, faster: 68 }, 3: { slower: 0, faster: 62 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {
