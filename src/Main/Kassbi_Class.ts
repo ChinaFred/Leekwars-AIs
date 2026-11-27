@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 23
+// file version: 24
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { decideMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -23,9 +23,12 @@ initLeekLogging(leekLogConfig)
 
 /**
  * Comportement de mon poireau : LE point de réglage, lu par `planAct` à chaque tour. Le rôle (`BALANCED`,
- * `AGGRESSIVE`, `DEFENSIVE`) et l'agressivité (0–100) fixent le poids du danger et les seuils de soin, de bouclier
- * et de repli ; la portée préférée minimale définit « trop près » ; les trois options autorisent soin, bouclier,
- * repli. Effets détaillés : `docs/strategies.md`.
+ * `AGGRESSIVE`, `DEFENSIVE`) et l'agressivité (0–100) fixent les seuils de soin, de bouclier et de repli, et la
+ * posture du plan conjoint (`posture`, `TacticalScore.ts`) : poids du danger, poids de l'approche, plancher de
+ * passivité, recul sans tir, arme visée par le trajet futur. `AGGRESSIVE` va à portée de sa meilleure arme et ne
+ * recule qu'après avoir tiré ; `DEFENSIVE` reste à couvert ; `BALANCED` est entre les deux. La portée préférée
+ * minimale définit « trop près » ; les trois options autorisent soin, bouclier, repli. Effets détaillés :
+ * `docs/strategies.md` (« Comportement configuré »).
  */
 export const leekProfile = new LeekProfile()
 leekProfile.setRole("AGGRESSIVE")
