@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -199,13 +199,16 @@ export function boostVariants(me: Me): BoostVariant[] {
 
 /**
  * Crédit des tours suivants d'une variante pour `weapon` (voir `StrengthBoost.ts`), avant plafonnement par
- * `FUTURE_TURN_WEIGHT` × les PV qui restent à la cible. Estimation à une arme ; les deux boosts sont crédités
+ * `FUTURE_TURN_WEIGHT` × les PV qui restent à la cible. Force et PT : tirs de l'arme seule ; `idle` (plan
+ * sans tir) : PT au meilleur de trois scénarios de portée, crédit optimiste (voir `tpBoostFutureDamage`). Les deux boosts sont crédités
  * indépendamment.
  */
-export function boostFuture(me: Me, variant: BoostVariant, weapon: Weapon | null, enemyLife: number): number {
+export function boostFuture(
+	me: Me, variant: BoostVariant, weapon: Weapon | null, enemyLife: number, idle = false
+): number {
 	if (weapon === null) return 0
 	return (variant.strength ? strengthBoostFutureDamage(weapon, variant.strength, me.tp) : 0) +
-		(variant.tp ? tpBoostFutureDamage(me, weapon, variant.tp, me.tp, enemyLife) : 0)
+		(variant.tp ? tpBoostFutureDamage(me, weapon, variant.tp, me.tp, enemyLife, idle) : 0)
 }
 
 /**

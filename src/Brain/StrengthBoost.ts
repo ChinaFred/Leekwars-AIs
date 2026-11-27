@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -12,8 +12,10 @@ import {
 	maxUsesOf,
 	mpBoostOf,
 	mpBoostTurns,
+	planShots,
 	strengthBoostOf,
 	strengthBoostTurns,
+	ShotCandidate,
 	toCandidate,
 	tpBoostOf,
 	tpBoostTurns
@@ -293,10 +295,16 @@ export function decideMpBoost(
 
 /**
  * Part des tours SUIVANTS d'un boost de PT pour `weapon` : `FUTURE_TURN_WEIGHT` × (durée − 1) tours à
- * `fullTp` + gain contre `fullTp`, en tirs entiers, chaque tour plafonné par les PV de l'ennemi.
+ * `fullTp` + gain contre `fullTp`, chaque tour plafonné par les PV de l'ennemi.
+ * Par défaut (plans qui tirent, plan B avec tir) : tirs entiers de l'arme seule.
+ * `idle` (plan SANS tir : les PT du boost seraient perdus) : maximum de trois scénarios de portée, en maximum exact
+ * (`planShots`) : arme seule, puces seules (arme hors de portée, combat 54991104), arme + puces. Puces : offensives,
+ * prêtes, de cooldown de base 0 (relançables, `chipUsesOf`) ou 1 (une fois par tour), donc disponibles à chaque tour
+ * couvert. Crédit OPTIMISTE assumé : il suppose le scénario de portée le plus favorable au boost.
+ * Coût en mode `idle` : six sacs à dos par appel (à calculer une fois par variante, pas par case).
  */
 export function tpBoostFutureDamage(
-	me: Me, weapon: Weapon, option: BoostOption, fullTp: number, enemyLife = Number.POSITIVE_INFINITY
+	me: Me, weapon: Weapon, option: BoostOption, fullTp: number, enemyLife = Number.POSITIVE_INFINITY, idle = false
 ): number {
 	const base = baseMeanDamage(weapon)
 	if (!(base > 0) || !(weapon.cost > 0)) {
@@ -307,7 +315,24 @@ export function tpBoostFutureDamage(
 	const life = Number.isFinite(enemyLife) && enemyLife > 0 ? enemyLife : Number.POSITIVE_INFINITY
 	const damage = (budget: number): number =>
 		Math.min(life, Math.max(0, Math.min(Math.floor(budget / weapon.cost), limit)) * base * (1 + strength / 100))
-	return Math.max(0, option.turns - 1) * (damage(fullTp + option.gain) - damage(fullTp)) * FUTURE_TURN_WEIGHT
+	let best = damage(fullTp + option.gain) - damage(fullTp)
+	if (idle) {
+		const chips: ShotCandidate[] = []
+		for (const chip of new Set(me.chips ?? [])) {
+			const shot = chip.currentCooldown === 0 && (chip.cooldown === 0 || chip.cooldown === 1)
+				? toCandidate(chip, true, strength) : null
+			if (shot !== null) {
+				chips.push(shot)
+			}
+		}
+		if (chips.length > 0) {
+			const candidate = toCandidate(weapon, false, strength)
+			const gain = (arm: ShotCandidate | null): number =>
+				Math.min(life, planShots(fullTp + option.gain, arm, chips).damage) - Math.min(life, planShots(fullTp, arm, chips).damage)
+			best = Math.max(best, gain(null), gain(candidate))
+		}
+	}
+	return Math.max(0, option.turns - 1) * best * FUTURE_TURN_WEIGHT
 }
 
 /**
@@ -338,10 +363,9 @@ export function boostReach(me: Me, enemy: Entity): number {
 
 /**
  * Dégâts nets d'un boost de PT (`option.gain` PT immédiatement, puis à chaque tour couvert) pour `weapon` :
- * ce tour (si je tire : `inContactNow`), PT − coût + gain contre PT ; puis `FUTURE_TURN_WEIGHT` × (durée − 1)
- * tours à `fullTp` + gain contre `fullTp`. Les dégâts sont plafonnés par les PV de l'ennemi. Les PT sont
- * convertis en tirs entiers (`floor(PT / coût)`), donc un gain de PT inférieur au coût de l'arme peut ne rien
- * valoir. Estimation à une arme, pas une simulation du plan.
+ * ce tour (si je tire : `inContactNow`), PT − coût + gain contre PT en tirs entiers de l'arme seule (ce que le
+ * plan B exécute) ; puis les tours suivants (`tpBoostFutureDamage`, arme seule). Dégâts plafonnés par les PV de
+ * l'ennemi. Un gain de PT inférieur au coût de l'arme peut ne rien valoir. Estimation à une arme, pas une simulation.
  */
 export function tpBoostNetDamage(
 	me: Me, weapon: Weapon, option: BoostOption, tp: number, fullTp: number, inContactNow: boolean,
