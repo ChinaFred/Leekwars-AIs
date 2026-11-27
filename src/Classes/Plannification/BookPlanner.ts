@@ -1,14 +1,17 @@
 // @version:5.8
-// file version: 3
+// file version: 6
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
-import { BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, SimState, TurnStep, Zone, runBeam } from "./BookBeam.js"
-import { BookBudget } from "./BookBudget.js"
+import {
+	BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, BeamTrace, DuelState, REFINE_KEEP, SimState, TurnStep, Zone, runBeam
+} from "./BookBeam.js"
+import { BOOK_DUEL_SEARCH_FRACTION, BookBudget } from "./BookBudget.js"
 import { catalogFor } from "./BookCatalog.js"
 import { EnemyMover, advanceTowardMe, futureDangerOf } from "./BookEnemyModel.js"
 import { BookObjective, DEFAULT_OBJECTIVE } from "./BookObjective.js"
+import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
 import { TACTICAL_LIMITS, TacticalContext, TacticalPlan } from "./TacticalTypes.js"
 
@@ -25,6 +28,12 @@ export interface BookOptions {
 	readonly mover?: EnemyMover
 	/** Plafond d'unités de travail (tests) ; sans lui, seul le plafond d'opérations du jeu coupe. */
 	readonly workLimit?: number
+	/** Compteur de duel (`BookStandoff.ts`) : lu seulement en posture AGGRESSIVE. */
+	readonly standoff?: StandoffTracker
+	/** Impose ou interdit le niveau 2 (tests) ; sinon `worthDeepening`. */
+	readonly deepen?: boolean
+	/** Budget fourni (tests : opérations simulées) ; sinon créé ici avec la part de `BOOK_SEARCH_FRACTION` ou du duel. */
+	readonly budget?: BookBudget
 }
 
 function describe(node: BeamNode, items: Catalog["book"]["items"]): string {
@@ -38,7 +47,15 @@ function describe(node: BeamNode, items: Catalog["book"]["items"]): string {
 }
 type Catalog = ReturnType<typeof catalogFor>
 
-export interface BeamRun { readonly result: BeamResult; readonly catalog: Catalog; readonly work: number }
+export interface BeamRun {
+	readonly result: BeamResult
+	readonly catalog: Catalog
+	readonly work: number
+	readonly trace: BeamTrace
+	readonly ops: { readonly prepare: number; readonly beam: number }
+	/** Part du total d'opérations accordée au faisceau (0,25, ou 0,30 en duel AGGRESSIVE). */
+	readonly budgetFraction: number
+}
 
 /** Faisceau du tour, ou null (données absentes ou périmées, budget épuisé d'entrée, aucun ennemi). */
 export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile, options: BookOptions = {}): BeamRun | null {
@@ -50,8 +67,13 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 		!hasExecutionRoom()) return null
 
 	const objective = options.objective ?? DEFAULT_OBJECTIVE
-	const budget = new BookBudget(options.workLimit)
+	// Duel : seulement AGGRESSIVE ; DEFENSIVE et BALANCED gardent le comportement sans duel.
+	const duel: DuelState | null = profile.strategyName === "AGGRESSIVE" && options.standoff?.active
+		? { accept: options.standoff.accept, riskScale: options.standoff.riskScale, beyond: options.standoff.beyond } : null
+	const budget = options.budget ?? new BookBudget(options.workLimit, duel === null ? undefined : BOOK_DUEL_SEARCH_FRACTION)
+	const opsStart = budget.ops()
 	const catalog = catalogFor(me)
+	budget.link(catalog.book)
 	const rootCells = [...reachable.entries()]
 	const known = new Map<number, { cell: Cell; danger: number }>()
 	for (const entry of rootCells) {
@@ -66,8 +88,9 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const sight = new Map<string, boolean>()
 	const futureDanger = futureDangerOf(known)
 	const strategy = createStrategy(profile)
+	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
-		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding,
+		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
 		zone(state, k) {
 			if (k === 0) return rootZone
 			const id = `${k}:${state.cell.id}`
@@ -107,11 +130,14 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 		buffs: catalog.buffs, enemies: enemies.map((enemy) => ({ enemy, cell: enemy.cell, life: enemy.life })),
 		held: me.weapon === null ? -1 : catalog.book.items.findIndex((item) => item.ref === me.weapon)
 	}
+	const opsPrepared = budget.ops()
 	const result = runBeam(env, root, options.width ?? BEAM_WIDTH, options.depth ?? BEAM_DEPTH)
 	log(() => `[Book] profile ${objective.name}: depth ${result.depth}, ${result.beam.length} plans, ${budget.work} work units, ` +
-		`${catalog.book.tablesBuilt} tables${result.cut ? `, cut: ${result.cut}` : ""}`, LOG_CONTEXT.PLANNING)
+		`${catalog.book.tablesBuilt} tables${result.cut ? `, cut: ${result.cut}` : ""}${result.skipped ? `, skipped ${result.skipped}` : ""}` +
+		`${duel ? `, duel +${duel.beyond} (accept ${duel.accept}, risk x${duel.riskScale})` : ""}`, LOG_CONTEXT.PLANNING)
+	log(() => `[Book] ops: prepare ${opsPrepared - opsStart}, beam ${budget.ops() - opsPrepared} (units are not ops)`, LOG_CONTEXT.PLANNING)
 	for (const node of result.beam) log(() => `[Book] beam ${node.score.toFixed(1)}: ${describe(node, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
-	return { result, catalog, work: budget.work }
+	return { result, catalog, work: budget.work, trace, ops: { prepare: opsPrepared - opsStart, beam: budget.ops() - opsPrepared }, budgetFraction: budget.fraction }
 }
 
 /** Plan du tour, ou null (rien d'utile à faire ou faisceau indisponible : l'appelant a un repli). */
@@ -128,8 +154,31 @@ export function planWithBook(me: Me, context: TacticalContext, profile: LeekProf
 		log(() => "[Book] best sequence does nothing this turn: fallback", LOG_CONTEXT.PLANNING)
 		return null
 	}
+	log(() => unchosen(first, run.trace, catalog.book.items, me.mp), LOG_CONTEXT.PLANNING)
 	log(() => `[Book] chosen: ${describe({ ...best, steps: [first] }, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
 	return toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score)
+}
+
+/**
+ * Diagnostic : le meilleur plan du tour 1 NON retenu qui inflige plus que le plan choisi, son danger final et pourquoi il
+ * n'a pas été retenu (létal avec la limite appliquée, pas de case de repli moins dangereuse à portée de PM, groupe hors des
+ * `REFINE_KEEP` meilleurs donc sans repli essayé, ou score inférieur).
+ */
+export function unchosen(chosen: TurnStep, trace: BeamTrace, items: Catalog["book"]["items"], mp: number): string {
+	let alt: TurnStep | null = null
+	for (const step of trace.candidates) {
+		if (step.key === chosen.key || !(step.outcome.damage > chosen.outcome.damage + 1e-9)) continue
+		if (alt === null || step.outcome.damage > alt.outcome.damage || (step.outcome.damage === alt.outcome.damage && step.score > alt.score)) alt = step
+	}
+	if (alt === null) return "[Book] unchosen with more damage: none"
+	const record = trace.groups.get(alt.group)
+	const reason = alt.lethal
+		? `lethal (danger ${alt.danger.toFixed(1)} >= limit ${alt.limit.toFixed(1)})` + (record === undefined
+			? `; group outside the ${REFINE_KEEP} best: no retreat tried`
+			: !trace.retreat ? "; retreat disabled (no MP or hiding not allowed)"
+			: record.retreat === null ? `; no cell with a lower danger within ${mp} MP (farthest reached: ${record.reachedMp} MP)` : "")
+		: `lower score (${alt.score.toFixed(1)} < ${chosen.score.toFixed(1)})`
+	return `[Book] unchosen with more damage: ${describe({ state: chosen.plan.state, score: alt.score, steps: [alt], key: "", group: "" }, items)} reason: ${reason}`
 }
 
 function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], depth: number, cut: string | null, score: number): TacticalPlan {
