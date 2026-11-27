@@ -1,24 +1,5 @@
 [
  {
-  "id": "ade622a",
-  "account": "Kassbi",
-  "published_at": 1795787630,
-  "published_at_iso": "2026-11-27T13:53:50Z",
-  "commit": "ade622a9ec0ab5f3c7c8378e489403058b5dd5f4",
-  "committed_at": 1795787586,
-  "subject": "feat(tactique): posture par rôle dans le plan conjoint",
-  "message": "feat(tactique): posture par rôle dans le plan conjoint\n\nPourquoi : le rôle n'agissait que par le poids du risque (0,75 / 1 / 1,25)\net les seuils de soin, bouclier et repli ; AGGRESSIVE reculait sans tirer\net les trois rôles jouaient presque pareil.\nStratégie: posture AGGRESSIVE / BALANCED / DEFENSIVE (BALANCED à 50\ninchangé) : poids du danger 0,5 / 1 / 1,5 (avant 0,75 / 1 / 1,25, plan B\ncompris) ; poids d'approche de G et N 1,25 / 1 / 0,75 × (0,5 +\nagressivité/100), N plafonné à 1 ; plancher de passivité 0 / 0 / 0,5 ;\nrecul sans tir : AGGRESSIVE cède aussi à une avance sous 0,75 × PV de\ndanger, DEFENSIVE jamais filtré ; arme du trajet futur : meilleurs\ndégâts / ordre actuel / plus longue portée. Valeurs non calibrées en\ncombat : AGGRESSIVE s'expose davantage.\nTests: npm run typecheck, npm test (731/731) ; 5 tests « posture » et\n8 lignes de tableau ajoutés, 22 tests AGGRESSIVE/DEFENSIVE mis à jour ;\ncoût en opérations non mesuré.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bN3k55fvD9RGm3fHV",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 4,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "3cdee5d",
   "account": "Kassbi",
   "published_at": 1795787723,
@@ -179,6 +160,25 @@
   "committed_at": 1795813186,
   "subject": "feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur",
   "message": "feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur\n\nPourquoi : combat 55005067 (nul, 64 tours) : duel de dégâts annulé par les\nsoins adverses (2479 infligés, 2269 soignés), faisceau en profondeur 1 dans\n58 tours sur 64, tir létal jamais raffiné avec un repli sûr.\nStratégie: Kassbi_Book seulement (non branché aux IA actives). Corrige le\nraffinement des replis par groupe d'actions ; compteur de duel (6 tours,\n< 15 % de PV nets, dégâts infligés ≥ 15 %) ; en AGGRESSIVE pendant un duel,\nlimite létale life × (1 + 0,25 × tours au-delà), plafond 2,0, poids du danger\nréduit, jamais si danger ≥ 2 × PV ni sous 50 % de PV ; niveau 2 ouvert\nseulement en duel ou si un plan non létal frappe plus, part de budget 0,25 →\n0,30 en duel. DEFENSIVE inchangée.\nTests: typecheck OK ; 42 tests ciblés OK ; npm test exit 0 (764 points\ncomptés) ; garde-fous et budget prouvés par mutation ; ops réelles non mesurées.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6fCuBuhoey8NDFqq4G",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 5,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "8150386",
+  "account": "Kassbi",
+  "published_at": 1795815675,
+  "published_at_iso": "2026-11-27T21:41:15Z",
+  "commit": "8150386151e0df213ed81a8b67642844f31db3c7",
+  "committed_at": 1795815619,
+  "subject": "feat(book): crédit de boost sans tir et rejeu du compteur de duel",
+  "message": "feat(book): crédit de boost sans tir et rejeu du compteur de duel\n\nPourquoi : combat 55005891 et cinq autres : tours 1 et 2 quasi vides (0 PT sur\n10 au tour 2 dans 5 combats sur 6, ennemi à 17-21 cases).\nStratégie: Kassbi_Book seulement. Boost de force sans tir crédité de\nIDLE_BOOST_SHOT_WEIGHT 0,75 × (durée − tour de contact) × gain de dégâts,\nseulement s'il n'existe aucun tir non létal (durées lues : protein 2 tours,\nmotivation 3). Rejeu hors ligne du duel : déclenchement au tour 9 sur 55005067,\njamais sur 55005897.\nTests: typecheck OK ; tests de boost et de duel prouvés par mutation ; npm test\nexit 0 (789 points comptés) ; ops réelles non mesurées.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6fCuBuhoey8NDFqq4G",
   "has_strategy_section": true,
   "dirty": false,
   "dirty_files": [],
