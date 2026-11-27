@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 31
+// file version: 34
 import { ReachableCells, computeReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { aliveEnemies } from "../Context/Targets.js"
@@ -937,6 +937,25 @@ function evaluate(
 		log(() => `[Tactical] doomed turn: least danger ${minDanger} is lethal with every protection ` +
 			`(life ${me.life}, fraction ${lifeFraction}); kill first, no future boost credit`, LOG_CONTEXT.PLANNING)
 	}
+	// Recul sans dégâts : plan qui n'inflige rien, dont `G` < 0 ET la distance Manhattan augmente (il s'éloigne de
+	// `enemies[0]` ; un détour du trajet futur qui rapproche en Manhattan n'en est pas un), vers une case MOINS
+	// dangereuse que la mienne, sans soin ni bouclier utile (combats 54969622, 54976625, 54974628 : replis à PV pleins
+	// vers une case de danger nul, zone réduite tour après tour, aucun dégât infligé). Un pas en arrière à danger égal ou
+	// supérieur n'est pas un repli (il ne vaut que par `N`). La recherche le classe comme avant (`leaderRetreat` : il
+	// est en tête), donc une recherche interrompue rend le même candidat qu'avant. En fin de recherche COMPLÈTE il est
+	// remplacé par le meilleur plan qui INFLIGE DES DÉGÂTS (`substitute`) avec un danger sous
+	// `PASSIVE_DANGER_LIFE_FRACTION` × mes PV (marge des critiques, comme à poids réduit ; sans objet s'il tue le dernier
+	// ennemi), même si un plan sans dégâts est mieux classé que lui : le but est de tirer au lieu de reculer, pas de
+	// s'exposer sans tirer (avance, pas de côté, protection ou boost seuls ne remplacent pas le recul). Sans un tel
+	// plan, le recul est rendu comme avant : le refus ne rend jamais un plan nul, vide ou létal.
+	// Jamais filtré (`freeRetreat`) : seuil de repli du rôle (`shouldHide`), tour condamné, plusieurs ennemis (`G` ne
+	// mesure que `enemies[0]`). Un ennemi plus lent ne l'autorise pas (54976625 : 5 PM contre 4, acculé au tour 6).
+	// Le recul APRÈS des dégâts et la sortie de stagnation ne sont pas concernés.
+	const freeRetreat = doomed || enemies.length !== 1 ||
+		(profile.allowHiding && strategy.shouldHide(lifeRatio, closestDistance, profile.preferredMinRange))
+	const originDanger = dangers.get(key(me.cell))!
+	let leaderRetreat = false
+	let substitute: TacticalPlan | null = null
 	// Boost : composante du plan. `boosts[0]` est toujours « aucun ». Un plan avec tir n'en lance pas sous
 	// `MIN_LIFE_RATIO_FOR_BOOST` de PV ; un plan sans tir seulement si l'ennemi peut être à portée au tour suivant.
 	const boosts = boostVariants(me)
@@ -1341,18 +1360,22 @@ function evaluate(
 		}
 	}
 	endingCache.clear()
+	// `G` par case, vers `enemies[0]` (cible des plans sans attaque) : Manhattan, ou trajet futur. Une fois par case,
+	// pas une fois par (protection, case) ; sert aussi au filtre du recul sans tir du classement offensif.
+	const progressTarget = enemies[0]
+	const geometric = progressTarget ? entries.map(({ cell }) =>
+		Math.abs(me.cell.x - progressTarget.cell.x) + Math.abs(me.cell.y - progressTarget.cell.y) -
+		Math.abs(cell.x - progressTarget.cell.x) - Math.abs(cell.y - progressTarget.cell.y)) : []
+	const originFuture = futureProgress ? futureProgress.get(key(me.cell))! : 0
+	const progressOf = futureProgress
+		? entries.map(({ cell }) => originFuture - futureProgress.get(key(cell))!) : geometric
+	// Sans case plus lointaine (Manhattan) et plus sûre que la mienne, aucun recul ne peut être en tête : rien à suivre.
+	const retreatPossible = !freeRetreat && geometric.some((gain, i) => gain < 0 && entryDanger[i]! < originDanger)
 	// Sans attaque connue, progression/couvert/support sont AUSSI un plan complet.
 	// Une puce refusée depuis une case de sa liste native n'autorise pas une approche de tir fictive.
 	let progressPlan: TacticalPlan | null = null
 	if (enemies.length && (hasAffordableWeapon || futureRoute || !skipped.refused)) {
 		const target = enemies[0]!
-		const distance = (cell: Cell): number => Math.abs(cell.x - target.cell.x) + Math.abs(cell.y - target.cell.y)
-		// Valeurs qui ne dépendent pas de la protection : une fois par case, pas une fois par (protection, case).
-		const originDistance = distance(me.cell)
-		const geometric = entries.map(({ cell }) => originDistance - distance(cell))
-		const originFuture = futureProgress ? futureProgress.get(key(me.cell))! : 0
-		const progressOf = futureProgress
-			? entries.map(({ cell }) => originFuture - futureProgress.get(key(cell))!) : geometric
 		const futureDistance = futureRoute ? entries.map(({ cell }) => futureRoute.get(key(cell))) : null
 		const firingOf = entries.map(({ cell }) => firingDistance(target, cell))
 		for (let p = 0; p < support.length; p++) for (let i = 0; i < entries.length; i++) {
@@ -1368,6 +1391,8 @@ function evaluate(
 				idle.credit + nextTurn
 			const futureRouteDistance = futureDistance?.[i]
 			const tpUsed = protection.cost + idle.variant.cost
+			const retreat = !freeRetreat && progress < 0 && geometric[i]! < 0 && danger < originDanger &&
+				!(protection.heal > 0 || shieldCredit(protection, danger) > 0)
 			if (!beats(progressPlan, doomed, 0, score, danger, tpUsed, target, firingOf[i], futureRouteDistance, ending.cost)) continue
 			const candidate: TacticalPlan = {
 				target, shotCell: me.cell, destination: ending.cell, beforeMp: 0, afterMp: ending.cost,
@@ -1378,6 +1403,7 @@ function evaluate(
 				futureRouteDistance,
 				score, nextTurn
 			}
+			leaderRetreat = retreat
 			progressPlan = candidate
 			if ((ending.cost > 0 || protection.heal > 0 || shieldCredit(protection, danger) > 0 || idle.credit > 0) &&
 				better(candidate, budget.incumbent, doomed)) budget.incumbent = candidate
@@ -1484,19 +1510,29 @@ function evaluate(
 				if (attack.damage > 0 || protection.heal > 0 || shieldCredit(protection, finalDanger) > 0) actionable = true
 				const usefulDamage = Math.min(option.target.life, attack.damage)
 				const tpUsed = cost + protection.cost + option.equipCost + variant.cost
+				const kills = killsLastEnemy(attack.damage, option.target, enemies.length)
+				// Sans dégâts (aucun tir, ou tir entièrement absorbé), ce plan n'est qu'un déplacement : même filtre que le
+				// plan sans attaque (voir `freeRetreat`).
+				const retreat = !freeRetreat && !(attack.damage > 0) && progressOf[ending.index]! < 0 &&
+					geometric[ending.index]! < 0 && finalDanger < originDanger && !(protection.heal > 0 || shieldCredit(protection, finalDanger) > 0)
 				// Tours suivants du boost, plafonnés par les PV qui restent à la cible après ce tour, eux aussi pondérés :
 				// des dégâts remis à plus tard ne valent jamais ceux de ce tour (un boost ne bat pas le coup fatal à égalité).
 				if (attack.damage > 0 && !doomed) {
 					future = Math.min((option.target.life - usefulDamage) * FUTURE_TURN_WEIGHT, option.tables.future[v]!)
 				}
-				const score = usefulDamage - riskCost(me, risk, protection, finalDanger,
-					killsLastEnemy(attack.damage, option.target, enemies.length), lifeFraction) + weight * protection.heal +
-					future + nextTurn
+				const score = usefulDamage - riskCost(me, risk, protection, finalDanger, kills, lifeFraction) +
+					weight * protection.heal + future + nextTurn
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				// Même départage que le plan de progression (trajet futur, seulement sans tir d'arme à portée).
 				const futureRouteAtEnd = futureRoute?.get(key(ending.cell))
-				if (!beats(best, doomed, usefulDamage, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd,
-					futureRouteAtEnd, shot.cost + ending.cost)) continue
+				const leads = beats(best, doomed, usefulDamage, score, finalDanger, tpUsed, option.target, firingDistanceAtEnd,
+					futureRouteAtEnd, shot.cost + ending.cost)
+				// Meilleur plan à dégâts sous la marge de danger, suivi à part tant qu'il n'est pas lui-même en tête (alors
+				// aucun candidat battu par la tête ne peut le battre) : c'est lui qui remplacera un recul sans dégâts.
+				const damaging = retreatPossible && (leads || substitute !== best) && attack.damage > 0 &&
+					(kills || !lethal(me, protection, finalDanger, PASSIVE_DANGER_LIFE_FRACTION))
+				if (!leads && !(damaging && beats(substitute, doomed, usefulDamage, score, finalDanger, tpUsed, option.target,
+					firingDistanceAtEnd, futureRouteAtEnd, shot.cost + ending.cost))) continue
 				const candidate: TacticalPlan = {
 					target: option.target, shotCell: shot.cell, destination: ending.cell,
 					beforeMp: shot.cost, afterMp: ending.cost,
@@ -1506,10 +1542,22 @@ function evaluate(
 					firingDistance: firingDistanceAtEnd, futureRouteDistance: futureRouteAtEnd,
 					score, nextTurn
 				}
+				if (damaging) substitute = candidate
+				if (!leads) continue
+				leaderRetreat = retreat
 				best = candidate
 				if (actionable && better(candidate, budget.incumbent, doomed)) budget.incumbent = candidate
 			}
 		}
+	}
+	// Fin de recherche complète : le recul sans dégâts en tête cède au meilleur plan à dégâts sous la marge, s'il existe.
+	if (actionable && leaderRetreat && best !== null && substitute !== null) {
+		const refused = best, kept = substitute
+		log(() => `[Tactical] retreat without damage refused: (${refused.destination.x},${refused.destination.y}) progress ` +
+			`${refused.progress ?? "none"}, danger ${refused.danger}, score ${refused.score}; life above the retreat threshold, ` +
+			`a plan dealing ${kept.usefulDamage} under ${PASSIVE_DANGER_LIFE_FRACTION} x life exists (score ${kept.score})`,
+		LOG_CONTEXT.PLANNING)
+		best = kept
 	}
 	return withStagnation(actionable ? best : null)
 }
