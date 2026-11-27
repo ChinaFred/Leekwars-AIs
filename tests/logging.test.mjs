@@ -17,7 +17,8 @@ const { LOG_CONTEXT, LOG_CONTEXTS, LogConfig, log, initLeekLogging, resetLeekLog
 
 const REQUIRED_CONTEXTS = [
 	"MOVEMENT", "STRATEGY", "COMBAT", "WEAPON", "ARMOR", "CHIP", "PLANNING", "MEMORY",
-	"REACHABLE", "THREAT", "OPERATIONS", "SPEECH", "ERROR", "SYSTEM", "SHOOTING", "DEBUG", "ACCESSIBLE_ZONE", "DANGER_ZONE"
+	"REACHABLE", "THREAT", "OPERATIONS", "SPEECH", "ERROR", "SYSTEM", "SHOOTING", "DEBUG", "ACCESSIBLE_ZONE", "DANGER_ZONE",
+	"TARGET_ZONE"
 ]
 
 /** Capture `console.log` (arguments conservés tels quels) pendant `action`. */
@@ -415,6 +416,7 @@ const CONTEXT_LINES = {
 	[LOG_CONTEXT.THREAT]: (line) => line.startsWith("[Threat]"),
 	[LOG_CONTEXT.ACCESSIBLE_ZONE]: (line) => line.startsWith("Accessible zone:"),
 	[LOG_CONTEXT.DANGER_ZONE]: (line) => line.startsWith("Danger zone:"),
+	[LOG_CONTEXT.TARGET_ZONE]: (line) => line.startsWith("Target zone:"),
 	[LOG_CONTEXT.OPERATIONS]: (line) => line.startsWith("Operations: "),
 	[LOG_CONTEXT.WEAPON]: (line) => /^\[Plannification\] (Weapon |ChosenWeapon:|EquipWeapon:|SkipEquipWeapon:|Shoot:|SkipShoot:)/.test(line),
 	[LOG_CONTEXT.MOVEMENT]: (line) => /^\[Plannification\] (Move:|SkipMove:|Hide:|RetreatAfterShoot:)/.test(line),

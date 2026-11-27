@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 23
+// file version: 24
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { decideMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -11,7 +11,7 @@ import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targ
 import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalTypes.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, isLogEnabled, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
-import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
+import { AccessibleZoneSource, showAccessibleZones, showDangerZone, showTargetZone } from "../Toolbox/Marker.js"
 import { getRandomMessage, SPEECH } from "../Toolbox/Speeches.js"
 
 /**
@@ -233,6 +233,23 @@ function displayDangerZone(): void {
 }
 
 /**
+ * Affichage visuel (contexte TARGET_ZONE) de la zone visée : toutes les cases que les ennemis peuvent toucher, que je
+ * puisse les atteindre ou non. Calculée ici, à la demande, et jamais transmise à planAct : contexte inactif = aucun
+ * calcul ; actif, son seul effet sur le plan est le nombre d'opérations déjà consommées (plafond
+ * `TARGET_ZONE_OPERATIONS_FRACTION`, marques non comprises).
+ */
+function displayTargetZone(me: Me): void {
+	try {
+		if (!isLogEnabled(LOG_CONTEXT.TARGET_ZONE)) {
+			return
+		}
+		showTargetZone(enemyMemory.computeTargetZone(me))
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", "displayTargetZone", error)
+	}
+}
+
+/**
  * Boost de PM : seule action décidée AVANT le plan, parce qu'elle en change les entrées (cases atteignables, carte de
  * danger). Décision et motif (`decideMpBoost`) journalisés avant le lancer ; puis les deux cartes sont recalculées avec
  * les PM et PT réels, que le lancer ait réussi ou non. Une erreur est journalisée sans interrompre le tour.
@@ -310,6 +327,7 @@ export function turn(): void {
 		displayAccessibleZones(me)
 		observeThreatMap(me)
 		displayDangerZone()
+		displayTargetZone(me)
 		observeStagnation(me)
 		// Après l'ouverture de l'historique (le lancer y figure), avant le plan (il reçoit les cartes recalculées).
 		castMpBoost(me)

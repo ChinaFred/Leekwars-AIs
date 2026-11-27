@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 //
 // Journalisation par contexte : TOUTE sortie texte (log de combat) passe par `log(texte, contexte)`.
 // Ce fichier est le seul de `src/` autorisé à appeler `console.log` / `Debug.log` (voir
@@ -52,7 +52,9 @@ export const LOG_CONTEXT = {
 	/** Zone accessible de chaque poireau : log du nom + marques + pause (voir `Marker.ts`). */
 	ACCESSIBLE_ZONE: "accessible_zone",
 	/** Zone de danger de mon poireau : log, marques colorées avec les dégâts + pause (voir `Marker.ts`). */
-	DANGER_ZONE: "danger_zone"
+	DANGER_ZONE: "danger_zone",
+	/** Zone visée : toutes les cases qu'un ennemi peut toucher, mêmes marques que la zone de danger (voir `Marker.ts`). */
+	TARGET_ZONE: "target_zone"
 } as const
 
 export type LogContext = (typeof LOG_CONTEXT)[keyof typeof LOG_CONTEXT]

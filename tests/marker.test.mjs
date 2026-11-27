@@ -27,10 +27,11 @@ const { Coordinates } = await import("../dist/Classes/Context/Coordinates.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { ThreatMap } = await import("../dist/Classes/Context/ThreatMap.js")
 const { LOG_CONTEXT, LogConfig, initLeekLogging, resetLeekLogging, log } = logger
-const { showAccessibleZones, showDangerZone, MARKER_SETTINGS, markCells, markTextCells, dangerTier, dangerLabel } = marker
+const { showAccessibleZones, showDangerZone, showTargetZone, MARKER_SETTINGS, markCells, markTextCells, dangerTier, dangerLabel } = marker
 
 const ZONE = LOG_CONTEXT.ACCESSIBLE_ZONE
 const DANGER = LOG_CONTEXT.DANGER_ZONE
+const TARGET = LOG_CONTEXT.TARGET_ZONE
 const RED = 0xff0000
 
 /** Exécute `action` avec console.log enregistré dans `trace` (["log", texte]) ; remet tout par défaut ensuite. */
@@ -534,8 +535,9 @@ async function playTurn(config, { debug, worldOptions } = {}) {
 
 test("turn(): zones are displayed after observeReachableCells / observeThreatMap and before planAct, with no extra Field.cellFromXY call", async () => {
 	await playTurn(new LogConfig()) // 1er tour du module (salutation) : on mesure les suivants
-	const on = await playTurn(new LogConfig())
-	const off = await playTurn(new LogConfig().setEnabled(ZONE, false).setEnabled(DANGER, false))
+	// TARGET_ZONE (nouveau contexte visuel, actif par défaut) est coupé ici : ce test porte sur les deux autres zones.
+	const on = await playTurn(new LogConfig().setEnabled(TARGET, false))
+	const off = await playTurn(new LogConfig().setEnabled(ZONE, false).setEnabled(DANGER, false).setEnabled(TARGET, false))
 
 	const text = on.calls.filter((call) => call[0] === "log").map((call) => call[1])
 	const index = (prefix) => text.findIndex((line) => String(line).startsWith(prefix))
@@ -587,10 +589,10 @@ test("turn(): plays the same actions when Debug is missing, incomplete or throwi
 })
 
 test("each zone context can be disabled independently inside turn()", async () => {
-	const onlyDanger = await playTurn(new LogConfig().setEnabled(ZONE, false))
+	const onlyDanger = await playTurn(new LogConfig().setEnabled(ZONE, false).setEnabled(TARGET, false))
 	assert.equal(onlyDanger.calls.some((call) => String(call[1]).startsWith("Accessible zone:")), false)
 	assert.equal(onlyDanger.calls.filter((call) => call[0] === "pause").length, 1)
-	const onlyZones = await playTurn(new LogConfig().setEnabled(DANGER, false))
+	const onlyZones = await playTurn(new LogConfig().setEnabled(DANGER, false).setEnabled(TARGET, false))
 	assert.equal(onlyZones.calls.some((call) => String(call[1]).startsWith("Danger zone:")), false)
 	assert.equal(onlyZones.calls.filter((call) => call[0] === "pause").length, 3)
 })
@@ -661,4 +663,95 @@ test("danger zone: cells with a non-finite danger are skipped (neither colored n
 		assert.deepEqual(trace.filter((call) => call[0] === "markText").map((call) => call[2]), ["5", "10"])
 		assert.equal(names(trace).at(-1), "clearMarks") // la séquence va jusqu'au bout
 	})
+})
+
+// --- zone visée (TARGET_ZONE) ----------------------------------------------------------------------
+
+test("target zone: same sequence as the danger zone under its own context and label", () => {
+	const map = dangerMap([10.4, 10.6, 25, 50, 50], { truncated: true })
+	recording(new LogConfig(), () => {
+		showDangerZone(map)
+		const danger = trace.map((call) => [...call])
+		trace.length = 0
+		showTargetZone(map)
+		assert.deepEqual(names(trace), [
+			"clearMarks", "log", "mark", "mark", "mark", "markText", "markText", "markText", "markText", "pause", "clearMarks"
+		])
+		assert.equal(trace[1][1], "Target zone: 5 cells, max 50.0 (truncated)")
+		assert.equal(danger[1][1], "Danger zone: 5 cells, max 50.0 (truncated)")
+		// hors libellé du log : appels strictement identiques (cases, couleurs, textes)
+		assert.deepEqual(trace.filter((call) => call[0] !== "log"), danger.filter((call) => call[0] !== "log"))
+	})
+	recording(new LogConfig(), () => {
+		showTargetZone(dangerMap([3]))
+		assert.equal(trace[1][1], "Target zone: 1 cells, max 3.0")
+	})
+})
+
+test("target zone: inactive context => no call, no computation; each of the two contexts is independent", () => {
+	let entriesCalls = 0
+	const map = dangerMap([1, 2, 3])
+	const spied = new Proxy(map, {
+		get(target, property) {
+			if (property === "entries") {
+				return () => { entriesCalls++; return target.entries() }
+			}
+			const value = Reflect.get(target, property, target)
+			return typeof value === "function" ? value.bind(target) : value
+		}
+	})
+	recording(new LogConfig().setEnabled(TARGET, false), () => {
+		showTargetZone(spied)
+		assert.deepEqual(trace, [])
+		assert.equal(entriesCalls, 0)
+		showDangerZone(map) // DANGER_ZONE reste actif
+		assert.equal(trace[1][1], "Danger zone: 3 cells, max 3.0")
+	})
+	recording(new LogConfig().setEnabled(DANGER, false), () => {
+		showDangerZone(map)
+		assert.deepEqual(trace, [])
+		showTargetZone(map)
+		assert.equal(trace[1][1], "Target zone: 3 cells, max 3.0")
+	})
+	recording(new LogConfig(), () => {
+		showTargetZone(null)
+		showTargetZone(undefined)
+		showTargetZone(dangerMap([]))
+		assert.deepEqual(trace, [])
+		assert.doesNotThrow(() => showTargetZone({ size: 3, maxDanger: 1, entries() { throw new Error("broken map") } }))
+	})
+})
+
+test("turn(): the target zone is shown right after the danger zone and before the plan; inactive => not computed, same actions", async () => {
+	const { enemyMemory } = await import("../dist/Main/Kassbi_Class.js")
+	await playTurn(new LogConfig()) // 1er tour du module (salutation) si ce test tourne seul
+	let computed = 0
+	const original = enemyMemory.computeTargetZone
+	enemyMemory.computeTargetZone = function (...args) { computed++; return original.apply(this, args) }
+	try {
+		const on = await playTurn(new LogConfig())
+		assert.equal(computed, 1)
+		const text = on.calls.filter((call) => call[0] === "log").map((call) => String(call[1]))
+		const index = (prefix) => text.findIndex((line) => line.startsWith(prefix))
+		assert.equal(text.filter((line) => line.startsWith("Target zone:")).length, 1)
+		assert.equal(index("Target zone:"), index("Danger zone:") + 1)
+		assert.ok(index("Target zone:") < index("[Plannification] PredictContactNextTurn"))
+		assert.equal(on.calls.filter((call) => call[0] === "pause").length, 5) // 3 poireaux + zone de danger + zone visée
+
+		computed = 0
+		const off = await playTurn(new LogConfig().setEnabled(TARGET, false))
+		assert.equal(computed, 0)
+		assert.equal(off.calls.some((call) => String(call[1]).startsWith("Target zone:")), false)
+		assert.equal(off.calls.filter((call) => call[0] === "pause").length, 4)
+		assert.ok(off.fieldCalls < on.fieldCalls) // l'énumération des cases visées n'a pas eu lieu
+		assert.deepEqual(on.actions, off.actions)
+
+		// Une erreur dans le calcul de la zone : rapportée (ERROR), le tour joue les mêmes actions.
+		enemyMemory.computeTargetZone = () => { throw new Error("zone exploded") }
+		const failing = await playTurn(new LogConfig())
+		assert.deepEqual(failing.actions, off.actions)
+		assert.equal(failing.calls.filter((call) => call[0] === "Debug.log" && String(call[1]).includes("displayTargetZone")).length, 1)
+	} finally {
+		enemyMemory.computeTargetZone = original
+	}
 })

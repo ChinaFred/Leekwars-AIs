@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 //
 // Sorties VISUELLES du terrain : seul module de `src/` autorisé à appeler `Debug.mark`, `Debug.markText`,
 // `Debug.clearMarks`, `Debug.pause` et `Debug.show` (voir tests/logging-policy.test.mjs). Le texte, lui,
@@ -217,7 +217,19 @@ export function dangerLabel(danger: number): string {
  * Ne lève jamais.
  */
 export function showDangerZone(map: ThreatMap | null | undefined): void {
-	const context = LOG_CONTEXT.DANGER_ZONE
+	showThreatZone(map, LOG_CONTEXT.DANGER_ZONE, "Danger zone")
+}
+
+/**
+ * Zone visée (`buildTargetZone` : toutes les cases qu'un ennemi peut toucher, atteignables par moi ou non). Même
+ * séquence et mêmes réglages (`MARKER_SETTINGS`) que `showDangerZone`, sous le contexte `TARGET_ZONE`, avec le log
+ * `Target zone: <n> cells, max <x>`. Sans pause, son clearMarks initial efface les marques de la zone de danger.
+ */
+export function showTargetZone(map: ThreatMap | null | undefined): void {
+	showThreatZone(map, LOG_CONTEXT.TARGET_ZONE, "Target zone")
+}
+
+function showThreatZone(map: ThreatMap | null | undefined, context: LogContext, label: string): void {
 	if (!isLogEnabled(context) || map === null || map === undefined) {
 		return
 	}
@@ -253,7 +265,7 @@ export function showDangerZone(map: ThreatMap | null | undefined): void {
 		}
 
 		clearAllMarks(context)
-		log(() => `Danger zone: ${map.size} cells, max ${maxDanger.toFixed(1)}${map.truncated ? " (truncated)" : ""}`, context)
+		log(() => `${label}: ${map.size} cells, max ${maxDanger.toFixed(1)}${map.truncated ? " (truncated)" : ""}`, context)
 		tiers.forEach((cells, tier) => {
 			if (cells.length > 0) {
 				markCells(cells, () => rgb(DANGER_TIER_COLORS_RGB[tier] as readonly [number, number, number]), context)
