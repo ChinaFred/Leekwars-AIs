@@ -53,7 +53,7 @@ const names = (run, step) => step.combo.items.map((i) => run.catalog.book.items[
 
 test("beam: five distinct plans, scores sorted, two turns", () => {
 	const w = world({ chips: [rock(), cure()] })
-	const run = planBeam(w.me, w.context, w.profile, { depth: 2 })
+	const run = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2 })
 	assert.equal(run.result.depth, 2)
 	assert.equal(run.result.beam.length, 5)
 	assert.equal(new Set(run.result.beam.map((node) => node.key)).size, 5, "clés distinctes")
@@ -65,8 +65,8 @@ test("beam: five distinct plans, scores sorted, two turns", () => {
 
 test("sliding horizon: only turn 1 of the best sequence is executed, the plan matches it", () => {
 	const w = world({ chips: [rock()] })
-	const run = planBeam(w.me, w.context, w.profile, { depth: 2 })
-	const plan = planWithBook(w.me, w.context, w.profile, { depth: 2 })
+	const run = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2 })
+	const plan = planWithBook(w.me, w.context, w.profile, { deepen: true, depth: 2 })
 	const first = run.result.best.steps[0]
 	assert.equal(run.result.best.steps.length, 2)
 	assert.equal(plan.weaponShots, first.combo.weaponShots)
@@ -78,7 +78,7 @@ test("sliding horizon: only turn 1 of the best sequence is executed, the plan ma
 
 test("cooldown is propagated: a chip of cooldown 3 cast on turn 1 is not available on turn 2", () => {
 	const w = world({ chips: [rock(3)] })
-	const run = planBeam(w.me, w.context, w.profile, { depth: 2 })
+	const run = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2 })
 	let castFirst = 0
 	for (const node of run.result.beam) {
 		const [one, two] = node.steps.map((step) => names(run, step))
@@ -86,7 +86,7 @@ test("cooldown is propagated: a chip of cooldown 3 cast on turn 1 is not availab
 	}
 	assert.ok(castFirst > 0, "au moins un enchaînement lance rock au tour 1")
 	// Cooldown de base 1 : la puce est de nouveau prête au tour suivant.
-	const again = planBeam(...(() => { const x = world({ chips: [rock(1)] }); return [x.me, x.context, x.profile, { depth: 2 }] })())
+	const again = planBeam(...(() => { const x = world({ chips: [rock(1)] }); return [x.me, x.context, x.profile, { deepen: true, depth: 2 }] })())
 	assert.ok(again.result.beam.some((node) => node.steps.every((step) => names(again, step).includes("rock"))), "rock (cooldown 1) relancé au tour 2")
 })
 
@@ -94,7 +94,7 @@ test("boost on the horizon: worth it with two turns of profit, not with one", ()
 	// 10 PT, arme 4 PT x 20 : sans boost 2 tirs = 40 ; boost 3 PT (force +60) : 1 tir à 32 ce tour, mais 2 tirs à 32 = 64 ensuite.
 	const first = (turns, depth) => {
 		const w = world({ chips: [protein(turns)] })
-		return planBeam(w.me, w.context, w.profile, { depth }).result.best.steps[0].boosts.map((b) => b.chip.name)
+		return planBeam(w.me, w.context, w.profile, { depth, deepen: true }).result.best.steps[0].boosts.map((b) => b.chip.name)
 	}
 	assert.deepEqual(first(2, 1), [], "un seul tour simulé : le boost ne rapporte rien de plus")
 	assert.deepEqual(first(1, 2), [], "effet d'un seul tour : jamais rentable")
@@ -104,12 +104,12 @@ test("boost on the horizon: worth it with two turns of profit, not with one", ()
 
 test("boost on the horizon: the PT boost pays at once and its PT are spent", () => {
 	const w = world({ chips: [motivation()] })
-	const run = planBeam(w.me, w.context, w.profile, { depth: 2 })
+	const run = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2 })
 	const step = run.result.best.steps[0]
 	assert.deepEqual(step.boosts.map((b) => b.chip.name), ["motivation"])
 	assert.equal(step.tpGain, 4)
 	assert.equal(step.combo.weaponShots, 3, "10 - 2 + 4 = 12 PT : trois tirs")
-	assert.equal(planWithBook(w.me, w.context, w.profile, { depth: 2 }).boost.tpGain, 4)
+	assert.equal(planWithBook(w.me, w.context, w.profile, { deepen: true, depth: 2 }).boost.tpGain, 4)
 	assert.equal(step.tpUsed, 14, "boost 2 + 3 tirs de 4")
 })
 
@@ -152,7 +152,7 @@ test("enemy hypotheses are replaceable functions", () => {
 	assert.equal(stayStill(enemy, w.me.cell).x, 10)
 	const danger = futureDangerOf(new Map([[1 * 4096 + 1, { cell: { x: 1, y: 1 }, danger: 7 }], [9 * 4096 + 9, { cell: { x: 9, y: 9 }, danger: 3 }]]))
 	assert.equal(danger({ x: 8, y: 8 }), 3, "case la plus proche")
-	const run = (mover) => planBeam(w.me, w.context, w.profile, { depth: 2, mover }).result.best.steps.length
+	const run = (mover) => planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2, mover }).result.best.steps.length
 	assert.equal(run(stayStill), 2)
 })
 
@@ -169,18 +169,18 @@ test("fallback: no beam on stale or truncated data, so planAct plays", () => {
 test("budget cut: the best COMPLETE plan is kept, never half a plan", () => {
 	const w = world({ chips: [rock(), protein(2)] })
 	const one = planBeam(w.me, w.context, w.profile, { depth: 1 })
-	const two = planBeam(w.me, w.context, w.profile, { depth: 2 })
+	const two = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2 })
 	assert.ok(two.work > one.work)
 	// Coupé pendant le tour 2 : le niveau 2 est abandonné, le tour 1 complet reste.
-	const cut = planBeam(w.me, w.context, w.profile, { depth: 2, workLimit: one.work + 1 })
+	const cut = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2, workLimit: one.work + 1 })
 	assert.equal(cut.result.cut, "work limit")
 	assert.equal(cut.result.depth, 1)
 	assert.equal(cut.result.best.steps.length, 1)
 	assert.equal(cut.result.best.steps[0].key, one.result.best.steps[0].key, "même meilleur tour 1")
-	const plan = planWithBook(w.me, w.context, w.profile, { depth: 2, workLimit: one.work + 1 })
+	const plan = planWithBook(w.me, w.context, w.profile, { deepen: true, depth: 2, workLimit: one.work + 1 })
 	assert.match(plan.searchStatus, /cut: work limit/)
 	// Coupé pendant le tour 1 : seules des étapes déjà complètes restent ; avant la première, aucun plan (repli planAct).
-	const early = planBeam(w.me, w.context, w.profile, { depth: 2, workLimit: 30 })
+	const early = planBeam(w.me, w.context, w.profile, { deepen: true, depth: 2, workLimit: 30 })
 	if (early.result.best !== null) assert.ok(early.result.best.steps.every((step) => step.combo !== undefined && step.finalCell !== undefined))
 	assert.equal(planWithBook(w.me, w.context, w.profile, { workLimit: 1 }), null)
 })
@@ -190,11 +190,11 @@ test("work units of the beam by width and depth (counted iterations, not game op
 	for (const [label, chips] of [["gun + rock + protein + cure", [rock(), protein(2), cure()]], ["gun only", []]]) {
 		for (const width of [1, 3, 5]) for (const depth of [1, 2, 3]) {
 			const w = world({ chips, enemies: [[12, 5, 1000]], danger: (cell) => Math.abs(cell.x - 12) * 5 })
-			const run = planBeam(w.me, w.context, w.profile, { width, depth })
+			const run = planBeam(w.me, w.context, w.profile, { width, depth, deepen: true })
 			lines.push(`${label} width ${width} depth ${depth}: ${run.work} beam units + ${run.catalog.book.work} table units, ${run.catalog.book.tablesBuilt} tables, reached depth ${run.result.depth}`)
 		}
 	}
 	t.diagnostic(lines.join("\n"))
 	const w = world({ chips: [rock(), protein(2), cure()] })
-	assert.ok(planBeam(w.me, w.context, w.profile, { width: 5, depth: 3 }).work < 500000)
+	assert.ok(planBeam(w.me, w.context, w.profile, { width: 5, deepen: true, depth: 3 }).work < 500000)
 })

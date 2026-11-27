@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { ShotItem, chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 
@@ -264,25 +264,36 @@ export class CombatBook {
 	readBoosted(
 		stats: Stats, boosts: readonly Boost[], query: BookQuery, offset = 0, shield: Shield = NO_SHIELD
 	): { combo: Combo; raw: DamageByStat; net: number; rebuilt: boolean } {
+		const resolved = this.resolveBoost(stats, boosts, offset, shield)
+		const combo = resolved.table.read(query)
+		return {
+			combo, rebuilt: resolved.rebuilt, net: combo.total * resolved.netFactor,
+			raw: resolved.rawStrength === 1 && resolved.rawMagic === 1 ? combo.raw : {
+				strength: combo.raw.strength * resolved.rawStrength, magic: combo.raw.magic * resolved.rawMagic, fixed: combo.raw.fixed
+			}
+		}
+	}
+
+	/**
+	 * Décide UNE fois (par variante de boost et cible, pas par case) quelle table lire et quels facteurs appliquer :
+	 * `table` (actuelle ou de l'état virtuel), `netFactor` sur `Combo.total`, facteurs sur le brut par statistique.
+	 */
+	resolveBoost(
+		stats: Stats, boosts: readonly Boost[], offset = 0, shield: Shield = NO_SHIELD
+	): { table: CombatTable; netFactor: number; rawStrength: number; rawMagic: number; rebuilt: boolean } {
 		const virtual = boostedStats(stats, boosts, offset)
 		if (virtual.strength === stats.strength && virtual.magic === stats.magic) {
-			const combo = this.read(stats, query, shield)
-			return { combo, raw: combo.raw, net: combo.total, rebuilt: false }
+			return { table: this.at(stats, shield), netFactor: 1, rawStrength: 1, rawMagic: 1, rebuilt: false }
 		}
 		// Bouclier absolu : le net n'est plus proportionnel à la statistique, le facteur seul serait faux.
 		if (shield.absolute > 0 || this.rankingMayChange(stats, virtual)) {
-			const combo = this.read(virtual, query, shield)
-			return { combo, raw: combo.raw, net: combo.total, rebuilt: true }
+			return { table: this.at(virtual, shield), netFactor: 1, rawStrength: 1, rawMagic: 1, rebuilt: true }
 		}
-		const combo = this.read(stats, query, shield)
 		const strength = boostFactor(stats.strength, virtual.strength - stats.strength)
 		const magic = boostFactor(stats.magic, virtual.magic - stats.magic)
-		const first = combo.items.length > 0 ? this.items[combo.items[0]!]! : null
-		const factor = first === null ? 1 : first.stat === "strength" ? strength : first.stat === "magic" ? magic : 1
-		return {
-			combo, rebuilt: false, net: combo.total * factor,
-			raw: { strength: combo.raw.strength * strength, magic: combo.raw.magic * magic, fixed: combo.raw.fixed }
-		}
+		const first = this.items[0]
+		const factor = first === undefined ? 1 : first.stat === "strength" ? strength : first.stat === "magic" ? magic : 1
+		return { table: this.at(stats, shield), netFactor: factor, rawStrength: strength, rawMagic: magic, rebuilt: false }
 	}
 
 	/** Le classement des combos peut-il changer ? Oui si les items à dégâts n'ont pas tous le même facteur. */

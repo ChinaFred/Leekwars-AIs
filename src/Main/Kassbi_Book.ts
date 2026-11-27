@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -8,6 +8,8 @@ import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { OBJECTIVES } from "../Classes/Plannification/BookObjective.js"
 import { planWithBook } from "../Classes/Plannification/BookPlanner.js"
+import { StandoffTracker } from "../Classes/Plannification/BookStandoff.js"
+import { aliveEnemies } from "../Classes/Context/Targets.js"
 import { executeTacticalPlan } from "../Classes/Plannification/TacticalExecution.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
@@ -28,6 +30,9 @@ leekProfile.setRole("AGGRESSIVE")
 leekProfile.setAggression(50)
 leekProfile.setSupportOptions(true, true, true)
 
+/** Compteur de duel (`BookStandoff.ts`) : nourri à chaque tour, lu par le faisceau en posture AGGRESSIVE seulement. */
+const standoff = new StandoffTracker()
+
 function operations(): number {
 	return typeof System === "undefined" ? 0 : System.operations
 }
@@ -44,16 +49,23 @@ export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Book.ts", "turn", () => {
 		const me = Fight.me
 		log(`\n=== KASSBI BOOK TURN START ===`, LOG_CONTEXT.SYSTEM)
+		// Avant `observeTurn` : il ouvre le tour dans l'historique, `lastDealt` serait alors celui du tour qui commence (0).
+		const dealtLastTurn = actionHistory.lastDealt
 		observeTurn(me)
 		if (!springChestTrap(me)) {
 			const context = {
 				reachable: enemyMemory.getReachable(me.id), threat: enemyMemory.getThreatMap(), stagnation,
 				mpBoost: mpBoostCandidate(me)
 			}
+			try {
+				standoff.observe(Fight.turn, me.life, aliveEnemies(), dealtLastTurn)
+			} catch (error) {
+				reportError("src/Main/Kassbi_Book.ts", "standoff", error)
+			}
 			const before = operations()
 			let plan = null
 			try {
-				plan = planWithBook(me, context, leekProfile, { objective: OBJECTIVE })
+				plan = planWithBook(me, context, leekProfile, { objective: OBJECTIVE, standoff })
 			} catch (error) {
 				reportError("src/Main/Kassbi_Book.ts", "planWithBook", error)
 			}

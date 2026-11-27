@@ -123,7 +123,7 @@ Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 30 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
 
-Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, 2 à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Aucun seuil ci-dessus n'en dépend.
+Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, jusqu'à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Repli après tir cherché par groupe d'actions classé sur son potentiel (danger final nul), pas sur son score « sur place ». Niveau 2 seulement en duel (AGGRESSIVE, `BookStandoff.ts` : ≥ 6 tours, mes PV stables, dégâts infligés ≥ 15 % des PV max adverses mais baisse nette < 15 %) ou si un plan non létal inflige plus ; en duel limite létale × (1 + 0,25 par tour au-delà de la fenêtre, 2,0 au plus), jamais à 2 × mes PV ni sous 50 % de PV, poids du danger réduit, budget 0,30 au lieu de 0,25. Aucun seuil ci-dessus n'en dépend.
 
 ## Plan B (`ReservePlan.ts`)
 
