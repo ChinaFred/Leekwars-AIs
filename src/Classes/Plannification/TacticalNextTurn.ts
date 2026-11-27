@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { ReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { ShotCandidate, isStrengthBoostType, isTpBoostType, toCandidate } from "../Context/ShotPlan.js"
@@ -7,9 +7,9 @@ import { Budget, Unavailable, key, validCost } from "./TacticalTypes.js"
 import { netDamage } from "./TacticalScore.js"
 
 /**
- * Parcours exploratoire facultatif, sans tir promis : l'unique arme choisie peut
- * être inabordable ce tour. Les distances retournées suivent seulement des
- * cases actuellement traversables, y compris au-delà des PM de ce tour.
+ * Parcours exploratoire facultatif, sans tir promis : l'unique arme choisie (la première valide de `weapons`, que
+ * l'appelant ordonne selon la posture du rôle) peut être inabordable ce tour. Les distances retournées suivent
+ * seulement des cases actuellement traversables, y compris au-delà des PM de ce tour.
  */
 export function futureWeaponRoute(
 	me: Me, target: Entity, weapons: readonly Weapon[], reachable: ReachableCells, budget: Budget
