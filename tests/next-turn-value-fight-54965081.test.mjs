@@ -68,7 +68,7 @@ const TURNS = {
 	4: { k: 546, e: 567, enemyLife: 197, enemyStrength: 295, enemyWeapon: "pistol", strengthBoost: 0, proteinCooldown: 1 }
 }
 
-function arena(turn, { ops } = {}) {
+function arena(turn, { ops, role = "AGGRESSIVE" } = {}) {
 	const state = TURNS[turn]
 	delete globalThis.System
 	globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5,
@@ -155,7 +155,7 @@ function arena(turn, { ops } = {}) {
 	memory.updateThreatMap(me, [enemy], turn)
 	if (ops) globalThis.System = { get operations() { return clock }, maxOperations: 1000000 }
 	const profile = new LeekProfile()
-	profile.setRole("AGGRESSIVE"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole(role); profile.setAggression(50); profile.setPreferredRange(3, 8)
 	profile.setSupportOptions(true, true, true)
 	const context = { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() }
 	const usableNextTurn = (cell, item) => {
@@ -184,14 +184,18 @@ const describe = (w, plan) => ({
 // cases de tir, puces créditées après déplacement comprises), pas après ce plan. Tour 4 : CARACTÉRISATION d'un objectif NON
 // atteint au poids 0,75 : le repli en 526 (danger 142,2 ; seul spark y reste utilisable, N = 0,75 x 43,2) garde l'avantage
 // sur motivation + neutrino + spark depuis 564 puis 527 (danger 252,8) ; bascule mesurée entre 0,8 et 0,85.
+// POSTURE DU RÔLE (profil du combat : AGGRESSIVE, `w` 0,75 -> 0,5, poids d'approche `a` = 1,25, soit N à 0,9375) : tour 3,
+// même plan, N et score recalculés (43,54 x 1,25) ; tour 4, la DÉCISION CHANGE et atteint l'objectif : motivation +
+// neutrino + spark depuis 564, fin en 527 (danger 252,8 < 369 PV), neutrino et rock utilisables au tour suivant. `BALANCED`
+// (`w` = 1, `a` = 1) garde le repli en 526 (test ci-dessous). Effet en combat non mesuré.
 const RECORDED = {
 	3: { destination: 546, distance: 11, shotCell: 565, weapon: null, shots: 0, chips: ["spark", "spark", "spark"], boost: [],
-		protection: [], usefulDamage: 76.68, danger: 0, nextTurn: 43.54, score: 120.22, neutrino: true, rock: true },
-	4: { destination: 526, distance: 12, shotCell: 546, weapon: null, shots: 0, chips: ["spark", "spark", "spark"], boost: [],
-		protection: [], usefulDamage: 43.2, danger: 142.2, nextTurn: 32.4, score: -31.05, neutrino: false, rock: false }
+		protection: [], usefulDamage: 76.68, danger: 0, nextTurn: 54.43, score: 131.11, neutrino: true, rock: true },
+	4: { destination: 527, distance: 10, shotCell: 564, weapon: "neutrino", shots: 1, chips: ["spark"], boost: ["motivation"],
+		protection: [], usefulDamage: 47.4, danger: 252.8, nextTurn: 74.25, score: 44.75, neutrino: true, rock: true }
 }
 
-test("combat 54965081, turns 3 and 4: the final cell is credited with next turn's damage (decisions at weight 0.75)", () => {
+test("combat 54965081, turns 3 and 4: the final cell is credited with next turn's damage (AGGRESSIVE: N weighted 0.75 x a)", () => {
 	try {
 		assert.equal(NEXT_TURN_WEIGHT, 0.75)
 		for (const turn of [3, 4]) {
@@ -206,12 +210,25 @@ test("combat 54965081, turns 3 and 4: the final cell is credited with next turn'
 	} finally { done() }
 })
 
+test("posture, combat 54965081 turn 4: AGGRESSIVE moves in to shoot the neutrino, BALANCED and DEFENSIVE keep the spark retreat", () => {
+	try {
+		const seen = (role) => {
+			const w = arena(4, { role })
+			const { plan } = w.evaluate()
+			return [plan.shotCell.id, plan.destination.id, plan.weapon?.name ?? null, Number(plan.danger.toFixed(2))]
+		}
+		assert.deepEqual(seen("AGGRESSIVE"), [564, 527, "neutrino", 252.8])
+		assert.deepEqual(seen("BALANCED"), [546, 526, null, 142.2])
+		assert.deepEqual(seen("DEFENSIVE"), [546, 526, null, 142.2])
+	} finally { done() }
+})
+
 test("N falls back to 0 for every cell when its operations allowance (5 %) is exceeded, and says so", () => {
 	try {
 		// Tour 3 : 29 recherches de case hors zone. À 1 000 ops chacune (29 000 < 50 000) N est calculé ; à 2 000 (58 000),
 		// N = 0 partout : même plan et même score qu'avant le terme N, et une ligne PLANNING.
 		const within = arena(3, { ops: { perCellLookup: 1000 } })
-		assert.equal(Number(within.evaluate().plan.nextTurn.toFixed(2)), 43.54)
+		assert.equal(Number(within.evaluate().plan.nextTurn.toFixed(2)), 54.43) // 1,25 x 43,54 (poids d'approche AGGRESSIVE)
 		const beyond = arena(3, { ops: { perCellLookup: 2000 } })
 		const { plan, reason } = beyond.evaluate()
 		assert.equal(reason, "complete search")

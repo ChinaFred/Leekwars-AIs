@@ -1,11 +1,11 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
 import { reportError } from "../Toolbox/Debug.js"
 import { isLogEnabled, log, LOG_CONTEXT } from "../Toolbox/Logger.js"
-import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
+import { AccessibleZoneSource, showAccessibleZones, showDangerZone, showTargetZone } from "../Toolbox/Marker.js"
 
 /** Mémoire et cartes du tour ; seules les cartes sont transmises à planAct. */
 export const enemyMemory = new EnemyMemory()
@@ -227,6 +227,21 @@ function displayDangerZone(): void {
 }
 
 /**
+ * Affichage visuel (contexte TARGET_ZONE) de la zone visée : toutes les cases que les ennemis peuvent toucher, que je
+ * puisse les atteindre ou non. Calculée ici, à la demande, et jamais transmise à planAct : contexte inactif = aucun
+ * calcul ; actif, son seul effet sur le plan est le nombre d'opérations déjà consommées (plafond
+ * `TARGET_ZONE_OPERATIONS_FRACTION`, marques non comprises).
+ */
+function displayTargetZone(me: Me): void {
+	guarded("displayTargetZone", () => {
+		if (!isLogEnabled(LOG_CONTEXT.TARGET_ZONE)) {
+			return
+		}
+		showTargetZone(enemyMemory.computeTargetZone(me))
+	})
+}
+
+/**
  * Observation complète du début de tour, dans l'ordre : ennemis, coffres, cases atteignables (et leur affichage),
  * carte de danger (et son affichage), stagnation, puis ouverture de l'historique des actions. Chaque étape est
  * protégée séparément ; la liste des ennemis vivants et celle des alliés ne sont demandées au jeu qu'une fois.
@@ -240,6 +255,7 @@ export function observeTurn(me: Me): void {
 	displayAccessibleZones(me, allies, living)
 	observeThreatMap(me, living)
 	displayDangerZone()
+	displayTargetZone(me)
 	observeStagnation(me, living)
 	openHistory(me)
 }

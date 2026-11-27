@@ -4,7 +4,7 @@ import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
 import { hasDamage, strengthBoostOf, tpBoostOf } from "./ShotPlan.js"
-import { buildThreatMap, GeometricShotCells, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
+import { buildTargetZone, buildThreatMap, GeometricShotCells, ThreatEnemy, ThreatMap } from "./ThreatMap.js"
 
 /** Multiplicateur de coup critique : constante officielle CRITICAL_FACTOR = 1.3. */
 export const CRITICAL_FACTOR = 1.3
@@ -73,6 +73,8 @@ export class EnemyMemory {
 	private lastLifeTurn = 0
 	/** Carte de danger de mon poireau pour le tour courant (remplacée à chaque tour). */
 	private threatMap: ThreatMap | null = null
+	/** Entrées ennemies de `threatMap` (même tour), gardées pour `computeTargetZone` ; null sans carte. */
+	private threatInputs: readonly ThreatEnemy[] | null = null
 	/** Lignes de vue (case de tir, case visée) déjà demandées : les obstacles sont fixes pendant le combat. */
 	private readonly sightCache = new Map<number, boolean>()
 
@@ -234,6 +236,7 @@ export class EnemyMemory {
 	updateThreatMap(me: Me, enemies: readonly Entity[], turn: number): ThreatUpdate | null {
 		// Une exception plus bas ne doit pas laisser la carte du tour précédent passer pour celle du tour courant.
 		this.threatMap = null
+		this.threatInputs = null
 		const mine = this.getReachable(me.id)
 		if (mine === null || mine.turn !== turn) {
 			return null
@@ -271,6 +274,7 @@ export class EnemyMemory {
 		}
 		const map = buildThreatMap(me, mine, inputs, turn, { provider: new GeometricShotCells(this.sightCache) })
 		this.threatMap = map
+		this.threatInputs = inputs
 		return {
 			size: map.size,
 			candidateCells: map.candidateCells,
@@ -282,6 +286,20 @@ export class EnemyMemory {
 			pairsEvaluated: map.pairsEvaluated,
 			lineOfSightCalls: map.lineOfSightCalls
 		}
+	}
+
+	/**
+	 * Zone visée du tour (voir `buildTargetZone`) : toutes les cases que les ennemis de la carte de danger courante
+	 * peuvent toucher, atteignables par moi ou non. Calculée À LA DEMANDE (affichage), jamais stockée ni lue par le
+	 * planificateur ; reprend les cases de la carte de danger et partage son cache de ligne de vue. Null sans carte
+	 * de danger du tour.
+	 */
+	computeTargetZone(me: Pick<Entity, "id" | "cell">): ThreatMap | null {
+		const known = this.threatMap
+		if (known === null || this.threatInputs === null) {
+			return null
+		}
+		return buildTargetZone(me, this.threatInputs, known.turn, { provider: new GeometricShotCells(this.sightCache), known })
 	}
 
 	private friendlyProfileOf(entity: Entity, turn: number): EntityProfile {

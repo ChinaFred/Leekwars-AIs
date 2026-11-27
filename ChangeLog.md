@@ -9,6 +9,8 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 - 2026-11-27 — Rangement : `castMpBoost` dans `StrengthBoost.ts`, attribution des coffres par la constante `NEVER_ATTRIBUTE_DAMAGE` ; aucun changement de comportement.
 - 2026-11-27 — Tour robuste : préambule et historique protégés à part, ennemis vivants lus une fois par observation (5 → 1 appel), `Kassbi_test` joue avec le contexte de `Kassbi_Class`.
 - 2026-11-27 — Observation du tour sortie du point d'entrée : `src/Brain/TurnObservation.ts` (mémoires, cartes, stagnation) ; `Kassbi_Class.ts` 332 → 122 lignes, aucun changement de comportement.
+- 2026-11-27 — Zone visée (`TARGET_ZONE`, actif) : danger des cases que les ennemis peuvent toucher, marqué sur le terrain ; jusqu'à 20 % des opérations du tour avant le plan.
+- 2026-11-27 — Posture par rôle (plan conjoint) : poids du danger 0,5 / 1 / 1,5, poids d'approche 1,25 / 1 / 0,75 ; AGGRESSIVE ne recule plus sans tirer, DEFENSIVE se met à couvert librement.
 - 2026-11-27 — Boost de PT (Motivation) sans tir : crédit futur compté aussi avec les puces offensives (meilleur de arme, puces, arme + puces) ; avec tir, inchangé (54991104).
 - 2026-11-27 — Plan conjoint découpé en six fichiers `Tactical*.ts` (90 Ko → 47 Ko pour `TacticalPlanner.ts`) : aucun changement de comportement.
 - 2026-11-27 — Repli sans tir refusé : un recul sans dégâts vers une case plus sûre cède au meilleur plan à dégâts sous 0,75 × PV de danger (hors seuil de repli, tour condamné) ; sinon il est gardé.
