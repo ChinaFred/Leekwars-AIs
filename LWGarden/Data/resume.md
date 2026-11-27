@@ -2,6 +2,21 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 9fa57c2 — fix(tactique): tour condamné sans boost crédité, kill prioritaire
+Compte Kassbi, publié le 2026-11-26T21:51:51Z.
+Stratégie : tour condamné = seuil létal atteint sur la case de moindre danger avec chaque protection candidate ; alors une cible tuée (dégâts moyens ≥ ses PV) passe avant le score et le crédit futur F des boosts vaut 0 avec ou sans tir (avant : F jusqu'à 0,75 × PV de la cible). Soin, protection et case finale inchangés ; hors tour condamné, aucun changement. Rejeux : 54969530 T10 cure + rock (31,2 attendus au lieu de 0), 54969527 T6 protein + rock (65,85 au lieu de 42,75), 54969622 T8 repli seul ; 54969530 T8 et 54969622 T7 identiques.
+Combats : 10 — 6 victoires, 4 défaites, 0 nuls (60 % de victoires), 0 sans logs.
+Ops : pic maximal 81 % (combat 54972543), médiane des pics 42 %.
+Ressources : 136 tours joués, 26 sans aucune action payante (19 %), 31 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 40 % inutilisés sur 1361 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 54972471 (17/55, victoire), 54972543 (2/8, victoire), 54976625 (2/9, défaite), 54974628 (2/10, défaite), 54972647 (1/6, défaite).
+
+Défaites :
+- 54972647 : 7 tours · vs PoisRond · pic ops 42 %
+- 54972715 : 15 tours · vs Massko · pic ops 48 %
+- 54974628 : 11 tours · vs Poireaufesseur · pic ops 43 %
+- 54976625 : 10 tours · vs Albertus · pic ops 72 %
+
 ## 28942a4 — chore(merge): Master (boost d'agilité, tag du workflow) dans la branche
 Compte Kassbi, publié le 2026-11-26T21:15:47Z.
 Combats : 28 — 24 victoires, 3 défaites, 1 nuls (86 % de victoires), 0 sans logs.
