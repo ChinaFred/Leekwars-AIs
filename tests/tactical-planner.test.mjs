@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import {
-	evaluateTacticalPlans, executeTacticalPlan, riskWeight, RETREAT_RISK_FACTOR, selfHitRadius, TACTICAL_LIMITS
-} from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { TACTICAL_LIMITS } from "../dist/Classes/Plannification/TacticalTypes.js"
+import { riskWeight, RETREAT_RISK_FACTOR } from "../dist/Classes/Plannification/TacticalScore.js"
+import { evaluateTacticalPlans, selfHitRadius } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
 import { createStrategy } from "../dist/Classes/LeekProfile.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"

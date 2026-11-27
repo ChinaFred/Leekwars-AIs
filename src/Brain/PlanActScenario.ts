@@ -1,9 +1,11 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { nearestEnemy } from "../Classes/Context/Targets.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
-import { TacticalContext, evaluateTacticalPlans, executeTacticalPlan } from "../Classes/Plannification/TacticalPlanner.js"
+import { TacticalContext } from "../Classes/Plannification/TacticalTypes.js"
+import { evaluateTacticalPlans } from "../Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan } from "../Classes/Plannification/TacticalExecution.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { executeReservePlan } from "../Classes/Plannification/ReservePlan.js"
 

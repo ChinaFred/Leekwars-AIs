@@ -3,6 +3,11 @@
 Stratégie **en vigueur**, sans historique. Le code fait foi ; les constantes citées sont suivies de leur fichier. Tout changement de seuil, de condition ou d'ordre de planification met ce fichier à jour (lignes concernées
 seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`ChangeLog.md`](../ChangeLog.md) et `git log`.
 
+**Sommaire** — [Chaîne de décision](#chaîne-de-décision) · [Plan conjoint](#plan-conjoint-tacticalplannerts) : [score](#score-et-compromis-explicite),
+[stagnation](#sortie-de-stagnation), [bornes et ops](#bornes-et-budget-dopérations) · [Plan B](#plan-b-reserveplants) · [Boosts](#boosts-srcbrainstrengthboostts) ·
+[Séquence historique](#séquence-historique-plannificationts-strategyts) : [seuils](#seuils-par-stratégie), [déplacements](#déplacements-movementbehaviorts) · [Mémoire de l'adversaire](#mémoire-de-ladversaire) :
+[cases atteignables](#cases-atteignables-reachablecellsts), [carte de danger](#carte-de-danger-threatmapts-shotplants-launchpatternts) · [Journalisation](#journalisation-toolboxloggerts-toolboxmarkerts) · [Limites connues](#limites-connues)
+
 ## Chaîne de décision
 
 Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
@@ -22,13 +27,12 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, boosts de force, de PT et d'agilité compris ; hors du
 plan, `turn()` ne lance que le boost de PM (il en change les entrées). Exécution commencée, aucun second plan : un échec l'arrête.
 
-**Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ;
-elle est suivie à part (`[Chest]`, contexte `MEMORY`).
+**Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ; elle est suivie à part (`[Chest]`, contexte `MEMORY`).
 
 ## Plan conjoint (`TacticalPlanner.ts`)
 
 Compare en un seul score attaque, boost, protection et déplacement. Un plan = **une cible, une case de tir, au plus
-une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support) concourt aussi.
+une arme**, plus des puces offensives, de protection et de boost ; l'option sans tir (progression, couvert, support) concourt aussi. Code : recherche dans `TacticalPlanner.ts`, types et bornes `TacticalTypes.ts`, score `TacticalScore.ts`, tour suivant `TacticalNextTurn.ts`, stagnation `TacticalStagnation.ts`, exécution `TacticalExecution.ts`.
 
 **Conditions** : `ReachableCells` et `ThreatMap` du tour courant, non tronquées, danger connu, fini et ≥ 0 sur
 chaque case atteignable. Sinon le danger est **inconnu** (jamais remplacé par zéro) et on passe au plan B.
@@ -86,10 +90,9 @@ La distance à une case de tir ne départage que les égalités. **Trajet futur 
 
 ### Sortie de stagnation
 
-Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
+Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester bloqué derrière un mur (minimum local de Manhattan).
 
-- **Tour sans progrès** : ni dégâts infligés, ni nouveau record de proximité à l'ennemi le plus proche. Rester
-  immobile ou osciller compte de la même façon.
+- **Tour sans progrès** : ni dégâts infligés, ni nouveau record de proximité à l'ennemi le plus proche. Rester immobile ou osciller compte de la même façon.
 - **Déclenchement** : `STAGNATION_TURNS` = 2 tours sans progrès, ennemis **immobiles** sur ces tours, et plan normal
   **bloqué** (ni tir, ni déplacement, ni protection) ou sortie déjà engagée.
 - **Destination** : case atteignable dont la distance de **marche** vers une zone de tir est strictement plus courte
@@ -105,8 +108,8 @@ Fichiers : `StagnationTracker.ts`, `TacticalPlanner.ts`. Évite de rester bloqu�
 
 | Borne | Valeur | Fichier |
 |---|---|---|
-| `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalPlanner.ts` |
-| Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalPlanner.ts` |
+| `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalTypes.ts` |
+| Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalTypes.ts` |
 | Arrêt de la recherche (global) | 80 % du total, partagé avec le plan B et la carte de danger (`SEARCH_GLOBAL_FRACTION`) | `ExecutionBudget.ts` |
 | Garde d'exécution | continuer si `max − ops > 3 % × max + 2 × plus gros segment observé` (`TAIL_FRACTION`) | `ExecutionBudget.ts` |
 
@@ -172,8 +175,7 @@ pénalité de portée d'arme et portée préférée max : séquence historique s
 - « Trop près » : `d < max(2, portée préférée min − 1)`. Portée de menace : PM de l'ennemi + portée max de son arme.
 - Score d'arme : dégâts moyens du tour − pénalité × écart entre portée moyenne préférée et portée moyenne de l'arme.
 - Le soin est sauté si tirer rapporte plus : `dégâts par PT × coût du soin > 2 × soin moyen`.
-- **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux
-  peuvent tirer et `vie ≤ 0,60`.
+- **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux peuvent tirer et `vie ≤ 0,60`.
 
 ### Déplacements (`MovementBehavior.ts`)
 
@@ -188,8 +190,7 @@ Hypothèse de grille : voisins orthogonaux `(x ± 1, y)` et `(x, y ± 1)`, non v
 
 ## Mémoire de l'adversaire
 
-Fichiers : `EnemyMemory.ts`, `EnemyProfile.ts`. Mise à jour au début de chaque tour ; seules les **cartes** du tour
-sont transmises à `planAct`.
+Fichiers : `EnemyMemory.ts`, `EnemyProfile.ts`. Mise à jour au début de chaque tour ; seules les **cartes** du tour sont transmises à `planAct`.
 
 - **Par ennemi** : caractéristiques, armes et puces connues ou observées, arme équipée, PT et PM maximaux vus,
   cooldowns suivis, journal des coups (`MAX_HIT_LOG` = 20).
@@ -227,8 +228,7 @@ armes, sélection bornée des boosts, élagage des configurations dominées (`te
 
 Toute sortie passe par `log(texte, contexte)` ; `Logger.ts` est le seul fichier qui écrit dans le log de combat,
 `Marker.ts` le seul qui marque le terrain ou met en pause. Tous les contextes sont actifs par défaut ; en couper un :
-`leekLogConfig.setEnabled(LOG_CONTEXT.DANGER_ZONE, false)`. Un texte paresseux (`() => string`) n'est évalué que
-si son contexte est actif.
+`leekLogConfig.setEnabled(LOG_CONTEXT.DANGER_ZONE, false)`. Un texte paresseux (`() => string`) n'est évalué que si son contexte est actif.
 
 Contextes utiles à l'analyse : `PLANNING` (plan avant exécution, replis `[Tactical]`, `[Reserve]`), `THREAT`,
 `REACHABLE`, `MEMORY`, `CHIP` (`[Boost]`), `OPERATIONS` (ligne `Operations:` de fin de tour), `ERROR` (en rouge).

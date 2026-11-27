@@ -17,7 +17,10 @@ export async function load(dir) {
 	const S = await import(dir + "/dist/Classes/Context/StagnationTracker.js")
 	const G = await import(dir + "/dist/Toolbox/Logger.js")
 	const V = await import(dir + "/dist/Classes/Plannification/ReservePlan.js")
-	return { ...P, ...R, ...T, ...L, ...S, ...G, executeReservePlan: V.executeReservePlan }
+	// Build d'avant le découpage du planificateur (`DIST_ROOT`) : `executeTacticalPlan` vient encore de TacticalPlanner.js.
+	const executeTacticalPlan = P.executeTacticalPlan ??
+		(await import(dir + "/dist/Classes/Plannification/TacticalExecution.js")).executeTacticalPlan
+	return { ...P, ...R, ...T, ...L, ...S, ...G, executeTacticalPlan, executeReservePlan: V.executeReservePlan }
 }
 
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)

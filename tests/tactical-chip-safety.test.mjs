@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { evaluateTacticalPlans, executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { evaluateTacticalPlans } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"

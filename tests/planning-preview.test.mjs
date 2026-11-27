@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { planAct } from "../dist/Brain/PlanActScenario.js"
-import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalPlanner.js"
+import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
 import { executeReservePlan } from "../dist/Classes/Plannification/ReservePlan.js"
 import { Plannification } from "../dist/Classes/Plannification/Plannification.js"
 import { Action } from "../dist/Classes/Plannification/Action.js"

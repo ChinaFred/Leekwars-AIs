@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 21
+// file version: 22
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { decideMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -8,7 +8,7 @@ import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies, nearestEnemy } from "../Classes/Context/Targets.js"
-import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalPlanner.js"
+import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalTypes.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, isLogEnabled, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
