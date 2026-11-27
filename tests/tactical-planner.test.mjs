@@ -739,10 +739,11 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 		weapons: [], chips: [], effects: [], launchedEffects: []
 	})
 	initLeekLogging(new LogConfig().setAll(false))
-	// Le bouclier à 100/120 PV prouve que la carte de danger arrive au plan : seuil BALANCED (0,85), pas celui du rôle par défaut.
-	const role = leekProfile.strategyName
+	// Le bouclier à 100/120 PV prouve que la carte de danger arrive au plan : seuil BALANCED à agressivité 50 (0,85), pas celui du profil de production.
+	const { role, aggression } = { role: leekProfile.strategyName, aggression: leekProfile.aggression }
 	leekProfile.setRole("BALANCED")
-	try { turn() } finally { leekProfile.setRole(role) }
+	leekProfile.setAggression(50)
+	try { turn() } finally { leekProfile.setRole(role); leekProfile.setAggression(aggression) }
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
 

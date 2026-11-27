@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 29
+// file version: 30
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -30,7 +30,7 @@ initLeekLogging(leekLogConfig)
  */
 export const leekProfile = new LeekProfile()
 leekProfile.setRole("AGGRESSIVE")
-leekProfile.setAggression(50)
+leekProfile.setAggression(100)
 leekProfile.setSupportOptions(true, true, true)
 
 let isFirstTurn = true

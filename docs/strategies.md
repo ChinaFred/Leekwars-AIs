@@ -16,7 +16,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
 3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 100, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
