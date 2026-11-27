@@ -139,7 +139,6 @@ function profile({ aggression = 50, hiding = true } = {}) {
 	const result = new LeekProfile()
 	result.setRole("BALANCED")
 	result.setAggression(aggression)
-	result.setPreferredRange(3, 8)
 	result.setSupportOptions(true, true, hiding)
 	return result
 }

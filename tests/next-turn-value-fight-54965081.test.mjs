@@ -155,7 +155,7 @@ function arena(turn, { ops, role = "AGGRESSIVE" } = {}) {
 	memory.updateThreatMap(me, [enemy], turn)
 	if (ops) globalThis.System = { get operations() { return clock }, maxOperations: 1000000 }
 	const profile = new LeekProfile()
-	profile.setRole(role); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole(role); profile.setAggression(50)
 	profile.setSupportOptions(true, true, true)
 	const context = { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() }
 	const usableNextTurn = (cell, item) => {

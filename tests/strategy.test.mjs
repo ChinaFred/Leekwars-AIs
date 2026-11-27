@@ -6,18 +6,15 @@ import { AggressiveStrategy } from "../dist/Classes/Strategy/AggressiveStrategy.
 import { BalancedStrategy } from "../dist/Classes/Strategy/BalancedStrategy.js"
 import { DefensiveStrategy } from "../dist/Classes/Strategy/DefensiveStrategy.js"
 
-test("profile normalizes role, aggression, range, and support settings", () => {
+test("profile normalizes role, aggression, and support settings", () => {
 	const profile = new LeekProfile()
 	profile.setRole("ATTACKER")
 	profile.setAggression(150)
-	profile.setPreferredRange(-2, 4)
 	profile.setSupportOptions(false, true, false)
 
 	assert.equal(profile.role, "AGGRESSIVE")
 	assert.equal(profile.strategyName, "AGGRESSIVE")
 	assert.equal(profile.aggression, 100)
-	assert.equal(profile.preferredMinRange, 0)
-	assert.equal(profile.preferredMaxRange, 4)
 	assert.equal(profile.allowHealing, false)
 	assert.equal(profile.allowShielding, true)
 	assert.equal(profile.allowHiding, false)

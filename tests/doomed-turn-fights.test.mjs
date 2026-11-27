@@ -199,7 +199,7 @@ function arena(name, dangerOverride = {}, change = {}) {
 		[cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: dangerOf.get(cell.id), breakdown: [] }])),
 	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: 1, pairsEvaluated: 0, lineOfSightCalls: 0 })
 	const profile = new LeekProfile()
-	profile.setRole(state.role ?? "AGGRESSIVE"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole(state.role ?? "AGGRESSIVE"); profile.setAggression(50)
 	profile.setSupportOptions(true, true, true)
 	const logs = []
 	const print = console.log

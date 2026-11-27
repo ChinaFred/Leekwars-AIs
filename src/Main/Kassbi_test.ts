@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { planAct } from "../Brain/PlanActScenario.js"
 import { enemyMemory, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
@@ -21,7 +21,6 @@ export function turn(): void {
 		const profile = new LeekProfile()
 		profile.setRole("AGGRESSIVE")
 		profile.setAggression(75)
-		profile.setPreferredRange(2, 8)
 		profile.setSupportOptions(true, true, false)
 
 		observeTurn(me)

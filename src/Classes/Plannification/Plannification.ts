@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 16
+// file version: 17
 import { Action } from "./Action.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -84,28 +84,25 @@ export class Plannification {
 			candidates.push(this.leek.weapon)
 		}
 
-		const preferredMid = (this.profile.preferredMinRange + this.profile.preferredMaxRange) / 2
-		let bestScore = Number.NEGATIVE_INFINITY
+		let bestDamage = Number.NEGATIVE_INFINITY
 		for (const weapon of candidates) {
-			const weaponMid = (weapon.minRange + weapon.maxRange) / 2
 			const meanDamage = getMeanFeatureValue(weapon.features, Effect.DAMAGE) *
 				(1 + this.leek.strength / 100)
 			const turnDamage = weapon.cost > 0
 				? meanDamage * Math.floor(this.tpLeft / weapon.cost)
 				: 0
-			const score = this.strategy.scoreWeapon(turnDamage, preferredMid, weaponMid)
 			this.debug(
 				() => `Weapon ${weapon.name}: damage=${meanDamage.toFixed(1)}, turnDamage=${turnDamage.toFixed(1)}, ` +
-					`range=${weapon.minRange}-${weapon.maxRange}, score=${score.toFixed(2)}`,
+					`range=${weapon.minRange}-${weapon.maxRange}`,
 				LOG_CONTEXT.WEAPON
 			)
-			if (score > bestScore) {
+			if (turnDamage > bestDamage) {
 				this.chosenWeapon = weapon
-				bestScore = score
+				bestDamage = turnDamage
 			}
 		}
 
-		this.debug(() => `ChosenWeapon: ${this.chosenWeapon?.name} (score: ${bestScore.toFixed(2)})`, LOG_CONTEXT.WEAPON)
+		this.debug(() => `ChosenWeapon: ${this.chosenWeapon?.name} (turnDamage: ${bestDamage.toFixed(1)})`, LOG_CONTEXT.WEAPON)
 		this.movementBehavior = new MovementBehavior(this.leek, this.target, this.chosenWeapon, this.target.weapon)
 	}
 
@@ -343,7 +340,7 @@ export class Plannification {
 
 		const distance = this.leek.distance(this.target)
 		const lifeRatio = this.leek.life / this.leek.maxLife
-		const shouldHide = this.strategy.shouldHide(lifeRatio, distance, this.profile.preferredMinRange)
+		const shouldHide = this.strategy.shouldHide(lifeRatio, distance)
 
 		this.debug(
 			() => `HideCheck: distance=${distance}, lifeRatio=${lifeRatio.toFixed(2)}, shouldHide=${shouldHide}`,
