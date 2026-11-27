@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 27
+// file version: 28
+import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { castMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -95,12 +96,15 @@ export function turn(): void {
 		// recalculées par `refreshMaps`).
 		guarded("castMpBoost", () => castMpBoost(me, enemyMemory.getReachable(me.id), () => refreshMaps(me)))
 
-		// Toutes les autres décisions du tour (boosts de force et de PT compris) sont prises dans le plan.
-		planAct(me, leekProfile, {
-			reachable: enemyMemory.getReachable(me.id),
-			threat: enemyMemory.getThreatMap(),
-			stagnation
-		})
+		// Piège du coffre : frapper un coffre contesté puis fuir remplace le plan du tour. Sinon, toutes les autres
+		// décisions du tour (boosts de force et de PT compris) sont prises dans le plan.
+		if (!springChestTrap(me)) {
+			planAct(me, leekProfile, {
+				reachable: enemyMemory.getReachable(me.id),
+				threat: enemyMemory.getThreatMap(),
+				stagnation
+			})
+		}
 
 		// Après le plan : l'équipement du tour 1 n'utilise que des PT non dépensés par le plan.
 		equipOpeningWeapon(me)
