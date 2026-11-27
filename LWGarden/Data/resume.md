@@ -2,6 +2,15 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 7e7313d — fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan
+Compte Kassbi, publié le 2026-11-27T19:54:53Z.
+Stratégie : aucun changement de comportement des IA actives. Kassbi_Book
+Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 74 % (combat 55005067), médiane des pics 74 %.
+Ressources : 64 tours joués, 1 sans aucune action payante (2 %), 95 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 16 % inutilisés sur 656 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55005067 (1/64, nul).
+
 ## 0be4b89 — chore(merge): fusion de Master (piège du coffre) dans la zone visée
 Compte Kassbi, publié le 2026-11-27T15:05:56Z.
 Combats : 12 — 10 victoires, 1 défaites, 1 nuls (83 % de victoires), 0 sans logs.
