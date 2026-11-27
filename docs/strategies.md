@@ -28,6 +28,7 @@ Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa premièr
 plan, `turn()` ne lance que le boost de PM (il en change les entrées). Exécution commencée, aucun second plan : un échec l'arrête.
 
 **Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ; elle est suivie à part (`[Chest]`, contexte `MEMORY`).
+**Piège du coffre** (`springChestTrap`, `src/Brain/ChestTrap.ts`, entre le boost de PM et `planAct`) : si je peux frapper un coffre depuis ma case (arme équipée, puce à dégâts, ou autre arme au prix de 1 PT) et qu'un ennemi vivant en est **strictement** plus proche que moi (distance), je tire sur le coffre tant que PT et tirs le permettent (arme équipée, puces, autres armes), puis `moveAwayFrom` le **coffre** avec tous mes PM. Ce tour remplace le plan ; sans tir abouti, le plan normal joue. Ligne `[ChestTrap]` (`PLANNING`). Condition de distance en vol d'oiseau, sans trajet ni PM adverses : heuristique non calibrée.
 
 ## Plan conjoint (`TacticalPlanner.ts`)
 
