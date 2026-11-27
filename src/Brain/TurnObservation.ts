@@ -1,8 +1,10 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
+import { TACTICAL_LIMITS, TacticalContext } from "../Classes/Plannification/TacticalTypes.js"
+import { decideFleeMpBoost, decideMpBoost } from "./StrengthBoost.js"
 import { reportError } from "../Toolbox/Debug.js"
 import { isLogEnabled, log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 import { AccessibleZoneSource, showAccessibleZones, showDangerZone, showTargetZone } from "../Toolbox/Marker.js"
@@ -260,11 +262,37 @@ export function observeTurn(me: Me): void {
 	openHistory(me)
 }
 
-/** Recalcule cases atteignables puis carte de danger avec les PM et PT réels (après le boost de PM). */
-export function refreshMaps(me: Me): void {
-	const living = enemyList()
-	observeReachableCells(me, allyList(), living)
-	observeThreatMap(me, living)
+/**
+ * Boost de PM candidat du tour, pour la seconde recherche du planificateur (`TacticalContext.mpBoost`). Lecture seule :
+ * ni lancer, ni PT ou PM dépensés ; la zone à PM + gain et sa carte de danger sont calculées à la demande, une fois par
+ * demande. Journal `[Boost] MP:` du motif (refus ou candidat). Une erreur est journalisée et vaut « pas de candidat ».
+ */
+export function mpBoostCandidate(me: Me): NonNullable<TacticalContext["mpBoost"]> {
+	return (kind, preparation) => {
+		try {
+			const reachable = enemyMemory.getReachable(me.id)
+			const decision = kind === "unlock"
+				? decideMpBoost(me, reachable, aliveEnemies(), TACTICAL_LIMITS.cells, preparation)
+				: decideFleeMpBoost(me, reachable, aliveEnemies(), TACTICAL_LIMITS.cells)
+			if (decision.option === null || decision.zone === undefined) {
+				if (decision.reason !== "") {
+					log(() => `[Boost] MP: not a candidate (${kind}): ${decision.reason}`, LOG_CONTEXT.CHIP)
+				}
+				return null
+			}
+			const threat = enemyMemory.threatMapFor(me, decision.zone, Fight.turn)
+			if (threat === null || threat.truncated || threat.inputsTruncated) {
+				log(() => `[Boost] MP: not a candidate (${kind}): danger map of the boosted zone unavailable`, LOG_CONTEXT.CHIP)
+				return null
+			}
+			log(() => `[Boost] MP: candidate (${kind}) ${decision.option!.chip.name} (+${decision.option!.gain} MP, ` +
+				`${decision.option!.chip.cost} TP): ${decision.reason}`, LOG_CONTEXT.CHIP)
+			return { option: decision.option, reachable: decision.zone, threat, reason: decision.reason }
+		} catch (error) {
+			reportError("src/Brain/TurnObservation.ts", "mpBoostCandidate", error)
+			return null
+		}
+	}
 }
 
 /** Mémorise mes PV de fin de tour (attribution des dégâts subis au tour suivant). */

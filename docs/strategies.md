@@ -14,21 +14,20 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 
 1. **Observer** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
-2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
-3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
+2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
    (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
      journalisée (`PLANNING`).
-4. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
+3. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
    (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
-Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, boosts de force, de PT et d'agilité compris. Seule exception
-restante : le boost de PM, décidé avant le plan (voir « Boosts » et « Limites »). Exécution commencée, aucun second plan : un échec l'arrête.
+Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, tous les boosts compris (force, PT, agilité, PM) :
+on observe, on compare, on planifie, on exécute ; aucune action n'est lancée ni décidée hors du plan. Exécution commencée, aucun second plan : un échec l'arrête.
 
 **Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ; elle est suivie à part (`[Chest]`, contexte `MEMORY`).
-**Piège du coffre** (`springChestTrap`, `src/Brain/ChestTrap.ts`, entre le boost de PM et `planAct`) : si je peux frapper un coffre depuis ma case (arme équipée, puce à dégâts, ou autre arme au prix de 1 PT) et qu'un ennemi vivant en est **strictement** plus proche que moi (distance), je tire sur le coffre tant que PT et tirs le permettent (arme équipée, puces, autres armes), puis `moveAwayFrom` le **coffre** avec tous mes PM. Ce tour remplace le plan ; sans tir abouti, le plan normal joue. Ligne `[ChestTrap]` (`PLANNING`). Condition de distance en vol d'oiseau, sans trajet ni PM adverses : heuristique non calibrée.
+**Piège du coffre** (`springChestTrap`, `src/Brain/ChestTrap.ts`, entre l'observation et `planAct`) : si je peux frapper un coffre depuis ma case (arme équipée, puce à dégâts, ou autre arme au prix de 1 PT) et qu'un ennemi vivant en est **strictement** plus proche que moi (distance), je tire sur le coffre tant que PT et tirs le permettent (arme équipée, puces, autres armes), puis `moveAwayFrom` le **coffre** avec tous mes PM. Ce tour remplace le plan ; sans tir abouti, le plan normal joue. Ligne `[ChestTrap]` (`PLANNING`). Condition de distance en vol d'oiseau, sans trajet ni PM adverses : heuristique non calibrée.
 
 ## Plan conjoint (`TacticalPlanner.ts`)
 
@@ -39,7 +38,7 @@ Compare en un seul score attaque, boost, protection et déplacement. Un plan = *
 **Cases de tir** : listes natives `Fight.weaponCells` / `me.chipCells` (portée, motif dont le lancer en ligne, ligne de vue) ; pas d'appel natif si aucune case de ma zone n'est à portée de Manhattan de la cible. Arme et puce offensive sont créditées sur leurs cases atteignables (déplacement puis tir). Puce écartée si `me.canUseChip` la refuse alors que ma case est dans sa liste
 (restriction inconnue) ; jamais tirée d'une case de sa zone d'effet si un effet peut toucher le lanceur (`selfHitRadius`).
 
-**Ordre exécuté** : approche → boost (PT, force, agilité ; l'agilité est choisie par le score comme les autres) → protection → équipement → puces offensives → tirs → déplacement
+**Ordre exécuté** : boost de PM (s'il est dans le plan ; un échec arrête le plan) → approche → boost (PT, force, agilité ; l'agilité est choisie par le score comme les autres) → protection → équipement → puces offensives → tirs → déplacement
 final. Chaque action revérifie PV, PT, cooldown, `canUseWeapon` / `canUseChip` ; retour natif > 0 = tir fait. Une puce offensive au cooldown de base nul (`Chip.cooldown`, `chipUsesOf`) est planifiée et relancée tant que `maxUses` et les PT le permettent ; sinon 1 fois.
 Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée : le reste du plan continue, ses PT ne sont pas replanifiés.
 
@@ -116,6 +115,7 @@ Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester blo
 
 Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
+La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 30 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
 
 ## Plan B (`ReservePlan.ts`)
 
@@ -147,9 +147,11 @@ par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Fo
 - **Plan B** : avec un tir d'arme, gain net du modèle à une arme (`boostNetDamage`, `tpBoostNetDamage`) > 0 et PV ≥ 50 % ;
   les tirs prévus sont réduits d'autant. Sinon, règle « sans tir » avec les PT que ni l'attaque ni les supports n'emploient.
 - **Agilité** (`BoostVariant.agility`, `pickAgilityBoost` ; `BUFF_AGILITY` ou effet 41, dont Étirement) : variante du plan conjoint, **choisie ou refusée par le score** face aux tirs, soins et boucliers qui se disputent les PT. Variante possible si sans effet d'agilité actif, gain ≥ 1, `canUseChip` sur moi (erreur native = non utilisable), coût ≤ PT − coûts des autres boosts **sans compter les PT gagnés** (`tpGain` = 0 : un boost de PT qui donnerait moins que prévu ne coûte jamais un tir). Gain = `agilityCritGain` = 0,3 × agilité / 1000 de dégâts moyens (plafonné à 100 % de critique) : ce tour `U` × gain (nul si le tir tue la cible) + `F` = 0,75 × (durée − 1) tours de tirs entiers de l'arme du plan × gain, dans le même plafond que les autres boosts (0 si tour condamné). Sans tir : même règle que les autres boosts (`idleBoosts`, ennemi à portée, `F` > 0 donc durée ≥ 2). Sous 50 % de PV : seule variante de boost permise (ses PT ne servent à rien d'autre ; le score tranche). Tour 1 sans arme équipée et plan sans arme : 1 PT gardé pour `equipOpeningWeapon`. Lancé après PT et force, avant protection et tirs ; jamais en plan B.
-- **Boost de PM** (`decideMpBoost`, avant le plan ; gain = partie entière ≥ 1), si tout est vrai : PV ≥ 50 % ; cases du tour
-  non tronquées, sans case de tir native d'une arme ou puce offensive prête payable ; zone à PM + gain non tronquée, ≤ 113 cases
-  (sinon plan B), avec une case de tir d'une arme payable après le boost (+ 1 PT si non équipée) ; opérations < 80 %.
+- **Boost de PM** (`TacticalPlan.mpBoost`, `decideMpBoost`, `decideFleeMpBoost`, `TurnObservation.mpBoostCandidate` ; gain = partie entière ≥ 1) : **composante du plan**, première action exécutée. Rien n'est lancé avant la recherche. Après la recherche sans boost (inchangée), le planificateur demande un candidat à l'observation (lecture seule, aucune dépense) :
+  - `unlock` (`decideMpBoost`) si : puce prête et utilisable sur moi ; PV ≥ 50 % ; cases du tour non tronquées, sans case de tir native d'une arme ou puce offensive prête payable ; zone à PM + gain non tronquée, ≤ 113 cases, avec une case de tir d'une arme payable après le boost (+ 1 PT si non équipée) ; opérations < 80 % ;
+  - sinon `flee` (`decideFleeMpBoost`) si le meilleur plan sans boost a un danger ≥ mes PV : mêmes gardes (puce, cartes, 113 cases, opérations), sans condition de tir ni de PV.
+  Le candidat porte la zone à PM + gain et SA carte de danger (`EnemyMemory.threatMapFor`, entrées ennemies de la carte du tour, ligne de vue partagée). **Seconde recherche** complète (`evaluate` avec `Frame` : PM + gain, PT − coût, zone et danger boostés ; listes natives d'armes et de puces réutilisées, jamais refaites ; aucun effet de bord sur la stagnation ; prochain tour à PM + gain si durée ≥ 2). Le plan boosté (`tpUsed` + coût) remplace le plan sans boost seulement s'il le **bat strictement au même score** : le danger des cases débloquées y compte (coût de risque, létalité), la fuite aussi. Référence : le score du plan sans boost, sinon celui du meilleur plan classé sans action (rester sur place). Tour condamné : tuer d'abord. Plan boosté avec tir refusé sous 50 % de PV ; erreur, limite ou absence de plan de la seconde recherche : plan sans boost gardé. Ligne `[Boost] MP:` (`PLANNING`) : scores, dangers, motif, ticks de la seconde recherche (et opérations si `System`). Exécution : lancer du boost, puis approche avec les PM réels ; refus natif ou PM non gagnés = **arrêt du plan** (rien d'autre n'est tenté).
+  Un plan boosté qui reste sur place (boost seul) est possible : il vaut par `N` à PM + gain.
 
 ## Seuils par stratégie (`Strategy/*.ts`)
 
@@ -225,5 +227,5 @@ dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`mov
 - Danger modélisé nul ≠ absence de menace (items ou PM adverses jamais observés) ; danger létal ≠ mort certaine. `KILL_MARGIN`, `LETHAL_PENALTY`, `RETREAT_RISK_FACTOR`, `FUTURE_TURN_WEIGHT`, `NEXT_TURN_WEIGHT`, posture du rôle, passivité et sa marge : non calibrés. Tour condamné : estimation, pas une certitude (54969530 tour 8, 54969622 tour 7 : survie réelle avec soin + casque, plans inchangés) ; hors de ce cas, le boost sans tir reste plafonné à 0,75 × PV de la cible, plus haut qu'avec tir (`tests/doomed-turn-fights.test.mjs`). Recul sans tir refusé : la case finale est plus exposée (rejeux `tests/doomed-turn-fights.test.mjs` : danger 0 → 118 à 184, pour 11,9 à 72,4 dégâts moyens ; garde-fous : `tests/retreat-filter-safety.test.mjs`), effet en combat non mesuré ; l'avance `AGGRESSIVE` sans tir s'expose de même sans infliger de dégâts (54969622 tour 2 : danger 0 → 184).
 - `N` : l'ennemi bouge en réalité (la promesse d'un tir peut ne pas être tenue) ; les items d'une case peuvent demander des cases de tir différentes ; un item hors de portée de ma zone ce tour, inabordable, en cooldown ou de cooldown de base > 1 n'est pas compté ; `U_max` (même réalisable seulement à fort danger) comprime `N` ; `N` et `F` s'additionnent sans plafond commun. Combat 54965081, tour 4 : à 0,75 (`BALANCED`) le repli garde l'avantage ; `AGGRESSIVE` (`a` × 0,75 = 0,94, `w` = 0,5) va tirer au neutrino, danger 252,8 au lieu de 142,2.
 - Boost de PT : le plan suppose les PT gagnés dès le lancer (gain moyen) ; sinon ses derniers tirs sont annulés par leurs contrôles. Soin et bouclier dépendent des seuils de vie du rôle, plus de la seule carte de danger.
-- Boost de PM : danger des cases débloquées non regardé (si le plan refuse d'y aller, ses PT sont perdus ce tour) ; pas pour fuir.
+- Boost de PM : la fuite se déclenche si le danger du meilleur plan sans boost ≥ mes PV (seuil non calibré) ; PM supposés gagnés dès le lancer (sinon arrêt du plan, PT perdus) ; seconde recherche : coût non mesuré en opérations réelles (voir « Bornes ») ; un boost de PM seul, valorisé par `N` à PM + gain, peut être choisi sans tir ; comparaison au score du plan sans boost, non calibrée.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API : les tests valident la logique, pas la force en combat.

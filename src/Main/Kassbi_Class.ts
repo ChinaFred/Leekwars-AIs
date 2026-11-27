@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 28
+// file version: 29
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
-import { castMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
-import { enemyMemory, observeTurn, recordMyTurnEnd, refreshMaps, stagnation } from "../Brain/TurnObservation.js"
+import { logChipInventory } from "../Brain/StrengthBoost.js"
+import { enemyMemory, observeTurn, mpBoostCandidate, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { nearestEnemy } from "../Classes/Context/Targets.js"
@@ -92,17 +92,14 @@ export function turn(): void {
 
 		// Observation du tour (mémoire, coffres, cartes, stagnation, historique) : `src/Brain/TurnObservation.ts`.
 		observeTurn(me)
-		// Boost de PM : après l'ouverture de l'historique (le lancer y figure), avant le plan (il reçoit les cartes
-		// recalculées par `refreshMaps`).
-		guarded("castMpBoost", () => castMpBoost(me, enemyMemory.getReachable(me.id), () => refreshMaps(me)))
-
-		// Piège du coffre : frapper un coffre contesté puis fuir remplace le plan du tour. Sinon, toutes les autres
-		// décisions du tour (boosts de force et de PT compris) sont prises dans le plan.
+		// Piège du coffre : frapper un coffre contesté puis fuir remplace le plan du tour. Sinon, toutes les décisions
+		// d'action du tour (tous les boosts, PM compris) sont prises dans le plan : on observe, compare, planifie, exécute.
 		if (!springChestTrap(me)) {
 			planAct(me, leekProfile, {
 				reachable: enemyMemory.getReachable(me.id),
 				threat: enemyMemory.getThreatMap(),
-				stagnation
+				stagnation,
+				mpBoost: mpBoostCandidate(me)
 			})
 		}
 

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { ReachableCells, MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { ShotCandidate, isStrengthBoostType, isTpBoostType, toCandidate } from "../Context/ShotPlan.js"
@@ -12,9 +12,9 @@ import { netDamage } from "./TacticalScore.js"
  * seulement des cases actuellement traversables, y compris au-delà des PM de ce tour.
  */
 export function futureWeaponRoute(
-	me: Me, target: Entity, weapons: readonly Weapon[], reachable: ReachableCells, budget: Budget
+	me: Me, target: Entity, weapons: readonly Weapon[], reachable: ReachableCells, budget: Budget, mp: number = me.mp
 ): Map<number, number> | null {
-	if (me.mp <= 0 || typeof Field === "undefined" || typeof Field.cellFromXY !== "function") return null
+	if (mp <= 0 || typeof Field === "undefined" || typeof Field.cellFromXY !== "function") return null
 	const weapon = weapons.find((item) => validCost(item.cost) &&
 		Number.isFinite(item.minRange) && Number.isFinite(item.maxRange) &&
 		item.minRange >= 0 && item.maxRange >= item.minRange && toCandidate(item, false, me.strength) !== null)
@@ -119,11 +119,11 @@ export interface NextTurn { equipped: Array<Weapon | null>; damages: number[][] 
 
 export function nextTurnDamages(
 	me: Me, target: Entity, entries: ReadonlyArray<{ cell: Cell; cost: number }>, entryIndex: ReadonlyMap<number, number>,
-	zones: ReadonlyArray<{ item: Weapon | Chip; isChip: boolean; cells: readonly Cell[] }>, budget: Budget
+	zones: ReadonlyArray<{ item: Weapon | Chip; isChip: boolean; cells: readonly Cell[] }>, budget: Budget, nextMp: number = me.mp
 ): NextTurn | null {
 	const tp = me.tp - Math.floor(expiringBoost(me, isTpBoostType))
 	const strength = me.strength - expiringBoost(me, isStrengthBoostType)
-	const mp = Math.max(0, me.mp)
+	const mp = Math.max(0, nextMp)
 	const items: Array<{ candidate: ShotCandidate; isChip: boolean; cells: readonly Cell[] }> = []
 	for (const { item, isChip, cells } of zones) {
 		const candidate = item.cost <= tp ? toCandidate(item, isChip, strength) : null

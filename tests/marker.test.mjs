@@ -555,7 +555,7 @@ test("turn(): Fight.getAllies is asked once per observation, zones displayed or 
 	await playTurn(new LogConfig()) // 1er tour du module (salutation)
 	const withZone = await playTurn(new LogConfig())
 	const withoutZone = await playTurn(new LogConfig().setEnabled(ZONE, false))
-	// Aucun boost de PM dans ce monde : `refreshMaps` n'est pas appelé, le tour ne compte qu'une observation.
+	// Aucun boost de PM dans ce monde : la seconde recherche du boost de PM n'a pas lieu, le tour ne compte qu'une observation.
 	assert.equal(withZone.allyCalls, 1)
 	assert.equal(withoutZone.allyCalls, 1)
 })
