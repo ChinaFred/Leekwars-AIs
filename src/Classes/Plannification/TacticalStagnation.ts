@@ -1,8 +1,7 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { toCandidate } from "../Context/ShotPlan.js"
-import { boostReach, pickAgilityBoost } from "../../Brain/StrengthBoost.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { STAGNATION_TURNS } from "../Context/StagnationTracker.js"
 import { Budget, Skipped, TacticalPlan, TacticalPreparation, Unavailable, key, validCost } from "./TacticalTypes.js"
@@ -129,44 +128,5 @@ export function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 		weaponShots: 0, chips: [], protection: [], tpUsed: 0, usefulDamage: 0, danger: chosen.danger,
 		score: origin - chosen.walk, progress: origin - chosen.walk, progressModel: "stagnation walk route",
 		stagnation: { turns, walkBefore: origin, walkAfter: chosen.walk }
-	}
-}
-
-/**
- * Boost d'agilité « de remplissage », ajouté au plan RETENU (après la recherche : ni score, ni comparaison, ni
- * variante de plus). Lancé seulement avec les PT que le plan n'emploie pas (PT − `tpUsed`, SANS les PT attendus d'un
- * boost de PT : s'ils n'arrivent pas, aucun tir prévu n'est perdu), moins 1 PT gardé pour `equipOpeningWeapon` au
- * tour 1 si le plan n'équipe pas d'arme : il ne prend jamais de PT à un tir, une protection ou un autre boost.
- * Facultatif : toute erreur rend le plan inchangé. Il doit pouvoir servir : le plan attaque ce tour (les critiques des tirs en
- * profitent, il est lancé avant), ou l'effet couvre le tour suivant (durée ≥ 2) et l'ennemi le plus proche est à
- * portée `boostReach` (critère du boost « sans tir »). Pas de seuil de PV : ces PT seraient perdus.
- */
-export function withAgilityFill(me: Me, plan: TacticalPlan, enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }>): TacticalPlan {
-	try {
-		return agilityFill(me, plan, enemies)
-	} catch {
-		return plan
-	}
-}
-
-function agilityFill(me: Me, plan: TacticalPlan, enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }>): TacticalPlan {
-	if (typeof me.canUseChip !== "function") return plan
-	const reserve = Fight.turn === 1 && me.weapon === null && plan.weapon === null && (me.weapons ?? []).length > 0 ? 1 : 0
-	const option = pickAgilityBoost(me, me.tp - plan.tpUsed - reserve)
-	if (option === null) return plan
-	if (plan.weaponShots === 0 && plan.chips.length === 0) {
-		if (option.turns < 2) return plan
-		let closest: Entity | null = null
-		let closestDistance = Infinity
-		for (const { enemy, cell } of enemies) {
-			const range = Math.abs(me.cell.x - cell.x) + Math.abs(me.cell.y - cell.y)
-			if (range < closestDistance) { closest = enemy; closestDistance = range }
-		}
-		if (closest === null || closestDistance > boostReach(me, closest)) return plan
-	}
-	if (!me.canUseChip(option.chip, me)) return plan
-	return {
-		...plan, tpUsed: plan.tpUsed + option.chip.cost,
-		boost: { chips: [...(plan.boost?.chips ?? []), option.chip], tpGain: plan.boost?.tpGain ?? 0 }
 	}
 }

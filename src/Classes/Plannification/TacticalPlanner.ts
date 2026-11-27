@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 38
+// file version: 39
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
-import { FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST, boostReach } from "../../Brain/StrengthBoost.js"
+import { FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST, agilityCritGain, boostReach } from "../../Brain/StrengthBoost.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
 import {
@@ -17,7 +17,7 @@ import {
 import {
 	NEXT_TURN_FRACTION, NEXT_TURN_WEIGHT, NextTurn, futureWeaponRoute, nextTurnDamages
 } from "./TacticalNextTurn.js"
-import { stagnationEscape, withAgilityFill } from "./TacticalStagnation.js"
+import { stagnationEscape } from "./TacticalStagnation.js"
 
 /**
  * Zone d'effet d'une puce offensive : distance de Manhattan à la cible jusqu'à laquelle le lanceur peut se trouver
@@ -53,7 +53,7 @@ export function evaluateTacticalPlans(
 		same(me.cell, preparation.origin) && me.mp === preparation.mp && me.tp === preparation.tp &&
 		preparation.enemies.every(({ enemy, cell }) => same(enemy.cell, cell))
 	const stamp = (plan: TacticalPlan | null): TacticalPlan | null => plan && {
-		...withAgilityFill(me, plan, preparation.enemies), state: { turn: preparation.turn, enemies: preparation.enemies }
+		...plan, state: { turn: preparation.turn, enemies: preparation.enemies }
 	}
 	try {
 		const skipped: Skipped = { refused: 0, noProgress: null }
@@ -198,7 +198,10 @@ function evaluate(
 	// Boost : composante du plan. `boosts[0]` est toujours « aucun ». Un plan avec tir n'en lance pas sous
 	// `MIN_LIFE_RATIO_FOR_BOOST` de PV ; un plan sans tir seulement si l'ennemi peut être à portée au tour suivant.
 	const boosts = boostVariants(me)
-	const attackBoosts = lifeRatio >= MIN_LIFE_RATIO_FOR_BOOST ? boosts : [boosts[0]!]
+	// Sous ce seuil : ni PT ni force, mais l'agilité reste candidate (ses PT ne servent à rien d'autre ; le score tranche).
+	const attackBoosts = lifeRatio >= MIN_LIFE_RATIO_FOR_BOOST ? boosts : boosts.filter((variant) => variant.tp === null && variant.strength === null)
+	// Tour 1 sans arme équipée : 1 PT reste pour `equipOpeningWeapon` (après le plan) si le plan n'équipe pas d'arme.
+	const openingReserve = Fight.turn === 1 && me.weapon === null && me.weapons.length > 0 ? 1 : 0
 	const strengthGain = attackBoosts.find((variant) => variant.strength !== null)?.strength?.gain ?? 0
 	let maxTp = me.tp
 	for (const variant of attackBoosts) maxTp = Math.max(maxTp, me.tp - variant.cost + variant.tpGain)
@@ -214,7 +217,8 @@ function evaluate(
 		if (idleTarget === null) return best
 		for (let v = 0; v < boosts.length; v++) {
 			const variant = boosts[v]!
-			if (variant.cost === 0 || me.tp - variant.cost + variant.tpGain < protection.cost) continue
+			if (variant.cost === 0 ||
+				me.tp - variant.cost + variant.tpGain < protection.cost + (variant.agility ? openingReserve : 0)) continue
 			const credit = idleCredits[v]!
 			if (credit > best.credit || (credit === best.credit && credit > 0 && variant.cost < best.variant.cost)) {
 				best = { variant, credit }
@@ -783,6 +787,8 @@ function evaluate(
 					if (variant.cost > 0) continue
 					if (cost === 0) { variant = idleBoosts[p]!.variant; future = idleBoosts[p]!.credit }
 				}
+				// Agilité sans arme (puces seules) : le PT de l'équipement du tour 1 n'est pas pris au plan.
+				if (attackBoosts[v]!.agility && option.weapon === null && openingReserve > 0 && available - cost < openingReserve) continue
 				// Sans repli autorisé, un déplacement avant tir doit permettre des dégâts utiles.
 				if (!profile.allowHiding && !(attack.damage > 0) && !same(shot.cell, me.cell)) continue
 				const state = attack.weaponShots > 0 ? nextState(option.weapon) : 0
@@ -803,7 +809,10 @@ function evaluate(
 				if (attack.damage > 0 && !doomed) {
 					future = Math.min((option.target.life - usefulDamage) * FUTURE_TURN_WEIGHT, option.tables.future[v]!)
 				}
-				const score = usefulDamage - riskCost(me, risk, protection, finalDanger, kills, lifeFraction) +
+				// Critiques de ce tour (agilité) : sans objet si le tir tue la cible.
+				const critNow = variant.agility && attack.damage > 0 && attack.damage < option.target.life
+					? usefulDamage * agilityCritGain(me, variant.agility) : 0
+				const score = usefulDamage + critNow - riskCost(me, risk, protection, finalDanger, kills, lifeFraction) +
 					weight * protection.heal + future + nextTurn
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				// Même départage que le plan de progression (trajet futur, seulement sans tir d'arme à portée).

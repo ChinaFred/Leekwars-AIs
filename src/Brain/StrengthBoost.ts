@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -20,6 +20,7 @@ import {
 	tpBoostOf,
 	tpBoostTurns
 } from "../Classes/Context/ShotPlan.js"
+import { CRITICAL_FACTOR } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { aliveEnemies } from "../Classes/Context/Targets.js"
 import { WEAPON_SWAP_TP } from "../Classes/Context/ThreatMap.js"
@@ -142,7 +143,7 @@ export function hasActiveAgilityBoost(me: Me): boolean {
 /**
  * Le boost d'agilité prêt au plus grand gain, abordable avec `tp` PT ; null sinon, ou si un boost d'agilité est actif.
  * `gain` = agilité entière (partie entière du gain moyen). Valeur attendue faible : + gain / 1000 de chance de critique,
- * soit + gain × 0,03 % de dégâts moyens (critique × 1,3) ; le plan ne le lance qu'avec des PT sans emploi.
+ * soit + gain × 0,03 % de dégâts moyens (critique × 1,3) : le plan la mesure (`agilityCritGain`) et la compare aux tirs.
  */
 export function pickAgilityBoost(me: Me, tp: number): BoostOption | null {
 	let best: BoostOption | null = null
@@ -160,6 +161,29 @@ export function pickAgilityBoost(me: Me, tp: number): BoostOption | null {
 		}
 	}
 	return best
+}
+
+/**
+ * Gain relatif de dégâts moyens d'un boost d'agilité : (critique − 1) × chance de critique ajoutée, soit
+ * 0,3 × gain / 1000 (gain plafonné pour que la chance totale reste ≤ 100 %). Estimation : le moteur arrondit.
+ */
+export function agilityCritGain(me: Me, option: BoostOption): number {
+	const room = Number.isFinite(me.agility) ? Math.max(0, 1000 - me.agility) : 1000
+	return (CRITICAL_FACTOR - 1) * Math.min(option.gain, room) / 1000
+}
+
+/**
+ * Part des tours SUIVANTS d'un boost d'agilité pour `weapon` : `FUTURE_TURN_WEIGHT` × (durée − 1) tours de tirs
+ * entiers de l'arme seule à `fullTp` PT, chacun majoré de `agilityCritGain`. Non plafonnée (l'appelant plafonne).
+ */
+export function agilityBoostFutureDamage(me: Me, weapon: Weapon, option: BoostOption, fullTp: number): number {
+	const base = baseMeanDamage(weapon)
+	if (!(base > 0) || !(weapon.cost > 0)) {
+		return 0
+	}
+	const shots = Math.max(0, Math.min(Math.floor(fullTp / weapon.cost), maxUsesOf(weapon)))
+	const strength = Number.isFinite(me.strength) ? me.strength : 0
+	return Math.max(0, option.turns - 1) * shots * base * (1 + strength / 100) * agilityCritGain(me, option) * FUTURE_TURN_WEIGHT
 }
 
 /** Décision du boost de PM d'avant plan : `option` null = ne pas lancer ; `reason` vide = aucune puce de PM prête. */

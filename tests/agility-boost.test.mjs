@@ -7,7 +7,7 @@ globalThis.Debug = { log() {}, pause() {} }
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4, POISON: 5, BUFF_STRENGTH: 6, BUFF_AGILITY: 7 }
 globalThis.Fight = { turn: 1 }
 
-// Boost d'agilité « de remplissage » : ajouté au plan conjoint retenu, payé par les seuls PT que ce plan n'emploie pas.
+// Boost d'agilité : variante de boost du plan conjoint, gain de critique mesuré dans le score ; refusé si des PT servent mieux.
 const { turn } = await import("../dist/Main/Kassbi_Class.js")
 const { hasActiveAgilityBoost, pickAgilityBoost } = await import("../dist/Brain/StrengthBoost.js")
 const { executeReservePlan } = await import("../dist/Classes/Plannification/ReservePlan.js")
@@ -159,14 +159,35 @@ test("(a) plan with shots and spare TP >= cost: stretching is in the displayed p
 	assert.ok(shown >= 0 && shown < w.timeline.findIndex((entry) => entry.startsWith("action:")))
 })
 
-test("(a) the score and the choice of the plan are those of the turn without the chip", () => {
+test("(a) the agility gain is IN the score: same choice as without the chip, score + crit now + crit of the next turn", () => {
 	const baseline = makeWorld({ turnNumber: 22, tp: 11, chips: [] })
 	const without = planLog(captureTurn(baseline))
 	const w = makeWorld({ turnNumber: 23, tp: 11 })
 	const filled = planLog(captureTurn(w))
-	for (const field of ["score", "usefulDamage", "danger", "shotCell", "destination", "weapon", "chips", "protection"]) {
+	for (const field of ["usefulDamage", "danger", "shotCell", "destination", "weapon", "chips", "protection"]) {
 		assert.deepEqual(filled[field], without[field], field)
 	}
+	// 90 d'agilité : + 0,027 de dégâts moyens (0,3 x 90 / 1000). Ce tour : 49,5 x 0,027 ; tour suivant (durée 2, un tour couvert) :
+	// 2 tirs x 22,5 x 1,1 x 0,027 x FUTURE_TURN_WEIGHT (0,75).
+	const gain = 49.5 * 0.027 + 49.5 * 0.027 * 0.75
+	assert.ok(Math.abs(filled.score - without.score - gain) < 1e-9, `${filled.score} - ${without.score} vs ${gain}`)
+})
+
+test("a kill needs no critical: agility is not cast (no gain, same PT), and the shot count is unchanged", () => {
+	const w = makeWorld({ turnNumber: 43, tp: 11, enemyLife: 20 })
+	captureTurn(w)
+	assert.deepEqual(w.actions, ["shoot"])
+})
+
+test("below 50 % of life the agility is still a candidate (PT and strength boosts are not)", () => {
+	const w = makeWorld({ turnNumber: 44, tp: 11, life: 120, chips: [stretching(), protein()] })
+	captureTurn(w)
+	assert.deepEqual(w.actions, ["stretching", "shoot", "shoot"])
+})
+
+test("withAgilityFill no longer exists: the choice is made by the search", async () => {
+	const stagnation = await import("../dist/Classes/Plannification/TacticalStagnation.js")
+	assert.equal("withAgilityFill" in stagnation, false)
 })
 
 test("(b) spare TP < cost: not cast, and the fill never steals a shot or the strength boost", () => {
@@ -280,7 +301,7 @@ test("(e) turn 1 without a weapon: 1 TP is kept for the opening equip", () => {
 	assert.deepEqual(enough.actions, ["stretching", "move", "equip"])
 	assert.equal(enough.me.tp, 0)
 	// Hors tour 1, aucune réserve : 3 PT suffisent.
-	const later = makeWorld({ turnNumber: 2, equipped: null, enemyAt: [19, 5], tp: 3 })
+	const later = makeWorld({ turnNumber: 2, equipped: null, enemyAt: [19, 5], tp: 5 })
 	captureTurn(later)
 	assert.equal(later.actions[0], "stretching")
 })
