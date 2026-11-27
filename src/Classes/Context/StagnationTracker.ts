@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 
 /**
@@ -247,7 +247,7 @@ export function formatHistoryLine(record: TurnRecord): string {
 		(actions.length ? ` ${actions.join("; ")}` : "")
 }
 
-/** Historique du combat, partagé par les trois exécuteurs (plan conjoint, plan B, file historique). */
+/** Historique du combat, partagé par les deux exécuteurs (plan conjoint, plan B). */
 export const actionHistory = new ActionHistory()
 
 /** Raccourci des exécuteurs : `track(me, "move", null, () => me.moveToward(cell, cost))`, `track(me, chip, target, ...)`. */

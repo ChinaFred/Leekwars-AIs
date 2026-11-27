@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 export class LeekStrategy {
 	public name = "BALANCED"
 	public aggression = 50
@@ -20,11 +20,6 @@ export class LeekStrategy {
 
 	getAggressionRatio(): number {
 		return this.aggression / 100.0
-	}
-
-	scoreWeapon(damage: number, preferredMid: number, weaponMid: number): number {
-		const rangePenalty = Math.abs(preferredMid - weaponMid) * (0.045 - 0.015 * this.getAggressionRatio())
-		return damage - rangePenalty
 	}
 
 	shouldHeal(_lifeRatio: number, lostLifeRatio: number): boolean {
@@ -66,15 +61,5 @@ export class LeekStrategy {
 		}
 		
 		return false
-	}
-
-	shouldUseAttackChip(lifeRatio: number): boolean {
-		return lifeRatio >= 0.50 - 0.20 * this.getAggressionRatio()
-	}
-
-	shouldSkipHealForDamage(healingCost: number, meanHealing: number, tpLeft: number, meanDamagePerTp: number): boolean {
-		if (meanDamagePerTp <= 0 || tpLeft <= 0) return false
-		const potentialDamage = meanDamagePerTp * healingCost
-		return potentialDamage > meanHealing * 2
 	}
 }

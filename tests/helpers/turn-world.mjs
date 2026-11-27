@@ -11,17 +11,25 @@ export function installGlobals() {
 	globalThis.Fight = { turn: 1 }
 }
 
-export function makeTurnWorld({ turnNumber, say = () => {}, enemyLife = 300 }) {
+export function makeTurnWorld({
+	turnNumber, say = () => {}, enemyLife = 300,
+	// Options des tests portés depuis l'ancien repli : grille du fichier appelant (son `Field` est alors conservé),
+	// identité, position et arme de l'ennemi, alliée éventuelle.
+	grid = null, meName = "me", enemyId = 2, enemyName = "enemy", enemyAt = [10, 5], enemyWeapon = null,
+	enemyMp = 3, enemyTp = 10, ally = null, allyAt = [5, 7]
+}) {
 	const gun = {
 		id: 38, name: "machine_gun", cost: 4, minRange: 1, maxRange: 6, needsLos: false, maxUses: -1,
 		features: [{ type: 1, minValue: 20, maxValue: 25 }]
 	}
 	const enemyGun = { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false, features: [{ type: 1, minValue: 1, maxValue: 1 }] }
-	const cells = new Map()
-	for (let x = 0; x < 31; x++) for (let y = 0; y < 11; y++) {
-		cells.set(`${x},${y}`, { id: y * 31 + x, x, y, empty: true, obstacle: false, entity: null })
+	const cells = grid === null ? new Map() : grid.cells
+	if (grid === null) {
+		for (let x = 0; x < 31; x++) for (let y = 0; y < 11; y++) {
+			cells.set(`${x},${y}`, { id: y * 31 + x, x, y, empty: true, obstacle: false, entity: null })
+		}
+		globalThis.Field = { cellFromXY: (x, y) => cells.get(`${x},${y}`) ?? null, lineOfSight: () => true }
 	}
-	globalThis.Field = { cellFromXY: (x, y) => cells.get(`${x},${y}`) ?? null, lineOfSight: () => true }
 	const place = (entity, x, y) => {
 		const cell = cells.get(`${x},${y}`)
 		cell.entity = entity
@@ -33,7 +41,7 @@ export function makeTurnWorld({ turnNumber, say = () => {}, enemyLife = 300 }) {
 	const inRange = (item, from, target) => distance(from, target.cell) >= item.minRange && distance(from, target.cell) <= item.maxRange
 	const actions = []
 	const me = place({
-		id: 1, name: "me", level: 10, life: 300, maxLife: 300, mp: 3, tp: 10, strength: 0, science: 0, wisdom: 0,
+		id: 1, name: meName, level: 10, life: 300, maxLife: 300, mp: 3, tp: 10, strength: 0, science: 0, wisdom: 0,
 		weapon: gun, weapons: [gun], chips: [], effects: [], launchedEffects: [],
 		say,
 		distance(other) { return distance(this.cell, other.cell) },
@@ -63,21 +71,23 @@ export function makeTurnWorld({ turnNumber, say = () => {}, enemyLife = 300 }) {
 		useChip() { actions.push("chip"); return 0 }
 	}, 5, 5)
 	const enemy = place({
-		id: 2, name: "enemy", level: 10, life: enemyLife, maxLife: 300, mp: 3, tp: 10, strength: 0, agility: 0, wisdom: 0,
-		resistance: 0, science: 0, magic: 0, weapon: enemyGun, weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 10, 5)
+		id: enemyId, name: enemyName, level: 10, life: enemyLife, maxLife: 300, mp: enemyMp, tp: enemyTp, strength: 0,
+		agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0, weapon: enemyWeapon ?? enemyGun, weapons: [], chips: [],
+		effects: [], launchedEffects: []
+	}, enemyAt[0], enemyAt[1])
+	if (ally !== null) place(ally, allyAt[0], allyAt[1])
 	const calls = { aliveEnemies: 0, allies: 0 }
 	globalThis.Fight = {
 		me, turn: turnNumber,
 		getNearestEnemy: () => enemy,
 		getEnemies: () => [enemy],
 		getAliveEnemies: () => { calls.aliveEnemies++; return [enemy].filter((e) => e.life > 0) },
-		getAllies: () => { calls.allies++; return [me] },
+		getAllies: () => { calls.allies++; return ally === null ? [me] : [me, ally] },
 		weaponCells: (target, weapon = me.weapon) => [...cells.values()].filter((cell) => inRange(weapon, cell, target))
 	}
 	globalThis.Weapon = { pistol: gun }
 	globalThis.Chip = {}
-	return { actions, me, enemy, calls }
+	return { actions, me, enemy, ally, calls, cell: (x, y) => cells.get(`${x},${y}`) }
 }
 
 /** Joue `turn` et renvoie les lignes de `console.log` et de `Debug.log` (rapports d'erreur) dans l'ordre. */

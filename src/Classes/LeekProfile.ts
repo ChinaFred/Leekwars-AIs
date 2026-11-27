@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { AggressiveStrategy } from "./Strategy/AggressiveStrategy.js"
 import { BalancedStrategy } from "./Strategy/BalancedStrategy.js"
 import { DefensiveStrategy } from "./Strategy/DefensiveStrategy.js"
@@ -42,7 +42,7 @@ export class LeekProfile {
 	}
 }
 
-/** Stratégie du rôle configuré (seuils de soin, bouclier, repli), sans instancier `Plannification`. */
+/** Stratégie du rôle configuré (seuils de soin, bouclier, repli). */
 export function createStrategy(profile: LeekProfile): LeekStrategy {
 	if (profile.strategyName === "AGGRESSIVE") {
 		return new AggressiveStrategy(profile.aggression)

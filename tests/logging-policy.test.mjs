@@ -22,7 +22,7 @@ const ALLOWED_FILES = new Set([
 
 /**
  * Seul point de sortie visuelle (Debug.mark / markText / clearMarks / pause / show). Aucune autre exception :
- * Coordinates.ts et Debug.ts passent par Marker.ts.
+ * Debug.ts passe par Marker.ts.
  */
 const VISUAL_ALLOWED_FILES = new Set([
 	"Toolbox/Marker.ts"

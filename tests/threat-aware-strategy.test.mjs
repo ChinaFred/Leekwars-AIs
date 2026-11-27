@@ -61,35 +61,9 @@ runCases("shouldHealWithThreat", [
 	["defensive 80% hp, 8% lost, distance 10", "defensive", 50, [0.80, 0.08, 10], true],
 ])
 
-// shouldUseAttackChip(lifeRatio)
-runCases("shouldUseAttackChip", [
-	["balanced 51% hp", "balanced", 50, [0.51], true],
-	["balanced 50% hp", "balanced", 50, [0.50], true],
-	["balanced 49% hp", "balanced", 50, [0.49], true],
-	["defensive 70% hp (threshold 0.65)", "defensive", 50, [0.70], true],
-])
-
 // shouldShield(lifeRatio, distance, threatRange)
 runCases("shouldShield", [
 	["aggressive 70: 70% hp (only shields at critical hp)", "aggressive", 70, [0.70, 2, 3], false],
 	["defensive 70% hp, distance 2, range 3 (shields readily)", "defensive", 50, [0.70, 2, 3], true],
 	["balanced 90% hp, distance 3 > range 2 (distance checked first)", "balanced", 50, [0.90, 3, 2], false],
 ])
-
-test("scoreWeapon: aggression lowers the range-mismatch penalty (100 > 0)", () => {
-	const aggressiveScore = new LeekStrategy("AGGRESSIVE", 100).scoreWeapon(50, 5, 2)
-	const passiveScore = new LeekStrategy("PASSIVE", 0).scoreWeapon(50, 5, 2)
-
-	assert.ok(aggressiveScore > passiveScore,
-		`Aggressive score (${aggressiveScore}) should be > Passive score (${passiveScore})`)
-})
-
-test("scoreWeapon: BalancedStrategy matches the base calculation", () => {
-	assert.equal(new BalancedStrategy(50).scoreWeapon(50, 5, 2), new LeekStrategy("BALANCED", 50).scoreWeapon(50, 5, 2))
-})
-
-test("scoreWeapon: a stronger well-ranged weapon outscores a weak mismatched one", () => {
-	const strategy = new BalancedStrategy(50)
-
-	assert.ok(strategy.scoreWeapon(15, 5, 5) > strategy.scoreWeapon(7.5, 5, 2))
-})

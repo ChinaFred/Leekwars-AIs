@@ -76,7 +76,7 @@ export function evaluateTacticalPlans(
 				reason: error.message, preparation
 			}
 		}
-		// Évaluation sans dépense : l'historique reste possible, mais l'exception n'est pas silencieuse.
+		// Évaluation sans dépense : le plan B reste possible, mais l'exception n'est pas silencieuse.
 		log(() => JSON.stringify({
 			level: "ERROR",
 			file: "src/Classes/Plannification/TacticalPlanner.ts",

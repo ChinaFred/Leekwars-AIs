@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 
 /** Arme ou puce : les deux ont coût, portées, `features` ; seule la puce a un cooldown. */
 export type ShotItem = Weapon | Chip
@@ -23,7 +23,7 @@ export function baseMeanDamage(item: ShotItem): number {
 }
 
 /**
- * Dégâts moyens d'UN tir : dégâts de base × (1 + force / 100) (même formule que `Plannification`). Sans
+ * Dégâts moyens d'UN tir : dégâts de base × (1 + force / 100). Sans
  * critique (pas de × 1,3), sans tenir compte de mes boucliers ni de ma résistance : valeur brute. `strength`
  * absent ou non fini → 0. Ne tient compte ni du poison ni des dégâts sur la durée (seules les features DAMAGE
  * comptent), ni de la zone d'effet. Les dégâts de base sont mis en cache par instance d'item (les features

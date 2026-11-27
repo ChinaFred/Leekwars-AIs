@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { makeTurnWorld } from "./helpers/turn-world.mjs"
 
 // Mocks : tout appel à Debug.* et console.log est enregistré, dans l'ordre, dans `trace`.
 globalThis.Color = { rgb: (red, green, blue) => (red << 16) | (green << 8) | blue }
@@ -23,7 +24,6 @@ function installDebug(overrides = {}) {
 const logger = await import("../dist/Toolbox/Logger.js")
 const marker = await import("../dist/Toolbox/Marker.js")
 const debugModule = await import("../dist/Toolbox/Debug.js")
-const { Coordinates } = await import("../dist/Classes/Context/Coordinates.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { ThreatMap } = await import("../dist/Classes/Context/ThreatMap.js")
 const { LOG_CONTEXT, LogConfig, initLeekLogging, resetLeekLogging, log } = logger
@@ -410,28 +410,6 @@ test("legacy marks: DEBUGS flags are false by default (no pause) and require fla
 	}
 })
 
-test("Coordinates.mark / markArray go through the DEBUG context", () => {
-	makeGrid(5, 5)
-	const origin = new Coordinates(1, 1)
-	const other = new Coordinates(2, 2)
-	recording(new LogConfig(), () => {
-		origin.mark(77)
-		Coordinates.markArray([origin, other], 88)
-		assert.deepEqual(names(trace), ["mark", "mark"])
-		assert.equal(trace[0][1].x, 1)
-		assert.equal(trace[1][1].length, 2)
-	})
-	recording(new LogConfig().setEnabled(LOG_CONTEXT.DEBUG, false), () => {
-		origin.mark(77)
-		Coordinates.markArray([origin, other], 88)
-		assert.deepEqual(trace, [])
-	})
-	recording(new LogConfig(), () => {
-		const missing = new Coordinates(99, 99)
-		assert.throws(() => missing.mark(1), RangeError) // comportement historique conservé
-	})
-})
-
 test("primitives: gate and context both required, text truncated to 10 characters", () => {
 	recording(new LogConfig(), () => {
 		assert.equal(markCells({ x: 0, y: 0 }, 5, ZONE, false), false)
@@ -445,26 +423,14 @@ test("primitives: gate and context both required, text truncated to 10 character
 
 // --- turn() complet ------------------------------------------------------------------------------
 
+/** Monde jouable par les plans actuels (`helpers/turn-world.mjs`) sur la grille de ce fichier (appels `Field` comptés). */
 function makeCombatWorld(runId, { allyNameFailsAfterReachable = false } = {}) {
 	const grid = makeGrid(21, 21)
-	const actions = []
-	let tp = 7
-	let equippedWeapon = null
-	let inRange = false
-	const enemyGun = {
-		id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false,
-		features: [{ type: 1, minValue: 10, maxValue: 20 }]
-	}
-	const enemy = grid.place({
-		id: 400 + 2 * runId, name: "Ennemi", level: 10, life: 10, maxLife: 100, mp: 2, tp: 5,
-		strength: 0, agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0,
-		weapon: enemyGun, weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 9, 5)
 	// `observeReachableCells` lit le nom de l'alliée puis journalise `[Reachable]` ; la lecture suivante est celle de
 	// `displayAccessibleZones` (source de zone). La faire échouer, une fois, provoque une erreur pendant l'affichage
 	// des zones, et là seulement.
 	let allyNameFailed = false
-	const ally = grid.place({
+	const ally = {
 		id: 401 + 2 * runId,
 		get name() {
 			const reachableLogged = trace.some((call) => call[0] === "log" && String(call[1]).startsWith("[Reachable]"))
@@ -476,43 +442,16 @@ function makeCombatWorld(runId, { allyNameFailsAfterReachable = false } = {}) {
 		},
 		level: 10, life: 100, maxLife: 100, mp: 2, tp: 10, strength: 0, wisdom: 0,
 		weapon: null, weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 5, 7)
-	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
-	const strongWeapon = { name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	const bandage = { name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] }
-	const attackChip = { name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	const me = grid.place({
-		id: 1, name: "Kassbi", level: 10, life: 70, maxLife: 100, mp: 3, tp,
-		strength: 0, wisdom: 0,
-		weapons: [weakWeapon, strongWeapon],
-		chips: [bandage, attackChip],
-		effects: [], launchedEffects: [],
-		get weapon() { return equippedWeapon },
-		distance: () => 4,
-		say() {},
-		setWeapon(weapon) { actions.push("equip"); equippedWeapon = weapon; tp -= 1 },
-		useChip(chip) { actions.push(chip.name); tp -= chip.cost },
-		chipCells: () => [me.cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() { actions.push("move"); inRange = true },
-		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
-		moveAwayFrom() { actions.push("retreat") }
-	}, 5, 5)
-	const counts = { getAllies: 0 }
-	globalThis.Fight = {
-		me,
-		turn: 300 + runId,
-		getNearestEnemy: () => enemy,
-		getEnemies: () => [enemy],
-		getAliveEnemies: () => (enemy.life > 0 ? [enemy] : []),
-		getAllies: () => {
-			counts.getAllies++
-			return [me, ally]
-		}
 	}
-	globalThis.Weapon = { pistol: weakWeapon }
-	globalThis.Chip = { bandage }
-	return { actions, counts }
+	const world = makeTurnWorld({
+		turnNumber: 300 + runId, grid, meName: "Kassbi", enemyId: 400 + 2 * runId, enemyName: "Ennemi", enemyAt: [9, 5],
+		enemyMp: 2, enemyTp: 5, ally,
+		enemyWeapon: {
+			id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false,
+			features: [{ type: 1, minValue: 10, maxValue: 20 }]
+		}
+	})
+	return { actions: world.actions, counts: { get getAllies() { return world.calls.allies } } }
 }
 
 let runCounter = 1
@@ -559,7 +498,7 @@ test("turn(): zones are displayed after observeReachableCells / observeThreatMap
 	assert.ok(index("Accessible zone: Alliee") < index("Accessible zone: Ennemi"))
 	assert.ok(index("Accessible zone: Ennemi") < index("[Threat]"))
 	assert.ok(index("[Threat]") < index("Danger zone:"))
-	assert.ok(index("Danger zone:") < index("[Plannification] PredictContactNextTurn"))
+	assert.ok(index("Danger zone:") < text.findIndex((line) => String(line).includes("plan before execution")))
 
 	const kinds = on.calls.map((call) => call[0])
 	assert.equal(kinds.filter((kind) => kind === "pause").length, 4) // 3 poireaux + 1 zone de danger
@@ -571,7 +510,7 @@ test("turn(): zones are displayed after observeReachableCells / observeThreatMap
 
 test("turn(): plays the same actions when Debug is missing, incomplete or throwing, or when building the zones fails", async () => {
 	const baseline = await playTurn(new LogConfig().setEnabled(ZONE, false).setEnabled(DANGER, false))
-	assert.ok(baseline.actions.length > 3)
+	assert.ok(baseline.actions.includes("shoot"), "the plan fires")
 	const brokenDebugs = {
 		"mark throws": () => { globalThis.Debug.mark = () => { throw new Error("mark exploded") } },
 		"all visual calls throw": () => {
@@ -753,7 +692,7 @@ test("turn(): the target zone is shown right after the danger zone and before th
 		const index = (prefix) => text.findIndex((line) => line.startsWith(prefix))
 		assert.equal(text.filter((line) => line.startsWith("Target zone:")).length, 1)
 		assert.equal(index("Target zone:"), index("Danger zone:") + 1)
-		assert.ok(index("Target zone:") < index("[Plannification] PredictContactNextTurn"))
+		assert.ok(index("Target zone:") < text.findIndex((line) => String(line).includes("plan before execution")))
 		assert.equal(on.calls.filter((call) => call[0] === "pause").length, 5) // 3 poireaux + zone de danger + zone visée
 
 		computed = 0

@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Repli historique et code inatteignable supprimés (`Plannification.ts`, `Items/*`, `src/Tests/`… : 52 → 33 fichiers) ; sans API du plan B, `planAct` journalise et ne joue pas.
 - 2026-11-27 — Alliés lus une fois par observation (`Fight.getAllies` : 2 → 1 appel par tour, zones affichées ou non) ; aucun changement de décision.
 - 2026-11-27 — Code mort supprimé : `simpleActionSequence.ts`, `Computations.ts`, `Helpers.ts` et leurs tests (importés par aucune IA).
 - 2026-11-27 — Rangement : `castMpBoost` dans `StrengthBoost.ts`, attribution des coffres par la constante `NEVER_ATTRIBUTE_DAMAGE` ; aucun changement de comportement.

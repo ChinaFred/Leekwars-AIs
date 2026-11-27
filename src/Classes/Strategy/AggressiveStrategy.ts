@@ -1,15 +1,10 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { LeekStrategy } from "./LeekStrategy.js"
 
 export class AggressiveStrategy extends LeekStrategy {
 	constructor(aggressionValue = 50) {
 		super("AGGRESSIVE", aggressionValue)
-	}
-
-	scoreWeapon(damage: number, preferredMid: number, weaponMid: number): number {
-		const rangePenalty = Math.abs(preferredMid - weaponMid) * (0.02 - 0.01 * this.getAggressionRatio())
-		return damage - rangePenalty
 	}
 
 	shouldHeal(lifeRatio: number, _lostLifeRatio: number): boolean {
@@ -50,9 +45,5 @@ export class AggressiveStrategy extends LeekStrategy {
 		}
 		
 		return false
-	}
-
-	shouldUseAttackChip(lifeRatio: number): boolean {
-		return lifeRatio >= 0.45 - 0.25 * this.getAggressionRatio()
 	}
 }
