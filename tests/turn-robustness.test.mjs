@@ -4,7 +4,7 @@ import { captureLines, installGlobals, makeTurnWorld } from "./helpers/turn-worl
 
 installGlobals()
 const { turn } = await import("../dist/Main/Kassbi_Class.js")
-const { observeTurn, refreshMaps, stagnation } = await import("../dist/Brain/TurnObservation.js")
+const { observeTurn, stagnation } = await import("../dist/Brain/TurnObservation.js")
 
 const errors = (lines) => lines.filter((text) => text.includes('"level":"ERROR"'))
 
@@ -68,12 +68,9 @@ test("an error in the stagnation update is reported and the action history of th
 	assert.match(history ?? "", /TP 8\/10 MP 0\/3 dealt 44 .*\| machine_gun:1:22; machine_gun:1:22/)
 })
 
-test("observeTurn and refreshMaps each ask the game for the living enemies once", () => {
+test("observeTurn asks the game for the living enemies once", () => {
 	const w = makeTurnWorld({ turnNumber: 4 })
 	captureLines(() => observeTurn(w.me))
-	assert.equal(w.calls.aliveEnemies, 1)
-	w.calls.aliveEnemies = 0
-	captureLines(() => refreshMaps(w.me))
 	assert.equal(w.calls.aliveEnemies, 1)
 })
 

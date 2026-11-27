@@ -7,7 +7,8 @@ globalThis.Debug = { log() {}, pause() {} }
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4, POISON: 5, BUFF_STRENGTH: 6, BUFF_MP: 7 }
 globalThis.Fight = { turn: 1 }
 
-// Le boost de PM est la seule action décidée avant le plan : `turn()` le lance, recalcule les cartes, puis planifie.
+// Le boost de PM est une composante du plan : décidé par une seconde recherche sur la zone boostée, comparé au plan sans boost
+// par le même score, affiché avec le plan, lancé en PREMIÈRE action de l'exécution.
 const { turn } = await import("../dist/Main/Kassbi_Class.js")
 const { decideMpBoost, pickMpBoost } = await import("../dist/Brain/StrengthBoost.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
@@ -35,7 +36,7 @@ const enemyGun = { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6,
  */
 function makeWorld({
 	turnNumber, chips = [boots()], effects = [], enemyAt = [15, 5], life = 300, mp = 3, tp = 10, useChipImpl = null,
-	height = 11, meAt = [5, 5]
+	height = 11, meAt = [5, 5], enemyWeapon = enemyGun, enemyMp = 3
 } = {}) {
 	const cells = new Map()
 	for (let x = 0; x < 31; x++) for (let y = 0; y < height; y++) {
@@ -102,8 +103,8 @@ function makeWorld({
 		}
 	}, meAt)
 	const enemy = place({
-		id: 2, name: "enemy", level: 10, life: 300, maxLife: 300, mp: 3, tp: 10, strength: 0, agility: 0, wisdom: 0,
-		resistance: 0, science: 0, magic: 0, weapon: enemyGun, weapons: [], chips: [], effects: [], launchedEffects: []
+		id: 2, name: "enemy", level: 10, life: 300, maxLife: 300, mp: enemyMp, tp: 10, strength: 0, agility: 0, wisdom: 0,
+		resistance: 0, science: 0, magic: 0, weapon: enemyWeapon, weapons: [], chips: [], effects: [], launchedEffects: []
 	}, enemyAt)
 	globalThis.Fight = {
 		me, turn: turnNumber,
@@ -143,26 +144,74 @@ function decide(options, { reachable, limit = TACTICAL_LIMITS.cells } = {}) {
 	return { w, decision: decideMpBoost(w.me, zone, [w.enemy], limit) }
 }
 
-test("(a) no shot this turn and +2 MP unlocks a firing cell: cast before the plan, maps recomputed, the plan then shoots", () => {
+test("(a) no shot this turn and +2 MP unlocks a firing cell: the boosted plan wins on score, is displayed, then runs boots first", () => {
 	const w = makeWorld({ turnNumber: 1 })
 	const lines = captureTurn(w)
 	assert.deepEqual(w.actions, ["leather_boots", "move", "shoot"], lines.filter((text) => /Boost|Tactical|ERROR/.test(text)).join("\n"))
 	assert.equal(w.me.tp, 10 - 3 - 4)
 	assert.equal(w.me.cell.x, 9) // 4 des 5 PM : première case à portée 6
-	// Décision et motif journalisés AVANT le lancer.
-	const decided = w.timeline.findIndex((entry) => entry.includes("[Boost] MP: casting leather_boots (+2 MP, 3 TP)"))
-	assert.ok(decided >= 0 && decided < w.timeline.indexOf("action:leather_boots"))
-	assert.match(w.timeline[decided], /no firing cell in 25 cells with 3 MP; 61 cells with 5 MP reach machine_gun on enemy/)
-	// Cartes recalculées avec les PM réels : le plan conjoint les accepte (pas de repli sur le plan B).
-	assert.deepEqual(lines.filter((text) => text.includes("[Reachable] me:")).map((text) => /me:\d+ \(\d MP\)/.exec(text)[0]),
-		["me:25 (3 MP)", "me:61 (5 MP)"])
-	assert.equal(lines.filter((text) => text.includes("[Threat] ")).length, 2)
+	// Rien n'est lancé avant l'affichage du plan, qui annonce le boost de PM en première position.
+	const shown = w.timeline.findIndex((entry) => entry.includes("[Tactical] plan before execution"))
+	assert.ok(shown >= 0 && shown < w.timeline.findIndex((entry) => entry.startsWith("action:")), "plan displayed before the first action")
+	const plan = JSON.parse(w.timeline[shown].slice(w.timeline[shown].indexOf("{")))
+	assert.deepEqual(plan.order.slice(0, 2), ["mp boost", "approach"])
+	assert.deepEqual(plan.mpBoost, { name: "leather_boots", cost: 3, gain: 2 })
+	assert.equal(plan.tp.available, 10)
+	assert.equal(plan.tp.planned, 3 + 4, "boost + 1 shot")
+	// Décision journalisée : plan boosté contre plan sans boost, même score, motif de l'observation.
+	const decided = lines.find((text) => text.includes("[Boost] MP: leather_boots (+2 MP) plan score"))
+	assert.match(decided, /with a shot vs without boost score .*boosted plan kept \(no firing cell in 25 cells with 3 MP; 61 cells with 5 MP reach machine_gun on enemy; second search \d+ ticks/)
+	assert.ok(w.timeline.findIndex((entry) => entry.includes("[Boost] MP: leather_boots (+2 MP) plan score")) < w.timeline.indexOf("action:leather_boots"))
+	// Une seule observation (3 PM) : la zone boostée est calculée en lecture seule par la recherche, sans repasser par les cartes du tour.
+	assert.deepEqual(lines.filter((text) => text.includes("[Reachable] me:")).map((text) => /me:\d+ \(\d MP\)/.exec(text)[0]), ["me:25 (3 MP)"])
+	assert.equal(lines.filter((text) => text.includes("[Threat] ")).length, 1)
 	assert.equal(lines.some((text) => text.includes("fallback") || text.includes("ERROR")), false)
-	const plan = lines.find((text) => text.includes("[Tactical] plan before execution"))
-	assert.ok(plan && JSON.parse(plan.slice(plan.indexOf("{"))).tp.available === 7, "the plan sees the TP left after the boost")
+	// Une seule liste native d'arme : celle de la décision est réutilisée par la seconde recherche.
+	assert.equal(w.native.weaponCells, 1)
 	// Le lancer figure dans l'historique du tour, avec les PM gagnés comptés comme disponibles.
 	const history = lines.find((text) => text.includes("[History] T1 "))
 	assert.match(history, /TP 7\/10 MP 4\/5 .*\| leather_boots:1:-; move:4:-; machine_gun:1:22\.5/)
+})
+
+test("the danger of the unlocked cells counts: the lethal firing zone is never entered, the same turn shoots with a harmless enemy", () => {
+	// Ennemi immobile, portée 6, 200 de dégâts par tir : les cases de tir débloquées (distance <= 6) sont létales, la zone à 3 PM est sûre.
+	const lethalGun = { ...enemyGun, features: [{ type: 1, minValue: 200, maxValue: 200 }] }
+	const w = makeWorld({ turnNumber: 50, enemyWeapon: lethalGun, enemyMp: 0 })
+	const lines = captureTurn(w)
+	const report = lines.filter((text) => /Boost|Tactical|ERROR/.test(text)).join("\n")
+	assert.equal(w.actions.includes("shoot"), false, report)
+	assert.ok(w.me.cell.x <= 8, `stays in the safe zone: ${report}`)
+	assert.ok(lines.some((text) => /\[Boost\] MP: leather_boots \(\+2 MP\) plan score .*danger 0, no shot vs without boost/.test(text)), report)
+	const chosen = lines.find((text) => text.includes("[Tactical] plan before execution"))
+	assert.equal(chosen === undefined ? 0 : JSON.parse(chosen.slice(chosen.indexOf("{"))).danger, 0)
+	// Sans le danger dans le score (ancien comportement), les bottes auraient mené le plan sur les cases de tir : même tour, ennemi inoffensif.
+	const harmless = makeWorld({ turnNumber: 54, enemyMp: 0 })
+	captureTurn(harmless)
+	assert.deepEqual(harmless.actions, ["leather_boots", "move", "shoot"])
+})
+
+test("the boots serve to flee: every cell of the turn is lethal, the zone at +2 MP holds a safe one, the score picks it", () => {
+	// Ennemi à distance 5 (3 PM, portée 6 : atteint 9 cases), 200 de dégâts par tir : tout ma zone à 3 PM est létale ; à 5 PM, (0,5) est à 10.
+	const lethalGun = { ...enemyGun, features: [{ type: 1, minValue: 200, maxValue: 200 }] }
+	const w = makeWorld({ turnNumber: 51, enemyAt: [10, 5], enemyWeapon: lethalGun })
+	const lines = captureTurn(w)
+	const report = lines.filter((text) => /Boost|Tactical|ERROR/.test(text)).join("\n")
+	assert.equal(w.actions[0], "leather_boots", report)
+	assert.ok(w.me.cell.x <= 1, `fled to the safe cells: ${w.me.cell.x}`)
+	assert.ok(lines.some((text) => /candidate \(flee\) leather_boots/.test(text)), report)
+	assert.ok(lines.some((text) => /plan score .*boosted plan kept/.test(text)), report)
+	// Le même tour sans puce de PM reste dans la zone létale.
+	const without = makeWorld({ turnNumber: 52, enemyAt: [10, 5], enemyWeapon: lethalGun, chips: [] })
+	captureTurn(without)
+	assert.ok(without.me.cell.x >= 2)
+})
+
+test("nothing is decided outside the plan: no candidate search without an unlock or a lethal plan, no extra native list", () => {
+	const w = makeWorld({ turnNumber: 53, enemyAt: [14, 5] }) // tir possible après 3 PM : aucun candidat
+	const lines = captureTurn(w)
+	assert.deepEqual(w.actions, ["move", "shoot", "shoot"])
+	assert.equal(lines.some((text) => text.includes("second search")), false)
+	assert.ok(lines.some((text) => /\[Boost\] MP: not a candidate \(unlock\): shot already possible: machine_gun/.test(text)))
 })
 
 test("(b) not cast when a shot is already possible: from my cell, after a move, or with a ready offensive chip", () => {
@@ -212,7 +261,8 @@ test("5 MP + 2 on open ground (113 cells): the boots are cast when they unlock a
 	assert.deepEqual(w.actions, ["leather_boots", "move", "shoot"], report)
 	assert.ok(lines.some((text) => text.includes("no firing cell in 61 cells with 5 MP; 113 cells with 7 MP reach machine_gun on enemy")), report)
 	assert.deepEqual(lines.filter((text) => text.includes("[Reachable] me:")).map((text) => /me:\d+ \(\d MP\)/.exec(text)[0]),
-		["me:61 (5 MP)", "me:113 (7 MP)"])
+		["me:61 (5 MP)"])
+	assert.ok(lines.some((text) => /\[Boost\] MP: leather_boots .*boosted plan kept/.test(text)), report)
 	// Plan conjoint retenu sur 113 cases : ni repli (bornes, carte tronquée), ni plan B.
 	assert.equal(lines.some((text) => /fallback|TRUNCATED|\[Reserve\]|ERROR/.test(text)), false, report)
 	assert.ok(lines.some((text) => text.includes("[Tactical] plan before execution")), report)
@@ -273,17 +323,20 @@ test("(e) not cast when the TP left after the boost pay no shot, nor when the tu
 	assert.match(decideMpBoost(old.me, computeReachableCells(old.me, 3, 26), [old.enemy], TACTICAL_LIMITS.cells).reason, /native firing cells unavailable/)
 })
 
-test("a refused cast or a failing decision does not stop the turn: maps match the real MP, the plan goes on", () => {
+test("a refused boost stops the plan cleanly (nothing else is tried); a failing candidate search keeps the plan without boost", () => {
 	const w = makeWorld({ turnNumber: 27, useChipImpl: () => 0 })
 	const lines = captureTurn(w)
-	assert.equal(w.actions.includes("leather_boots"), false)
+	assert.deepEqual(w.actions, [], "no move, no shot: the plan was built for the boosted zone")
 	assert.equal(w.me.tp, 10)
 	assert.ok(lines.some((text) => text.includes("[Boost] MP: leather_boots result 0; now 3 MP, 10 TP")))
-	// Cartes recalculées avec les PM réels (3) : le plan conjoint ne les rejette pas comme périmées.
-	assert.equal(lines.filter((text) => text.includes("[Reachable] me:25 (3 MP)")).length, 2)
-	assert.equal(lines.some((text) => text.includes("fallback: stale/inconsistent") || text.includes('"level":"ERROR"')), false)
+	assert.ok(lines.some((text) => text.includes("[Tactical] execution: MP boost failed: leather_boots, result 0, MP 3 -> 3; plan stopped")))
+	assert.equal(lines.some((text) => text.includes("[Reserve]") || text.includes('"level":"ERROR"')), false, "no second sequence")
 	assert.match(lines.find((text) => text.includes("[History] T27 ")), /leather_boots:0:-/)
-	// Exception pendant la décision : journalisée (ERROR), rien n'est lancé, le plan tire comme sans puce de PM.
+	// Cast accepted but no MP gained: same clean stop.
+	const noGain = makeWorld({ turnNumber: 29, useChipImpl: (me, chip) => { me.tp -= chip.cost; return 1 } })
+	assert.ok(captureTurn(noGain).some((text) => text.includes("MP boost failed: leather_boots, result 1, MP 3 -> 3; plan stopped")))
+	assert.deepEqual(noGain.actions, [])
+	// Exception pendant la recherche du candidat : journalisée (ERROR), rien n'est lancé, le plan tire comme sans puce de PM.
 	const broken = makeWorld({ turnNumber: 28, enemyAt: [14, 5] })
 	const canUseChip = broken.me.canUseChip
 	broken.me.canUseChip = function (chip, target) {
@@ -292,7 +345,7 @@ test("a refused cast or a failing decision does not stop the turn: maps match th
 	}
 	const report = captureTurn(broken).filter((text) => text.includes('"level":"ERROR"'))
 	assert.equal(report.length, 1)
-	assert.match(report[0], /"function":"castMpBoost".*boom/)
+	assert.match(report[0], /"function":"mpBoostCandidate".*boom/)
 	assert.deepEqual(broken.actions, ["move", "shoot", "shoot"])
 })
 

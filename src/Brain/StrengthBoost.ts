@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 9
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -20,11 +20,10 @@ import {
 	tpBoostOf,
 	tpBoostTurns
 } from "../Classes/Context/ShotPlan.js"
-import { actionHistory } from "../Classes/Context/StagnationTracker.js"
-import { aliveEnemies } from "../Classes/Context/Targets.js"
+import { CRITICAL_FACTOR } from "../Classes/Context/EnemyMemory.js"
 import { WEAPON_SWAP_TP } from "../Classes/Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Classes/Plannification/ExecutionBudget.js"
-import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalTypes.js"
+import { TacticalPreparation } from "../Classes/Plannification/TacticalTypes.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
 /** Part créditée des tours futurs couverts par le boost (le contact avec l'ennemi n'est pas garanti). */
@@ -142,7 +141,7 @@ export function hasActiveAgilityBoost(me: Me): boolean {
 /**
  * Le boost d'agilité prêt au plus grand gain, abordable avec `tp` PT ; null sinon, ou si un boost d'agilité est actif.
  * `gain` = agilité entière (partie entière du gain moyen). Valeur attendue faible : + gain / 1000 de chance de critique,
- * soit + gain × 0,03 % de dégâts moyens (critique × 1,3) ; le plan ne le lance qu'avec des PT sans emploi.
+ * soit + gain × 0,03 % de dégâts moyens (critique × 1,3) : le plan la mesure (`agilityCritGain`) et la compare aux tirs.
  */
 export function pickAgilityBoost(me: Me, tp: number): BoostOption | null {
 	let best: BoostOption | null = null
@@ -162,10 +161,64 @@ export function pickAgilityBoost(me: Me, tp: number): BoostOption | null {
 	return best
 }
 
+/**
+ * Gain relatif de dégâts moyens d'un boost d'agilité : (critique − 1) × chance de critique ajoutée, soit
+ * 0,3 × gain / 1000 (gain plafonné pour que la chance totale reste ≤ 100 %). Estimation : le moteur arrondit.
+ */
+export function agilityCritGain(me: Me, option: BoostOption): number {
+	const room = Number.isFinite(me.agility) ? Math.max(0, 1000 - me.agility) : 1000
+	return (CRITICAL_FACTOR - 1) * Math.min(option.gain, room) / 1000
+}
+
+/**
+ * Part des tours SUIVANTS d'un boost d'agilité pour `weapon` : `FUTURE_TURN_WEIGHT` × (durée − 1) tours de tirs
+ * entiers de l'arme seule à `fullTp` PT, chacun majoré de `agilityCritGain`. Non plafonnée (l'appelant plafonne).
+ */
+export function agilityBoostFutureDamage(me: Me, weapon: Weapon, option: BoostOption, fullTp: number): number {
+	const base = baseMeanDamage(weapon)
+	if (!(base > 0) || !(weapon.cost > 0)) {
+		return 0
+	}
+	const shots = Math.max(0, Math.min(Math.floor(fullTp / weapon.cost), maxUsesOf(weapon)))
+	const strength = Number.isFinite(me.strength) ? me.strength : 0
+	return Math.max(0, option.turns - 1) * shots * base * (1 + strength / 100) * agilityCritGain(me, option) * FUTURE_TURN_WEIGHT
+}
+
 /** Décision du boost de PM d'avant plan : `option` null = ne pas lancer ; `reason` vide = aucune puce de PM prête. */
 export interface MpBoostDecision {
 	readonly option: BoostOption | null
 	readonly reason: string
+	/** Zone atteignable à PM + gain (seulement avec `option`), déjà calculée par la décision. */
+	readonly zone?: ReachableCells
+}
+
+/** Listes natives déjà obtenues ce tour (voir `TacticalPreparation`) : un appel natif n'est jamais refait. */
+type NativeCells = Pick<TacticalPreparation, "weaponCells" | "chipCells">
+
+function cachedCells<T extends Weapon | Chip>(
+	store: Map<Entity, Map<T, Cell[]>> | undefined, target: Entity, item: T, fetch: () => Cell[]
+): Cell[] {
+	let byItem = store?.get(target)
+	const known = byItem?.get(item)
+	if (known) {
+		return known
+	}
+	const cells = fetch()
+	if (store) {
+		if (!byItem) {
+			store.set(target, byItem = new Map())
+		}
+		byItem.set(item, cells)
+	}
+	return cells
+}
+
+/** Zone atteignable à PM + gain, ou le motif du refus (carte tronquée, plus de `cellLimit` cases). */
+function boostedZone(me: Me, option: BoostOption, cellLimit: number): ReachableCells | string {
+	const boostedMp = me.mp + option.gain
+	const zone = computeReachableCells(me, boostedMp, Fight.turn)
+	return zone.truncated || zone.size > cellLimit
+		? `${zone.size}${zone.truncated ? "+" : ""} cells with ${boostedMp} MP > ${cellLimit}` : zone
 }
 
 /** Même garde que les recherches (plan conjoint, plan B, carte de danger) : rien ne démarre passé 80 % des opérations. */
@@ -199,13 +252,15 @@ function mayReach(zone: ReachableCells, target: Entity, item: Weapon | Chip): bo
  * (+ `WEAPON_SWAP_TP` si elle n'est pas équipée). Les puces offensives ne comptent pas dans ce second test : les
  * plans ne créditent une puce que si elle est utilisable depuis la case actuelle, donc pas depuis une case débloquée.
  *
- * Le danger des cases débloquées n'est pas regardé : si le plan refuse d'y aller, les PT du boost sont perdus ce tour.
+ * Ne lance RIEN : c'est une décision d'observation (lecture seule). Le plan boosté est cherché ensuite sur `zone` et
+ * comparé au plan sans boost par le même score (`TacticalPlanner.ts`), danger des cases débloquées compris.
  * Coût : un parcours en largeur de plus, puis une liste native par couple (ennemi, item) dont la portée de Manhattan
  * touche la zone ; aucune liste si l'arme équipée tire déjà d'ici ou si rien n'est à portée de la zone boostée.
- * Non mesuré sur le moteur. Garde : rien ne démarre passé `SEARCH_GLOBAL_FRACTION` des opérations.
+ * `cells` : listes natives déjà obtenues par la recherche, réutilisées et complétées. Non mesuré sur le moteur.
+ * Garde : rien ne démarre passé `SEARCH_GLOBAL_FRACTION` des opérations.
  */
 export function decideMpBoost(
-	me: Me, reachable: ReachableCells | null, enemies: readonly Entity[], cellLimit: number
+	me: Me, reachable: ReachableCells | null, enemies: readonly Entity[], cellLimit: number, cells?: NativeCells
 ): MpBoostDecision {
 	const no = (reason: string): MpBoostDecision => ({ option: null, reason })
 	const option = pickMpBoost(me, me.tp)
@@ -247,9 +302,9 @@ export function decideMpBoost(
 		return no(`shot already possible: ${equipped.name}`)
 	}
 	const boostedMp = me.mp + option.gain
-	const boosted = computeReachableCells(me, boostedMp, Fight.turn)
-	if (boosted.truncated || boosted.size > cellLimit) {
-		return no(`${boosted.size}${boosted.truncated ? "+" : ""} cells with ${boostedMp} MP > ${cellLimit}`)
+	const boosted = boostedZone(me, option, cellLimit)
+	if (typeof boosted === "string") {
+		return no(boosted)
 	}
 	const chips = [...new Set(me.chips ?? [])].filter((chip) => chip.currentCooldown === 0 &&
 		Number.isInteger(chip.cost) && chip.cost > 0 && chip.cost <= me.tp && toCandidate(chip, true, me.strength) !== null)
@@ -263,7 +318,7 @@ export function decideMpBoost(
 			if (!hasSearchRoom()) {
 				return no("operations budget")
 			}
-			if (reaches(reachable, me.chipCells(chip, target))) {
+			if (reaches(reachable, cachedCells(cells?.chipCells, target, chip, () => me.chipCells(chip, target)))) {
 				return no(`shot already possible: ${chip.name}`)
 			}
 		}
@@ -275,11 +330,11 @@ export function decideMpBoost(
 			if (!hasSearchRoom()) {
 				return no("operations budget")
 			}
-			const cells = Fight.weaponCells(target, weapon)
-			if (reaches(reachable, cells)) {
+			const zone = cachedCells(cells?.weaponCells, target, weapon, () => Fight.weaponCells(target, weapon))
+			if (reaches(reachable, zone)) {
 				return no(`shot already possible: ${weapon.name}`)
 			}
-			if (unlocked === null && cost <= tpAfter && reaches(boosted, cells)) {
+			if (unlocked === null && cost <= tpAfter && reaches(boosted, zone)) {
 				unlocked = `${weapon.name} on ${target.name}`
 			}
 		}
@@ -292,31 +347,45 @@ export function decideMpBoost(
 	}
 	return {
 		option,
-		reason: `no firing cell in ${reachable.size} cells with ${me.mp} MP; ${boosted.size} cells with ${boostedMp} MP reach ${unlocked}`
+		reason: `no firing cell in ${reachable.size} cells with ${me.mp} MP; ${boosted.size} cells with ${boostedMp} MP reach ${unlocked}`,
+		zone: boosted
 	}
 }
 
 /**
- * Boost de PM : seule action décidée AVANT le plan, parce qu'elle en change les entrées (cases atteignables, carte de
- * danger). `reachable` = mes cases atteignables du tour. Décision et motif (`decideMpBoost`) journalisés avant le
- * lancer ; puis `refresh` recalcule les deux cartes avec les PM et PT réels, que le lancer ait réussi ou non.
- * Ce module n'importe pas `Debug.ts` : l'appelant protège l'appel (erreur journalisée sans interrompre le tour).
+ * Boost de PM pour FUIR : même lecture seule, sans condition de tir ni de PV (le plan boosté avec tir reste refusé sous
+ * `MIN_LIFE_RATIO_FOR_BOOST` par le planificateur). Appelé seulement quand le meilleur plan sans boost est létal ; le
+ * score décide si la zone élargie offre mieux. Mêmes gardes : puce prête et utilisable, cartes fraîches, au plus
+ * `cellLimit` cases, opérations < `SEARCH_GLOBAL_FRACTION`.
  */
-export function castMpBoost(me: Me, reachable: ReachableCells | null, refresh: () => void): void {
-	const decision = decideMpBoost(me, reachable, aliveEnemies(), TACTICAL_LIMITS.cells)
-	const option = decision.option
+export function decideFleeMpBoost(
+	me: Me, reachable: ReachableCells | null, enemies: readonly Entity[], cellLimit: number
+): MpBoostDecision {
+	const no = (reason: string): MpBoostDecision => ({ option: null, reason })
+	const option = pickMpBoost(me, me.tp)
 	if (option === null) {
-		if (decision.reason !== "") {
-			log(() => `[Boost] MP: not cast: ${decision.reason}`, LOG_CONTEXT.CHIP)
-		}
-		return
+		return no("")
 	}
-	const chip = option.chip
-	log(() => `[Boost] MP: casting ${chip.name} (+${option.gain} MP, ${chip.cost} TP) before the plan: ${decision.reason}`,
-		LOG_CONTEXT.CHIP)
-	const result = actionHistory.track(me, chip, me, () => me.useChip(chip, me))
-	log(() => `[Boost] MP: ${chip.name} result ${result}; now ${me.mp} MP, ${me.tp} TP`, LOG_CONTEXT.CHIP)
-	refresh()
+	if (typeof me.canUseChip !== "function") {
+		return no("native chip check unavailable")
+	}
+	if (reachable === null || reachable.truncated || !reachable.isUpToDate(me.id, me.cell, me.mp, Fight.turn)) {
+		return no("reachable cells unavailable")
+	}
+	if (!enemies.some((enemy) => enemy.life > 0)) {
+		return no("no enemy")
+	}
+	if (!hasSearchRoom()) {
+		return no("operations budget")
+	}
+	if (!me.canUseChip(option.chip, me)) {
+		return no("chip not usable on me")
+	}
+	const zone = boostedZone(me, option, cellLimit)
+	if (typeof zone === "string") {
+		return no(zone)
+	}
+	return { option, reason: `lethal plan in ${reachable.size} cells with ${me.mp} MP; ${zone.size} cells with ${me.mp + option.gain} MP`, zone }
 }
 
 /**

@@ -1,16 +1,31 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
 import { StagnationTracker } from "../Context/StagnationTracker.js"
+import type { BoostOption } from "../../Brain/StrengthBoost.js"
 
 export interface TacticalContext {
 	readonly reachable: ReachableCells | null
 	readonly threat: ThreatMap | null
 	/** Compteur de stagnation et de passivité (optionnel : sans lui, ni sortie de stagnation ni baisse du poids du risque). */
 	readonly stagnation?: StagnationTracker
+	/**
+	 * Boost de PM candidat, calculé À LA DEMANDE par l'observation (lecture seule, aucune dépense) : `unlock` = un tir
+	 * est débloqué par PM + gain (`decideMpBoost`), `flee` = le meilleur plan sans boost est létal (`decideFleeMpBoost`).
+	 * Null : pas de candidat. Absent : aucun boost de PM n'est comparé.
+	 */
+	readonly mpBoost?: (kind: "unlock" | "flee", preparation: TacticalPreparation) => MpBoostCandidate | null
+}
+
+/** Zone atteignable et carte de danger à PM + gain d'un boost de PM, pour la seconde recherche du planificateur. */
+export interface MpBoostCandidate {
+	readonly option: BoostOption
+	readonly reachable: ReachableCells
+	readonly threat: ThreatMap
+	readonly reason: string
 }
 
 /** Éphémère, sans dépense : réutilisable par le secours uniquement au même état. */
@@ -24,6 +39,8 @@ export interface TacticalPreparation {
 	readonly enemies: Array<{ enemy: Entity; cell: Cell }>
 	dangers: ReadonlyMap<number, number> | null
 	readonly weaponCells: Map<Entity, Map<Weapon, Cell[]>>
+	/** Listes natives de cases de tir des puces offensives, par cible : indépendantes de mes PM, partagées avec le boost de PM. */
+	readonly chipCells: Map<Entity, Map<Chip, Cell[]>>
 	readonly currentWeapons: Map<Entity, Map<Weapon, boolean>>
 }
 
@@ -39,7 +56,9 @@ export interface TacticalPlan {
 	readonly protection: readonly Chip[]
 	/** Boosts lancés avant la protection (PT, force, puis agilité de remplissage) ; `tpGain` : PT que le plan compte recevoir du boost de PT. */
 	readonly boost?: { readonly chips: readonly Chip[]; readonly tpGain: number }
-	/** PT dépensés, boosts compris (les PT gagnés ne sont pas déduits). */
+	/** Boost de PM : PREMIÈRE action exécutée ; le plan est cherché sur la zone à PM + `gain`, avec `chip.cost` PT de moins. */
+	readonly mpBoost?: { readonly chip: Chip; readonly gain: number }
+	/** PT dépensés, boosts compris, boost de PM compris (les PT gagnés ne sont pas déduits). */
 	readonly tpUsed: number
 	readonly usefulDamage: number
 	/** Danger brut conservé, même si les dégâts moyens dépassent les PV de la cible. */
@@ -77,14 +96,20 @@ export const TACTICAL_LIMITS = {
  */
 const SEARCH_FRACTION = OPS_BUDGET.TACTICAL_SEARCH
 
-/** Compteurs de l'évaluation : puces écartées, et cause d'un plan nul sans progrès (sinon raison générique). */
-export interface Skipped { refused: number; noProgress: string | null }
+/**
+ * Compteurs de l'évaluation : puces écartées, cause d'un plan nul sans progrès (sinon raison générique), tour condamné
+ * et score du meilleur plan classé, même s'il est nul faute d'action (rester sur place) : référence du boost de PM.
+ */
+export interface Skipped { refused: number; noProgress: string | null; doomed: boolean; leaderScore: number | null }
 
 export class Budget {
 	private work = 0
 	private readonly start = typeof System === "undefined" ? 0 : System.operations
 	private readonly fraction: number
 	incumbent: TacticalPlan | null = null
+
+	/** Ticks de recherche consommés (mesure indirecte : un tick n'est pas une opération du moteur). */
+	get used(): number { return this.work }
 
 	/** `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`). */
 	constructor(fraction: number = SEARCH_FRACTION) { this.fraction = fraction }

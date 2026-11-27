@@ -1,10 +1,11 @@
 // @version:5.8
-// file version: 5
+// file version: 7
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import {
-	BoostOption, pickBoost, pickTpBoost, strengthBoostFutureDamage, tpBoostFutureDamage
+	BoostOption, agilityBoostFutureDamage, pickAgilityBoost, pickBoost, pickTpBoost, strengthBoostFutureDamage,
+	tpBoostFutureDamage
 } from "../../Brain/StrengthBoost.js"
 import { Budget, TACTICAL_LIMITS, TacticalPlan, Unavailable, validCost } from "./TacticalTypes.js"
 
@@ -115,7 +116,7 @@ export interface Protection {
  * `healing` / `shielding` : le profil l'autorise ET le seuil du rôle (`Strategy/*.ts`) est atteint ; mêmes seuils
  * que le plan B.
  */
-export function protections(me: Me, healing: boolean, shielding: boolean, budget: Budget): Protection[] {
+export function protections(me: Me, healing: boolean, shielding: boolean, budget: Budget, tp: number = me.tp): Protection[] {
 	const usable = (chip: Chip): boolean => {
 		budget.check()
 		const result = me.canUseChip(chip, me)
@@ -123,7 +124,7 @@ export function protections(me: Me, healing: boolean, shielding: boolean, budget
 		return result
 	}
 	const candidates = [...new Set(me.chips)].filter((chip) =>
-		validCost(chip.cost) && chip.cost <= me.tp && chip.currentCooldown === 0 && maxUsesOf(chip) > 0 &&
+		validCost(chip.cost) && chip.cost <= tp && chip.currentCooldown === 0 && maxUsesOf(chip) > 0 &&
 		chip.features.length > 0 && chip.features.every((feature) =>
 			(feature.type === Effect.HEAL && healing) ||
 			((feature.type === Effect.ABSOLUTE_SHIELD || feature.type === Effect.RELATIVE_SHIELD) && shielding)
@@ -133,7 +134,7 @@ export function protections(me: Me, healing: boolean, shielding: boolean, budget
 	const result: Protection[] = [{ chips: [], cost: 0, heal: 0, absolute: 0, relative: 0 }]
 	for (const chip of candidates) {
 		for (const previous of result.slice()) {
-			if (previous.cost + chip.cost > me.tp) continue
+			if (previous.cost + chip.cost > tp) continue
 			result.push({
 				chips: [...previous.chips, chip], cost: previous.cost + chip.cost,
 				heal: Math.min(me.maxLife - me.life,
@@ -221,37 +222,58 @@ export interface BoostVariant {
 	tpGain: number
 	tp: BoostOption | null
 	strength: BoostOption | null
+	/** Boost d'agilité (lancé en dernier des boosts) : gain de critique mesuré dans le score. */
+	agility: BoostOption | null
 }
 
 /**
- * Au plus 4 variantes : aucune, meilleur boost de PT prêt, meilleur boost de force prêt, les deux. Sans boost
- * prêt (ou effet déjà actif) : la seule variante « aucune », donc aucun travail de plus dans la recherche.
+ * `tp` : PT disponibles pour le plan (ceux du tour, moins le boost de PM d'un plan boosté). Au plus 8 variantes : aucune, meilleur boost de PT prêt, meilleur boost de force prêt, les deux, puis chacune avec le
+ * meilleur boost d'agilité prêt (si `canUseChip` sur moi et si PT − coûts ≥ 0, sans compter les PT gagnés : une variante
+ * d'agilité ne compte jamais sur le boost de PT, d'où `tpGain` = 0, comme l'ancien remplissage). Sans boost prêt (ou effet
+ * déjà actif) : la seule variante « aucune », donc aucun travail de plus dans la recherche.
  */
-export function boostVariants(me: Me): BoostVariant[] {
-	const variants: BoostVariant[] = [{ chips: [], cost: 0, tpGain: 0, tp: null, strength: null }]
-	const tp = pickTpBoost(me, me.tp)
-	const strength = pickBoost(me, me.tp)
-	const tpGain = tp ? Math.floor(tp.gain) : 0
-	if (tp) variants.push({ chips: [tp.chip], cost: tp.chip.cost, tpGain, tp, strength: null })
-	if (strength) variants.push({ chips: [strength.chip], cost: strength.chip.cost, tpGain: 0, tp: null, strength })
-	if (tp && strength && tp.chip !== strength.chip && strength.chip.cost <= me.tp - tp.chip.cost + tpGain) {
-		variants.push({ chips: [tp.chip, strength.chip], cost: tp.chip.cost + strength.chip.cost, tpGain, tp, strength })
+export function boostVariants(me: Me, tp: number = me.tp): BoostVariant[] {
+	const variants: BoostVariant[] = [{ chips: [], cost: 0, tpGain: 0, tp: null, strength: null, agility: null }]
+	const tpBoost = pickTpBoost(me, tp)
+	const strength = pickBoost(me, tp)
+	const tpGain = tpBoost ? Math.floor(tpBoost.gain) : 0
+	if (tpBoost) variants.push({ chips: [tpBoost.chip], cost: tpBoost.chip.cost, tpGain, tp: tpBoost, strength: null, agility: null })
+	if (strength) variants.push({ chips: [strength.chip], cost: strength.chip.cost, tpGain: 0, tp: null, strength, agility: null })
+	if (tpBoost && strength && tpBoost.chip !== strength.chip && strength.chip.cost <= tp - tpBoost.chip.cost + tpGain) {
+		variants.push({ chips: [tpBoost.chip, strength.chip], cost: tpBoost.chip.cost + strength.chip.cost, tpGain, tp: tpBoost, strength, agility: null })
+	}
+	const agility = pickAgilityBoost(me, tp)
+	if (agility && usableOnMe(me, agility.chip)) {
+		for (const base of variants.slice()) {
+			if (base.cost + agility.chip.cost > tp) continue
+			variants.push({ ...base, chips: [...base.chips, agility.chip], cost: base.cost + agility.chip.cost, tpGain: 0, agility })
+		}
 	}
 	return variants
+}
+
+/** `canUseChip` sur moi ; une erreur native ou une API absente = non utilisable (le boost est facultatif). */
+function usableOnMe(me: Me, chip: Chip): boolean {
+	try {
+		return typeof me.canUseChip === "function" && me.canUseChip(chip, me)
+	} catch {
+		return false
+	}
 }
 
 /**
  * Crédit des tours suivants d'une variante pour `weapon` (voir `StrengthBoost.ts`), avant plafonnement par
  * `FUTURE_TURN_WEIGHT` × les PV qui restent à la cible. Force et PT : tirs de l'arme seule ; `idle` (plan
  * sans tir) : PT au meilleur de trois scénarios de portée, crédit optimiste (voir `tpBoostFutureDamage`). Les deux boosts sont crédités
- * indépendamment.
+ * indépendamment (agilité comprise : tirs de l'arme seule).
  */
 export function boostFuture(
 	me: Me, variant: BoostVariant, weapon: Weapon | null, enemyLife: number, idle = false
 ): number {
 	if (weapon === null) return 0
 	return (variant.strength ? strengthBoostFutureDamage(weapon, variant.strength, me.tp) : 0) +
-		(variant.tp ? tpBoostFutureDamage(me, weapon, variant.tp, me.tp, enemyLife, idle) : 0)
+		(variant.tp ? tpBoostFutureDamage(me, weapon, variant.tp, me.tp, enemyLife, idle) : 0) +
+		(variant.agility ? agilityBoostFutureDamage(me, weapon, variant.agility, me.tp) : 0)
 }
 
 /**

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -286,6 +286,18 @@ export class EnemyMemory {
 			pairsEvaluated: map.pairsEvaluated,
 			lineOfSightCalls: map.lineOfSightCalls
 		}
+	}
+
+	/**
+	 * Carte de danger d'une AUTRE zone atteignable de `me` (zone d'un boost de PM), à partir des entrées ennemies de la
+	 * carte du tour (leurs zones ne dépendent pas de mes PM) : lecture seule, rien n'est stocké ni remplacé. Null sans
+	 * carte du tour. Coût : une évaluation par case de la zone, ligne de vue partagée avec la carte du tour.
+	 */
+	threatMapFor(me: Me, reachable: ReachableCells, turn: number): ThreatMap | null {
+		if (this.threatMap === null || this.threatInputs === null) {
+			return null
+		}
+		return buildThreatMap(me, reachable, this.threatInputs, turn, { provider: new GeometricShotCells(this.sightCache) })
 	}
 
 	/**

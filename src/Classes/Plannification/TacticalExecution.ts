@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
@@ -40,7 +40,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 	}
 	log(() => `[Tactical] plan before execution ${JSON.stringify({
 		mode: "complete intent; native checks may cancel actions",
-		order: ["approach", "boost", "protection", "equipment if needed", "offensive chips", "weapon shots", "final move"],
+		order: [...(plan.mpBoost ? ["mp boost"] : []), "approach", "boost", "protection", "equipment if needed", "offensive chips", "weapon shots", "final move"],
 		target: { id: plan.target.id, position: { x: plan.target.cell.x, y: plan.target.cell.y } },
 		origin: { x: me.cell.x, y: me.cell.y },
 		shotCell: { x: plan.shotCell.x, y: plan.shotCell.y },
@@ -51,6 +51,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 		weapon: plan.weapon === null ? null : { name: plan.weapon.name, cost: plan.weapon.cost,
 			equipTp: me.weapon === plan.weapon ? 0 : 1, shots: plan.weaponShots },
 		chips: plan.chips.map((chip) => ({ name: chip.name, cost: chip.cost })),
+		mpBoost: plan.mpBoost === undefined ? null : { name: plan.mpBoost.chip.name, cost: plan.mpBoost.chip.cost, gain: plan.mpBoost.gain },
 		boost: (plan.boost?.chips ?? []).map((chip) => ({ name: chip.name, cost: chip.cost })),
 		protection: plan.protection.map((chip) => ({ name: chip.name, cost: chip.cost })),
 		attackLegality: plan.weaponShots > 0 || plan.chips.length > 0
@@ -67,6 +68,25 @@ function execute(me: Me, plan: TacticalPlan): void {
 	})}`, LOG_CONTEXT.PLANNING)
 	if (me.life <= 0 || !available()) return
 	if (!currentState()) { interrupted("enemy positions/turn changed; plan unavailable"); return }
+	// Boost de PM : PREMIÈRE action (le plan a été cherché sur la zone à PM + gain). Un échec arrête le plan : rien d'autre
+	// n'est tenté, ni seconde séquence, ni plan sans boost (ses cases et son danger ne sont plus ceux de ce tour).
+	if (plan.mpBoost !== undefined) {
+		const { chip } = plan.mpBoost
+		if (!available()) return
+		if (!(me.life > 0 && me.chips.includes(chip) && chip.currentCooldown === 0 && me.tp >= chip.cost && me.canUseChip(chip, me))) {
+			interrupted(`MP boost unavailable: ${chip.name}; plan stopped`)
+			return
+		}
+		phase(me, "mp boost", () => ({ chip: chip.name, tpCost: chip.cost, gain: plan.mpBoost!.gain }))
+		if (!available()) return
+		const mpBefore = me.mp
+		const result = track(me, chip, me, () => me.useChip(chip, me))
+		log(() => `[Boost] MP: ${chip.name} result ${result}; now ${me.mp} MP, ${me.tp} TP`, LOG_CONTEXT.CHIP)
+		if (!(result > 0) || !(me.mp > mpBefore)) {
+			interrupted(`MP boost failed: ${chip.name}, result ${result}, MP ${mpBefore} -> ${me.mp}; plan stopped`)
+			return
+		}
+	}
 	if (!same(me.cell, plan.shotCell)) {
 		// Seules les cases à au plus `beforeMp` pas comptent (au-delà : « shot cell blocked », comme avec `me.mp`).
 		const current = computeReachableCells(me, Math.min(me.mp, plan.beforeMp), Fight.turn)
