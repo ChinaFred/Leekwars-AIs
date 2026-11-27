@@ -1,8 +1,8 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
-import { ReachableCells } from "./ReachableCells.js"
+import { ReachableCell, ReachableCells } from "./ReachableCells.js"
 import {
 	EMPTY_PLAN,
 	planShots,
@@ -32,11 +32,30 @@ export const MAX_THREAT_PAIRS = 16000
  * d'exécution, aucune action) ; avec lui, la carte s'arrête et le planificateur se replie sur `operations reserve`.
  * Contrôlé une fois par case X (au plus les cases de tir de chaque ennemi entre deux contrôles). Sans `System` : aucun plafond d'ops.
  */
-function operationsCeiling(): number {
+function operationsCeiling(fraction: number = SEARCH_GLOBAL_FRACTION): number {
 	return typeof System === "undefined" || !Number.isFinite(System.maxOperations) || System.maxOperations <= 0
 		? Number.POSITIVE_INFINITY
-		: System.maxOperations * SEARCH_GLOBAL_FRACTION
+		: System.maxOperations * fraction
 }
+
+function overCeiling(ceiling: number): boolean {
+	return ceiling !== Number.POSITIVE_INFINITY && System.operations >= ceiling
+}
+
+/**
+ * Plafond de paires (case de tir, case visée) de `buildTargetZone`, distinct de celui de la carte de danger : la zone
+ * visée n'est qu'un affichage. Même valeur que `MAX_THREAT_PAIRS` (au pire, le coût en paires d'une carte de danger de
+ * plus) : hypothèse non mesurée. Ennemi à 4 PM et portée 8 : 41 cases de tir × ~300 cases visées ≈ 12 000 paires.
+ */
+export const MAX_TARGET_ZONE_PAIRS = 16000
+
+/**
+ * Plafond d'opérations de `buildTargetZone`, en part de `System.maxOperations` (seuil ABSOLU du tour, comme
+ * `SEARCH_GLOBAL_FRACTION`, pas un budget relatif) : la zone est calculée AVANT le plan et s'arrête là pour lui laisser
+ * sa fenêtre de recherche (30 % depuis son départ, sous le plafond global de 80 %). Valeur non mesurée en combat.
+ * Contrôlé une fois par colonne de l'énumération et une fois par case évaluée ; les marques ne sont pas comptées.
+ */
+export const TARGET_ZONE_OPERATIONS_FRACTION = 0.20
 
 /**
  * Fournisseur de « cases de tir » : point d'échange pour une implémentation native future
@@ -217,7 +236,7 @@ export interface EnemyThreat {
 /** Une case que je peux atteindre, avec son danger. */
 export interface ThreatCell {
 	readonly cell: Cell
-	/** PM que je dois dépenser pour y arriver (0 = ma case actuelle). */
+	/** PM que je dois dépenser pour y arriver (0 = ma case actuelle) ; -1 : case hors de mes cases atteignables (`buildTargetZone`). */
 	readonly mpCost: number
 	/** Somme, sur les ennemis, de leurs meilleurs dégâts potentiels sur cette case. */
 	readonly danger: number
@@ -229,13 +248,22 @@ export interface ThreatMapOptions {
 	readonly maxPairs?: number
 }
 
+export interface TargetZoneOptions extends ThreatMapOptions {
+	/**
+	 * Carte de danger construite avec les MÊMES `enemies` : ses cases sont reprises telles quelles (même valeur),
+	 * sans paire ni ligne de vue de plus.
+	 */
+	readonly known?: ThreatMap | null
+}
+
 function cellKey(cell: Cell): number {
 	return cell.x * 4096 + cell.y
 }
 
 /**
  * Carte de danger de mon poireau pour un tour : une entrée par case que je peux atteindre (case actuelle
- * incluse). Immuable en pratique, remplacée à chaque tour (pas d'accumulation).
+ * incluse). Immuable en pratique, remplacée à chaque tour (pas d'accumulation). Sert aussi de conteneur à la
+ * zone visée (`buildTargetZone`) : une entrée par case qu'un ennemi peut toucher, atteignable par moi ou non.
  */
 export class ThreatMap {
 	readonly entityId: number
@@ -292,6 +320,11 @@ export class ThreatMap {
 
 	has(cell: Cell): boolean {
 		return this.byKey.has(cellKey(cell))
+	}
+
+	/** Entrée de la case ; null si elle n'est pas dans la carte. */
+	entryAt(cell: Cell): ThreatCell | null {
+		return this.byKey.get(cellKey(cell)) ?? null
 	}
 
 	/** Danger de la case ; null si elle n'est pas dans la carte (non atteignable ou non évaluée). */
@@ -724,6 +757,52 @@ function bestThreat(
 }
 
 /**
+ * Boucle commune à `buildThreatMap` et `buildTargetZone` : danger de chaque case candidate, dans l'ordre reçu.
+ * S'arrête (`truncated`) au plafond d'opérations, contrôlé une fois par case, ou au plafond de paires : la case en
+ * cours est abandonnée, les suivantes sont absentes. `known` : une case déjà dans cette carte est reprise sans calcul.
+ * `keepSafe` faux : les cases à danger nul ne sont pas retenues.
+ */
+function evaluateCells(
+	candidates: Iterable<ReachableCell>,
+	prepared: readonly PreparedEnemy[],
+	provider: ShotCellsProvider,
+	budget: { pairs: number, max: number },
+	ceiling: number,
+	known: ThreatMap | null,
+	keepSafe: boolean
+): { byKey: Map<number, ThreatCell>, truncated: boolean } {
+	const byKey = new Map<number, ThreatCell>()
+	for (const candidate of candidates) {
+		const reused = known === null ? null : known.entryAt(candidate.cell)
+		if (reused !== null) {
+			if (keepSafe || reused.danger > 0) {
+				byKey.set(cellKey(candidate.cell), reused)
+			}
+			continue
+		}
+		if (overCeiling(ceiling)) {
+			return { byKey, truncated: true }
+		}
+		let danger = 0
+		const breakdown: EnemyThreat[] = []
+		for (const item of prepared) {
+			const threat = bestThreat(item, candidate.cell, provider, budget)
+			if (threat === "aborted") {
+				return { byKey, truncated: true }
+			}
+			if (threat !== null) {
+				danger += threat.damage
+				breakdown.push(threat)
+			}
+		}
+		if (keepSafe || danger > 0) {
+			byKey.set(cellKey(candidate.cell), { cell: candidate.cell, mpCost: candidate.cost, danger, breakdown })
+		}
+	}
+	return { byKey, truncated: false }
+}
+
+/**
  * Carte de danger de `me` : pour chaque case que je peux atteindre (`myReachable`, case actuelle incluse),
  * danger = Σ sur les ennemis de leurs meilleurs dégâts potentiels sur cette case (voir `bestThreat` et
  * `planShots`). Fournit le danger potentiel utilisé par le planificateur conjoint (modèle incomplet).
@@ -750,30 +829,7 @@ export function buildThreatMap(
 		}
 	}
 
-	const byKey = new Map<number, ThreatCell>()
-	let truncated = false
-	const ceiling = operationsCeiling()
-	cells:
-	for (const mine of myReachable.entries()) {
-		if (ceiling !== Number.POSITIVE_INFINITY && System.operations >= ceiling) {
-			truncated = true
-			break
-		}
-		let danger = 0
-		const breakdown: EnemyThreat[] = []
-		for (const item of prepared) {
-			const threat = bestThreat(item, mine.cell, provider, budget)
-			if (threat === "aborted") {
-				truncated = true
-				break cells
-			}
-			if (threat !== null) {
-				danger += threat.damage
-				breakdown.push(threat)
-			}
-		}
-		byKey.set(cellKey(mine.cell), { cell: mine.cell, mpCost: mine.cost, danger, breakdown })
-	}
+	const { byKey, truncated } = evaluateCells(myReachable.entries(), prepared, provider, budget, operationsCeiling(), null, true)
 
 	return new ThreatMap(me.id, turn, byKey, {
 		truncated,
@@ -782,5 +838,100 @@ export function buildThreatMap(
 		pairsEvaluated: budget.pairs,
 		lineOfSightCalls: provider.lineOfSightCalls ?? 0,
 		candidateCells: myReachable.size
+	})
+}
+
+/**
+ * Zone visée : toutes les cases qu'au moins un ennemi peut toucher à son prochain tour, que je puisse les atteindre
+ * ou non, avec le même modèle que la carte de danger (« si j'étais sur cette case » : `bestThreat`, sans zone
+ * d'effet). Les cases à danger nul ne sont pas retenues. AFFICHAGE seulement : le planificateur ne la lit pas.
+ *
+ * Candidates : cases de la grille (`Field.cellFromXY`, un appel par coordonnée) non-obstacle, à distance de Manhattan
+ * ≤ PM + portée maximale d'un ennemi depuis sa case de départ ; la case d'une entité (ennemi compris) reste candidate.
+ * Elles sont évaluées de la plus proche de `me` à la plus lointaine : une troncature garde le voisinage.
+ * `mpCost` vaut -1 hors des cases de `options.known`.
+ *
+ * Bornes propres : `MAX_TARGET_ZONE_PAIRS` (ou `maxPairs`) et `TARGET_ZONE_OPERATIONS_FRACTION` ; au-delà, `truncated`
+ * (cases non évaluées absentes). `candidateCells` compte les candidates énumérées.
+ */
+export function buildTargetZone(
+	me: Pick<Entity, "id" | "cell">,
+	enemies: readonly ThreatEnemy[],
+	turn: number,
+	options: TargetZoneOptions = {}
+): ThreatMap {
+	const provider = options.provider ?? new GeometricShotCells()
+	const budget = { pairs: 0, max: options.maxPairs ?? MAX_TARGET_ZONE_PAIRS }
+	const ceiling = operationsCeiling(TARGET_ZONE_OPERATIONS_FRACTION)
+	const prepared: PreparedEnemy[] = []
+	let inputsTruncated = false
+	for (const enemy of enemies) {
+		inputsTruncated = inputsTruncated || enemy.reachable.truncated
+		const item = prepare(enemy)
+		if (item !== null) {
+			prepared.push(item)
+		}
+	}
+
+	// Candidates rangées par distance à ma case (anneaux) : pas de tri, ordre stable.
+	const rings: ReachableCell[][] = []
+	const seen = new Set<number>()
+	let candidateCells = 0
+	let enumerationCut = false
+	enumeration:
+	for (const item of prepared) {
+		const origin = item.enemy.reachable.startCell
+		const radius = item.enemy.reachable.mp + item.maxRange
+		if (!Number.isFinite(radius)) {
+			enumerationCut = true
+			continue
+		}
+		for (let dx = -radius; dx <= radius; dx++) {
+			if (overCeiling(ceiling)) {
+				enumerationCut = true
+				break enumeration
+			}
+			const span = radius - Math.abs(dx)
+			for (let dy = -span; dy <= span; dy++) {
+				const x = origin.x + dx
+				const y = origin.y + dy
+				const key = x * 4096 + y
+				if (seen.has(key)) {
+					continue
+				}
+				seen.add(key)
+				const cell = Field.cellFromXY(x, y)
+				if (cell === null || cell.obstacle) {
+					continue
+				}
+				const distance = Math.abs(cell.x - me.cell.x) + Math.abs(cell.y - me.cell.y)
+				let ring = rings[distance]
+				if (ring === undefined) {
+					ring = []
+					rings[distance] = ring
+				}
+				ring.push({ cell, cost: -1 })
+				candidateCells++
+			}
+		}
+	}
+	const ordered: ReachableCell[] = []
+	for (let distance = 0; distance < rings.length; distance++) {
+		const ring = rings[distance]
+		if (ring !== undefined) {
+			for (const candidate of ring) {
+				ordered.push(candidate)
+			}
+		}
+	}
+
+	const { byKey, truncated } = evaluateCells(ordered, prepared, provider, budget, ceiling, options.known ?? null, false)
+	return new ThreatMap(me.id, turn, byKey, {
+		truncated: truncated || enumerationCut,
+		inputsTruncated,
+		enemyCount: enemies.length,
+		pairsEvaluated: budget.pairs,
+		lineOfSightCalls: provider.lineOfSightCalls ?? 0,
+		candidateCells
 	})
 }

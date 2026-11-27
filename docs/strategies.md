@@ -232,7 +232,7 @@ Toute sortie passe par `log(texte, contexte)` ; `Logger.ts` est le seul fichier 
 
 Contextes utiles à l'analyse : `PLANNING` (plan avant exécution, replis `[Tactical]`, `[Reserve]`), `THREAT`,
 `REACHABLE`, `MEMORY`, `CHIP` (`[Boost]`), `OPERATIONS` (ligne `Operations:` de fin de tour), `ERROR` (en rouge).
-`ACCESSIBLE_ZONE` et `DANGER_ZONE` affichent les zones sur le terrain avec une pause : à couper hors mise au point.
+`ACCESSIBLE_ZONE`, `DANGER_ZONE` et `TARGET_ZONE` affichent les zones sur le terrain avec une pause : à couper hors mise au point. `TARGET_ZONE` (zone visée : toutes les cases qu'un ennemi peut toucher, atteignables par moi ou non, mêmes marques que `DANGER_ZONE`) est le seul qui calcule, avant le plan et seulement s'il est actif (`buildTargetZone`, `ThreatMap.ts`) : au plus `MAX_TARGET_ZONE_PAIRS` = 16 000 paires et arrêt à 20 % des opérations du tour (`TARGET_ZONE_OPERATIONS_FRACTION`), au-delà `truncated` (cases proches de moi gardées) ; coût réel non mesuré, pris sur le budget du plan.
 Fin de tour (`StagnationTracker.ts`, `COMBAT`, 8 tours gardés, tout plan) : `[History] T<tour> TP <utilisés>/<dispo> MP <utilisés>/<dispo>
 dealt <n> taken <n> passive <n> | <action>:<retour natif>:<dégâts>; …` (`move`, `equip` ; `?` sans retour, `-` non mesurable).
 

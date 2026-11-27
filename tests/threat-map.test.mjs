@@ -1256,3 +1256,154 @@ test("turn() logs 'unavailable' when my reachable cells could not be computed", 
 	assert.deepEqual(actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
 	assert.equal(lines.filter((line) => line === "[Threat] unavailable").length, 1)
 })
+
+// --- zone visée (buildTargetZone) -------------------------------------------------------------------
+
+const { buildTargetZone, MAX_TARGET_ZONE_PAIRS, TARGET_ZONE_OPERATIONS_FRACTION } = await import("../dist/Classes/Context/ThreatMap.js")
+
+/** Moi en (8,10) avec 2 PM ; ennemi en (12,10), 1 PM, arme de portée 1 à 3 : il touche tout le losange de rayon 4. */
+function targetZoneScenario(obstacles = [[15, 10]]) {
+	const grid = makeGrid(21, 21, obstacles)
+	const { me, myReach } = setupMe(grid, [8, 10], 2)
+	const { input } = addEnemy(grid, me, 2, [12, 10], { mp: 1, weaponItem: weapon({ id: 95, cost: 3, min: 10, max: 10, minRange: 1, maxRange: 3 }) })
+	return { grid, me, myReach, input, danger: buildThreatMap(me, myReach, [input], 1) }
+}
+
+test("target zone: every cell an enemy can hit, reachable by me or not; untouched cells and obstacles are left out", () => {
+	const { grid, me, myReach, input, danger } = targetZoneScenario()
+	const zone = buildTargetZone(me, [input], 1)
+	assert.equal(zone.truncated, false)
+	assert.equal(zone.candidateCells, 40) // losange de rayon 1 PM + 3 de portée (41 cases) moins l'obstacle
+	assert.equal(zone.size, 40)
+	assert.equal(zone.pairsEvaluated, 40 * 5)
+	// hors de mes cases atteignables, mais visée
+	const far = grid.cell(14, 10)
+	assert.equal(myReach.canReach(far), false)
+	assert.equal(danger.has(far), false)
+	assert.equal(zone.dangerAt(far), 30)
+	assert.equal(zone.entryAt(far).mpCost, -1)
+	assert.equal(zone.dangerAt(grid.cell(12, 14)), 30)
+	// atteignable par moi mais hors de toute portée : dans la carte de danger (0), pas dans la zone
+	const safe = grid.cell(6, 10)
+	assert.equal(danger.dangerAt(safe), 0)
+	assert.equal(zone.has(safe), false)
+	assert.equal(zone.has(grid.cell(12, 15)), false) // distance 5 de l'ennemi
+	assert.equal(zone.has(grid.cell(15, 10)), false) // obstacle
+	assert.ok([...zone.entries()].every((entry) => entry.danger > 0))
+	// de la plus proche de moi à la plus lointaine
+	const distances = [...zone.entries()].map((entry) => Math.abs(entry.cell.x - 8) + Math.abs(entry.cell.y - 10))
+	assert.deepEqual(distances, [...distances].sort((a, b) => a - b))
+	assert.equal(distances[0], 0)
+})
+
+test("target zone: cells shared with the danger map have the same danger, computed or reused from it", () => {
+	const { me, input, danger } = targetZoneScenario()
+	const computed = buildTargetZone(me, [input], 1)
+	const reused = buildTargetZone(me, [input], 1, { known: danger })
+	let shared = 0
+	for (const entry of danger.entries()) {
+		assert.equal(computed.has(entry.cell), entry.danger > 0)
+		if (entry.danger > 0) {
+			shared++
+			assert.equal(computed.dangerAt(entry.cell), entry.danger)
+			assert.deepEqual(computed.breakdownAt(entry.cell), entry.breakdown)
+			assert.equal(reused.entryAt(entry.cell), entry) // reprise telle quelle (coût en PM compris)
+		}
+	}
+	assert.equal(shared, 5) // (8,10) (9,9) (9,10) (9,11) (10,10)
+	const view = (map) => [...map.entries()].map((entry) => [entry.cell.x, entry.cell.y, entry.danger])
+	assert.deepEqual(view(reused), view(computed))
+	// aucune paire pour une case déjà dans la carte de danger, à danger nul comprise
+	const known = [...danger.entries()].filter((entry) => Math.abs(entry.cell.x - 12) + Math.abs(entry.cell.y - 10) <= 4).length
+	assert.equal(reused.pairsEvaluated, computed.pairsEvaluated - known * 5)
+})
+
+test("target zone: its own pair cap truncates and keeps the cells nearest to me", () => {
+	const { grid, me, input } = targetZoneScenario()
+	const capped = buildTargetZone(me, [input], 1, { maxPairs: 12 }) // 5 paires par case : 2 cases complètes
+	assert.equal(capped.truncated, true)
+	assert.equal(capped.pairsEvaluated, 12)
+	assert.equal(capped.candidateCells, 40)
+	assert.deepEqual([...capped.entries()].map((entry) => [entry.cell.x, entry.cell.y]), [[8, 10], [9, 10]])
+	assert.equal(capped.dangerAt(grid.cell(14, 10)), null) // non évaluée : absente
+
+	// plafond par défaut : dédié, exporté ; 861 cases × 113 cases de tir le dépassent
+	assert.equal(MAX_TARGET_ZONE_PAIRS, 16000)
+	const wide = makeGrid(41, 21)
+	const { me: me2, myReach } = setupMe(wide, [10, 10], 1)
+	const { input: sniper } = addEnemy(wide, me2, 2, [28, 10], { mp: 7, weaponItem: weapon({ minRange: 1, maxRange: 40 }) })
+	const before = buildThreatMap(me2, myReach, [sniper], 1)
+	const zone = buildTargetZone(me2, [sniper], 1)
+	assert.equal(zone.truncated, true)
+	assert.equal(zone.pairsEvaluated, MAX_TARGET_ZONE_PAIRS)
+	assert.equal(zone.candidateCells, 41 * 21)
+	assert.equal(before.truncated, false) // la carte de danger garde son propre plafond
+})
+
+test("target zone: its own operations ceiling (below the planner's) truncates; the danger map is not affected", () => {
+	const previous = globalThis.System
+	try {
+		assert.ok(TARGET_ZONE_OPERATIONS_FRACTION < 0.8)
+		globalThis.System = { operations: 100 * TARGET_ZONE_OPERATIONS_FRACTION, maxOperations: 100 }
+		const { me, input, danger } = targetZoneScenario()
+		assert.equal(danger.truncated, false)
+		assert.equal(danger.size, 13)
+		const stopped = buildTargetZone(me, [input], 1)
+		assert.equal(stopped.truncated, true)
+		assert.equal(stopped.size, 0)
+		assert.equal(stopped.pairsEvaluated, 0)
+		globalThis.System.operations = 100 * TARGET_ZONE_OPERATIONS_FRACTION - 1
+		const complete = buildTargetZone(me, [input], 1)
+		assert.equal(complete.truncated, false)
+		assert.equal(complete.size, 40)
+	} finally {
+		globalThis.System = previous
+	}
+})
+
+test("danger map: the planner's operations ceiling (80 %) is unchanged by the shared loop", () => {
+	const previous = globalThis.System
+	try {
+		globalThis.System = { operations: 80, maxOperations: 100 }
+		const stopped = targetZoneScenario().danger
+		assert.deepEqual([stopped.truncated, stopped.size, stopped.pairsEvaluated, stopped.candidateCells], [true, 0, 0, 13])
+		globalThis.System.operations = 79
+		const complete = targetZoneScenario().danger
+		assert.deepEqual([complete.truncated, complete.size, complete.candidateCells], [false, 13, 13])
+	} finally {
+		globalThis.System = previous
+	}
+})
+
+test("target zone: no armed enemy or no enemy gives an empty zone", () => {
+	const { me, input } = targetZoneScenario()
+	assert.equal(buildTargetZone(me, [], 1).size, 0)
+	const unarmed = buildTargetZone(me, [{ ...input, weapon: null }], 1)
+	assert.deepEqual([unarmed.size, unarmed.candidateCells, unarmed.truncated, unarmed.enemyCount], [0, 0, false, 1])
+})
+
+test("EnemyMemory.computeTargetZone: on demand, from the turn's danger map inputs, sharing the line-of-sight cache", () => {
+	const sighted = weapon({ id: 96, cost: 3, min: 10, max: 10, minRange: 1, maxRange: 3, needsLos: true })
+	const scenario = memoryScenario({ enemyWeapon: sighted, mp: 1 })
+	assert.equal(scenario.memory.computeTargetZone(scenario.me), null) // pas de carte de danger
+	run(scenario, 1)
+	const danger = scenario.memory.getThreatMap()
+	const losBefore = scenario.grid.losCalls.length
+	const zone = scenario.memory.computeTargetZone(scenario.me)
+	assert.equal(scenario.memory.getThreatMap(), danger) // la carte du planificateur n'est ni remplacée ni modifiée
+	assert.equal(danger.size, 1)
+	assert.equal(zone.turn, 1)
+	assert.equal(zone.size, 41)
+	assert.equal(zone.entryAt(scenario.me.cell), danger.entryAt(scenario.me.cell))
+	assert.equal(zone.dangerAt(scenario.grid.cell(4, 10)), 30) // derrière l'ennemi, hors de ma portée de déplacement
+	assert.ok(scenario.grid.losCalls.length > losBefore)
+	// cache partagé : un second calcul ne redemande aucune ligne de vue
+	const losAfter = scenario.grid.losCalls.length
+	const again = scenario.memory.computeTargetZone(scenario.me)
+	assert.equal(again.lineOfSightCalls, 0)
+	assert.equal(scenario.grid.losCalls.length, losAfter)
+	assert.notEqual(again, zone) // jamais stockée
+	// carte de danger effacée (cases atteignables périmées) : plus de zone
+	assert.equal(scenario.memory.updateThreatMap(scenario.me, [scenario.enemy], 2), null)
+	assert.equal(scenario.memory.computeTargetZone(scenario.me), null)
+})
