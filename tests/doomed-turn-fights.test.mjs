@@ -260,15 +260,15 @@ test("doomed turn: a kill of the target (mean damage >= its life, under KILL_MAR
 
 test("a protection that brings one cell under the lethal threshold: not a doomed turn, survival still comes first", () => {
 	// 54969530, tour 8, case 126 ramenée de 177,975 à 150 : létale sans protection (150 >= 96 PV), plus avec cure + helmet
-	// (150 - 15 = 135 < 96 + 42). Le plan reste celui d'avant le changement : soin, casque, repli, aucun tir.
+	// (150 - 15 = 135 < 96 + 42). Soin, casque, repli, aucun tir ; motivation part avec les PT restants (10 - 4 + 2 - 7 = 1).
 	const w = arena("54969530:8", { 126: 150 })
 	assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [])
-	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 150, -51.6))
+	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], ["motivation"], ["cure", "helmet"], 11, 0, 150, -30))
 })
 
 // RECUL SANS TIR (plan sans dégâts qui s'éloigne de la cible vers une case moins dangereuse). Plans joués dans les combats,
 // reproduits par cette reconstruction avant le changement, score compris :
-//   54969622:2  protein, repli 233 -> 161 (distance 12 -> 16, danger 330 -> 0), score 47,3 (helmet adverse : spark = 0 dégât)
+//   54969622:2  motivation + protein, repli 233 -> 161 (distance 12 -> 16, danger 330 -> 0), score 68,9 (helmet adverse : spark = 0 dégât)
 //   54969622:3  repli 161 -> 141 (11 -> 16, danger 416,6 -> 0), 0 PT, score 0
 //   54976625:3  repli 169 -> 223 (12 -> 15, danger 130 -> 0), score 32,4 (N seul) ; 54976625:4 : 223 -> 277, idem
 //   54974628:3  repli 496 -> 550 (12 -> 15, danger 118 -> 0), score 0
@@ -279,7 +279,7 @@ const REFUSED = /^\[Tactical\] retreat without damage refused: /
 const RETREAT_CASES = [
 	// 54969622:2 : spark est absorbé par le helmet adverse (aucun plan à dégâts) : le repli du combat est GARDÉ. Une première
 	// version le remplaçait par protein + 1 pas d'avance (danger 184) ; s'exposer sans tirer n'est pas le but de la règle.
-	["54969622:2", 0, plan(233, 161, null, 0, [], ["protein"], [], 3, 0, 0, 47.3)],
+	["54969622:2", 0, plan(233, 161, null, 0, [], ["motivation", "protein"], [], 7, 0, 0, 68.9)],
 	["54969622:3", 1, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -87.12)],
 	["54976625:3", 1, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 7.26)],
 	["54976625:4", 1, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, -21.9)],

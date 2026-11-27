@@ -38,7 +38,8 @@ const enemyGun = { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6,
 
 function makeWorld({
 	turnNumber, chips = [protein()], effects = [], meAt = [5, 5], enemyAt = [9, 5], equipped = machineGun,
-	life = 300, mp = 3, tp = 10, enemyLife = 300, chestAt = null, FakeChest = null, useChipImpl = null
+	life = 300, mp = 3, tp = 10, enemyLife = 300, chestAt = null, FakeChest = null, useChipImpl = null,
+	weapons = [machineGun]
 } = {}) {
 	const cells = new Map()
 	for (let x = 0; x < 31; x++) for (let y = 0; y < 11; y++) {
@@ -53,6 +54,7 @@ function makeWorld({
 		return entity
 	}
 	const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+	const offensive = (chip) => chip.features.some((feature) => feature.type === 1)
 	const actions = []
 	const trace = []
 	// Actions ET lignes de journal, dans l'ordre : prouve que le plan est affiché avant la première action.
@@ -60,15 +62,22 @@ function makeWorld({
 	const act = (name) => { actions.push(name); timeline.push(`action:${name}`) }
 	const me = place({
 		id: 1, name: "me", level: 10, life, maxLife: 300, mp, tp, strength: 10, science: 0, wisdom: 0,
-		weapon: equipped, weapons: [machineGun], chips, effects, launchedEffects: [],
+		weapon: equipped, weapons, chips, effects, launchedEffects: [],
 		say() {},
 		distance(other) { return distance(this.cell, other.cell) },
 		canUseWeapon(target) {
 			return this.weapon !== null && this.tp >= this.weapon.cost && target.life > 0 &&
 				distance(this.cell, target.cell) >= this.weapon.minRange && distance(this.cell, target.cell) <= this.weapon.maxRange
 		},
-		canUseChip(chip, target) { return chip.currentCooldown === 0 && this.tp >= chip.cost && target === this },
-		chipCells() { return [this.cell] },
+		// Puce offensive (feature de dégâts) : sur un ennemi à portée ; les autres puces : sur moi, comme avant.
+		canUseChip(chip, target) {
+			return chip.currentCooldown === 0 && this.tp >= chip.cost && (target === this || (offensive(chip) &&
+				target.life > 0 && distance(this.cell, target.cell) >= chip.minRange && distance(this.cell, target.cell) <= chip.maxRange))
+		},
+		chipCells(chip, target) {
+			return !target || target === this || !offensive(chip) ? [this.cell] : [...cells.values()].filter((cell) =>
+				distance(cell, target.cell) >= chip.minRange && distance(cell, target.cell) <= chip.maxRange)
+		},
 		setWeapon(weapon) { act("equip"); this.tp -= 1; this.weapon = weapon; return true },
 		moveToward(destination, max = this.mp) {
 			const to = destination.cell ?? destination
@@ -96,6 +105,7 @@ function makeWorld({
 			if (useChipImpl) return useChipImpl(this, chip)
 			this.tp -= chip.cost
 			chip.currentCooldown = chip.cooldown
+			if (target !== this) target.life -= (chip.features[0].minValue + chip.features[0].maxValue) / 2 * (1 + this.strength / 100)
 			// Comme le moteur (hypothèse du modèle) : force et PT s'ajoutent dès le lancer ; le soin rend des PV.
 			for (const feature of chip.features) {
 				if (feature.type === 38) { this.strength += feature.minValue; this.effects.push({ type: 38, turns: feature.turns }) }
@@ -238,6 +248,54 @@ test("plan without a shot: the boost is part of it when the enemy can be in rang
 		chips: [protein({ features: [{ type: 38, minValue: 90, maxValue: 90, turns: 1 }] })] })
 	captureTurn(brief)
 	assert.equal(brief.actions.includes("protein"), false) // un seul tour : rien à gagner sans tirer
+})
+
+// Combat 54991104 : arme à 5 PT, puce offensive à 3 PT sans cooldown, motivation +2 PT jamais lancée (12 PT = 2 tirs
+// d'arme comme 10 PT). Le crédit retient le meilleur scénario de portée : puces seules, 4 lancers à 12 PT contre 3 à 10 PT.
+test("plan without a shot: a +2 TP boost is cast when the extra TP buy one more offensive chip cast, not otherwise", () => {
+	const gun = { ...machineGun, id: 60, name: "gun", cost: 5, features: [{ type: 1, minValue: 20, maxValue: 20 }] }
+	const zap = (cooldown) => ({
+		id: 18, name: "zap", cost: 3, cooldown, currentCooldown: 0, minRange: 0, maxRange: 10, needsLos: false,
+		features: [{ type: 1, minValue: 12, maxValue: 12 }]
+	})
+	const smallMotivation = () => ({ ...motivation(), features: [{ type: 32, minValue: 2, maxValue: 2, turns: 3 }] })
+	// Distance 14 : aucun tir ce tour (arme 6 + 3 PM, puce 10 + 3 PM), dans la portée utile du boost (15).
+	const world = (turnNumber, cooldown) => makeWorld({
+		turnNumber, equipped: gun, weapons: [gun], enemyAt: [19, 5], chips: [zap(cooldown), smallMotivation()]
+	})
+	const paying = world(60, 0)
+	const lines = captureTurn(paying)
+	assert.deepEqual(paying.actions, ["motivation", "move"])
+	assert.deepEqual(planLog(lines).boost, [{ name: "motivation", cost: 4 }])
+	const useless = world(61, 1) // cooldown 1 : un seul lancer par tour, les 2 PT n'achètent rien dans aucun scénario
+	captureTurn(useless)
+	assert.deepEqual(useless.actions, ["move"])
+	// Tour 3 du combat 54991104 : shotgun, rock, spark, protein ET motivation prêtes, ennemi hors de portée ce tour.
+	// Distance 14 = portée utile du boost (shotgun 5 + 2 × 3 PM + 3 PM adverses). Les deux boosts, PT d'abord.
+	const shotgun = { ...machineGun, id: 41, name: "shotgun", cost: 5, maxRange: 5, maxUses: 2, features: [{ type: 1, minValue: 33, maxValue: 43 }] }
+	const rock = { ...zap(1), id: 7, name: "rock", cost: 5, minRange: 2, maxRange: 6, features: [{ type: 1, minValue: 38, maxValue: 39 }] }
+	const spark = { ...zap(0), name: "spark", features: [{ type: 1, minValue: 8, maxValue: 16 }] }
+	const both = makeWorld({
+		turnNumber: 62, equipped: shotgun, weapons: [shotgun], enemyAt: [19, 5], chips: [rock, protein(), smallMotivation(), spark]
+	})
+	const bothLines = captureTurn(both)
+	assert.deepEqual(both.actions, ["motivation", "protein", "move"])
+	assert.deepEqual(planLog(bothLines).boost, [{ name: "motivation", cost: 4 }, { name: "protein", cost: 3 }])
+	assert.equal(both.me.tp, 10 - 4 + 2 - 3)
+	// Même équipement, plan B sans tir : même crédit (les PT que rien n'emploie seraient perdus).
+	const reserve = makeWorld({
+		turnNumber: 63, equipped: shotgun, weapons: [shotgun], enemyAt: [19, 5], chips: [{ ...rock }, smallMotivation(), { ...spark }]
+	})
+	capture(reserve, () => executeReservePlan(reserve.me, new LeekProfile()))
+	assert.equal(reserve.actions[0], "motivation")
+	// Tours 4 à 8 du combat : spark seul à portée (distance 10 ; rock porte à 6, shotgun à 5, 3 PM), protein en cooldown.
+	// Un plan qui TIRE garde ses 3 sparks : pas de spark certain échangé contre le crédit optimiste des puces.
+	const sparks = makeWorld({
+		turnNumber: 64, equipped: shotgun, weapons: [shotgun], enemyAt: [15, 5],
+		chips: [{ ...rock }, protein({ currentCooldown: 2 }), smallMotivation(), { ...spark }]
+	})
+	captureTurn(sparks)
+	assert.deepEqual(sparks.actions.filter((name) => name !== "move"), ["spark", "spark", "spark"])
 })
 
 test("a turn with no boost chip is unchanged by the feature; a chip in cooldown or an active boost behaves the same", () => {
