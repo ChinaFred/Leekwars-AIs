@@ -1,10 +1,9 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
-import { castMpBoost } from "../Brain/StrengthBoost.js"
-import { enemyMemory, observeTurn, recordMyTurnEnd, refreshMaps, stagnation } from "../Brain/TurnObservation.js"
+import { enemyMemory, mpBoostCandidate, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { OBJECTIVES } from "../Classes/Plannification/BookObjective.js"
@@ -36,7 +35,7 @@ function operations(): number {
 /**
  * Variante de `Kassbi_Class.turn()` dont le plan du tour est décidé par LECTURE de la table de combos
  * (`CombatBook.ts`, `BookPlanner.ts`) : cases de tir par index, boost de force par facteur, puis exécution par
- * `executeTacticalPlan`. Observation, carte de danger, boost de PM, piège du coffre et arme du tour 1 sont ceux de
+ * `executeTacticalPlan`. Observation, carte de danger, piège du coffre et arme du tour 1 sont ceux de
  * `Kassbi_Class` (sans paroles). Le plan est un faisceau de 5 enchaînements sur 2 à 3 tours (`BookBeam.ts`), seul le tour 1
  * du meilleur est exécuté. Sans plan par table (données absentes, budget coupé, aucune action utile), le plan conjoint
  * existant (`planAct`) joue : un tour n'est jamais perdu. Les opérations de chaque phase sont journalisées (`[Book]`).
@@ -46,14 +45,10 @@ export function turn(): void {
 		const me = Fight.me
 		log(`\n=== KASSBI BOOK TURN START ===`, LOG_CONTEXT.SYSTEM)
 		observeTurn(me)
-		try {
-			castMpBoost(me, enemyMemory.getReachable(me.id), () => refreshMaps(me))
-		} catch (error) {
-			reportError("src/Main/Kassbi_Book.ts", "castMpBoost", error)
-		}
 		if (!springChestTrap(me)) {
 			const context = {
-				reachable: enemyMemory.getReachable(me.id), threat: enemyMemory.getThreatMap(), stagnation
+				reachable: enemyMemory.getReachable(me.id), threat: enemyMemory.getThreatMap(), stagnation,
+				mpBoost: mpBoostCandidate(me)
 			}
 			const before = operations()
 			let plan = null
