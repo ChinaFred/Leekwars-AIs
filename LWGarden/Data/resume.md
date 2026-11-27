@@ -5,11 +5,16 @@ Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ;
 ## 7e7313d — fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan
 Compte Kassbi, publié le 2026-11-27T19:54:53Z.
 Stratégie : aucun changement de comportement des IA actives. Kassbi_Book
-Combats : 1 — 0 victoires, 0 défaites, 1 nuls (0 % de victoires), 0 sans logs.
-Ops : pic maximal 74 % (combat 55005067), médiane des pics 74 %.
-Ressources : 64 tours joués, 1 sans aucune action payante (2 %), 95 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 16 % inutilisés sur 656 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55005067 (1/64, nul).
+Combats : 34 — 29 victoires, 3 défaites, 2 nuls (85 % de victoires), 0 sans logs.
+Ops : pic maximal 82 % (combat 55005747), médiane des pics 60 %.
+Ressources : 415 tours joués, 64 sans aucune action payante (15 %), 50 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 35 % inutilisés sur 4186 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55005881 (2/4, défaite), 55005587 (22/51, victoire), 55005608 (5/13, victoire), 55005734 (2/7, victoire), 55005611 (2/8, victoire).
+
+Défaites :
+- 55005849 : 7 tours · vs Gorglucks, Destan, Hakuko, dilph, DEVaporator · pic ops 53 %
+- 55005881 : 5 tours · vs HatsuNekron · pic ops 48 %
+- 55005891 : 2 tours · vs LaZeraclure · pic ops 25 %
 
 ## 0be4b89 — chore(merge): fusion de Master (piège du coffre) dans la zone visée
 Compte Kassbi, publié le 2026-11-27T15:05:56Z.
