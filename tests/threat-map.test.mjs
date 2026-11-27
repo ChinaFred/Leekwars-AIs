@@ -1241,7 +1241,8 @@ test("target zone: every cell an enemy can hit, reachable by me or not; untouche
 	assert.equal(zone.truncated, false)
 	assert.equal(zone.candidateCells, 40) // losange de rayon 1 PM + 3 de portée (41 cases) moins l'obstacle
 	assert.equal(zone.size, 40)
-	assert.equal(zone.pairsEvaluated, 40 * 5)
+	assert.equal(zone.evaluatedCells, 40)
+	assert.ok(zone.pairsEvaluated <= 40 * 2, `pairs ${zone.pairsEvaluated}`) // parcours exhaustif : 40 × 5 cases de tir
 	// hors de mes cases atteignables, mais visée
 	const far = grid.cell(14, 10)
 	assert.equal(myReach.canReach(far), false)
@@ -1272,38 +1273,154 @@ test("target zone: cells shared with the danger map have the same danger, comput
 		if (entry.danger > 0) {
 			shared++
 			assert.equal(computed.dangerAt(entry.cell), entry.danger)
-			assert.deepEqual(computed.breakdownAt(entry.cell), entry.breakdown)
+			// même plan ; seule la case de tir retenue parmi les ex æquo peut différer (toujours une case de tir qui touche)
+			const [threat] = computed.breakdownAt(entry.cell)
+			assert.deepEqual({ ...threat, shotCell: null }, { ...entry.breakdown[0], shotCell: null })
+			assert.ok(input.reachable.canReach(threat.shotCell))
+			const range = Math.abs(threat.shotCell.x - entry.cell.x) + Math.abs(threat.shotCell.y - entry.cell.y)
+			assert.ok(range >= 1 && range <= 3)
 			assert.equal(reused.entryAt(entry.cell), entry) // reprise telle quelle (coût en PM compris)
 		}
 	}
 	assert.equal(shared, 5) // (8,10) (9,9) (9,10) (9,11) (10,10)
 	const view = (map) => [...map.entries()].map((entry) => [entry.cell.x, entry.cell.y, entry.danger])
 	assert.deepEqual(view(reused), view(computed))
-	// aucune paire pour une case déjà dans la carte de danger, à danger nul comprise
+	// aucune paire pour une case déjà dans la carte de danger, à danger nul comprise : seules les autres sont calculées
 	const known = [...danger.entries()].filter((entry) => Math.abs(entry.cell.x - 12) + Math.abs(entry.cell.y - 10) <= 4).length
-	assert.equal(reused.pairsEvaluated, computed.pairsEvaluated - known * 5)
+	let inside = 0
+	const counting = { canHit(from, target, item) { if (danger.has(target)) inside++; return new GeometricShotCells().canHit(from, target, item) } }
+	assert.equal(buildTargetZone(me, [input], 1, { known: danger, provider: counting }).size, 40)
+	assert.equal(inside, 0)
+	assert.ok(known >= 5 && reused.pairsEvaluated < computed.pairsEvaluated)
+	assert.deepEqual([reused.evaluatedCells, reused.candidateCells], [40, 40])
 })
 
 test("target zone: its own pair cap truncates and keeps the cells nearest to me", () => {
 	const { grid, me, input } = targetZoneScenario()
-	const capped = buildTargetZone(me, [input], 1, { maxPairs: 12 }) // 5 paires par case : 2 cases complètes
+	const capped = buildTargetZone(me, [input], 1, { maxPairs: 2 }) // une paire par case ici : 2 cases complètes
 	assert.equal(capped.truncated, true)
-	assert.equal(capped.pairsEvaluated, 12)
+	assert.equal(capped.pairsEvaluated, 2)
 	assert.equal(capped.candidateCells, 40)
+	assert.equal(capped.evaluatedCells, 2)
 	assert.deepEqual([...capped.entries()].map((entry) => [entry.cell.x, entry.cell.y]), [[8, 10], [9, 10]])
 	assert.equal(capped.dangerAt(grid.cell(14, 10)), null) // non évaluée : absente
 
-	// plafond par défaut : dédié, exporté ; 861 cases × 113 cases de tir le dépassent
+	// plafond par défaut : dédié, exporté ; le parcours exhaustif (861 cases × 113 cases de tir) le dépassait et la zone
+	// était coupée ; la recherche bornée examine moins de deux paires par case et la zone est complète
 	assert.equal(MAX_TARGET_ZONE_PAIRS, 16000)
 	const wide = makeGrid(41, 21)
 	const { me: me2, myReach } = setupMe(wide, [10, 10], 1)
 	const { input: sniper } = addEnemy(wide, me2, 2, [28, 10], { mp: 7, weaponItem: weapon({ minRange: 1, maxRange: 40 }) })
 	const before = buildThreatMap(me2, myReach, [sniper], 1)
 	const zone = buildTargetZone(me2, [sniper], 1)
-	assert.equal(zone.truncated, true)
-	assert.equal(zone.pairsEvaluated, MAX_TARGET_ZONE_PAIRS)
-	assert.equal(zone.candidateCells, 41 * 21)
+	assert.equal(zone.truncated, false)
+	assert.ok(zone.pairsEvaluated <= 2 * 41 * 21, `pairs ${zone.pairsEvaluated}`)
+	assert.deepEqual([zone.size, zone.evaluatedCells, zone.candidateCells], [41 * 21, 41 * 21, 41 * 21])
 	assert.equal(before.truncated, false) // la carte de danger garde son propre plafond
+})
+
+/** Ancien calcul de la zone : `bestThreat` exhaustif (toutes les cases de tir) sur toutes les cases libres de la grille. */
+function exhaustiveZone(grid, me, inputs) {
+	const free = [...grid.cells.values()].filter((cell) => !cell.obstacle)
+	const everywhere = { truncated: false, size: free.length, entries: () => free.map((cell) => ({ cell, cost: -1 })).values() }
+	return buildThreatMap(me, everywhere, inputs, 1, { maxPairs: Number.POSITIVE_INFINITY })
+}
+
+function assertSameDamage(zone, reference) {
+	assert.equal(zone.truncated, false)
+	let touched = 0
+	for (const entry of reference.entries()) {
+		const where = `cell ${entry.cell.x},${entry.cell.y}`
+		assert.equal(zone.has(entry.cell), entry.danger > 0, where)
+		if (entry.danger > 0) {
+			touched++
+			assert.equal(zone.dangerAt(entry.cell), entry.danger, where)
+			assert.deepEqual(zone.breakdownAt(entry.cell).map((threat) => [threat.enemyId, threat.damage]),
+				entry.breakdown.map((threat) => [threat.enemyId, threat.damage]), where)
+		}
+	}
+	assert.equal(zone.size, touched)
+	return touched
+}
+
+test("target zone: complete for an enemy with 7 MP and range 12 on open ground, within a few pairs per cell", () => {
+	const grid = makeGrid(41, 41)
+	const { me } = setupMe(grid, [4, 20], 3)
+	const { input } = addEnemy(grid, me, 2, [20, 20], { mp: 7, weaponItem: weapon({ minRange: 1, maxRange: 12, needsLos: true }) })
+	assert.equal(input.reachable.size, 113)
+	const zone = buildTargetZone(me, [input], 1)
+	// losange de rayon 7 PM + 12 de portée : 761 cases, toutes visées ; l'ancien parcours (761 × 113 = 85 993 paires)
+	// s'arrêtait à MAX_TARGET_ZONE_PAIRS en ne gardant que le côté proche de moi
+	assert.deepEqual([zone.truncated, zone.candidateCells, zone.evaluatedCells, zone.size], [false, 761, 761, 761])
+	assert.ok(zone.pairsEvaluated <= 2 * 761, `pairs ${zone.pairsEvaluated}`)
+	assert.equal(zone.dangerAt(grid.cell(39, 20)), 45) // côté opposé à moi, à 19 de l'ennemi : 3 tirs de 15
+	assert.equal(assertSameDamage(zone, exhaustiveZone(grid, me, [input])), 761)
+})
+
+test("target zone: same damage per cell as the exhaustive search with obstacles, launch patterns, ranges and several enemies", () => {
+	const obstacles = []
+	for (let x = 0; x < 31; x++) {
+		for (let y = 0; y < 31; y++) {
+			if ((x * 7 + y * 13) % 11 === 0 && (x + y) % 3 !== 0) obstacles.push([x, y])
+		}
+	}
+	const free = (at) => !obstacles.some(([x, y]) => x === at[0] && y === at[1])
+	const grid = makeGrid(31, 31, obstacles)
+	// la ligne de vue du mock ne voit que les lignes droites : un échantillonnage du segment bloque aussi les autres paires
+	globalThis.Field.lineOfSight = (from, to) => {
+		const steps = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y))
+		for (let i = 1; i < steps; i++) {
+			const x = Math.round(from.x + ((to.x - from.x) * i) / steps)
+			const y = Math.round(from.y + ((to.y - from.y) * i) / steps)
+			if (grid.cell(x, y).obstacle) return false
+		}
+		return true
+	}
+	const spots = [[3, 15], [15, 15], [22, 8], [9, 24], [25, 25]]
+	assert.ok(spots.every(free))
+	const { me } = setupMe(grid, spots[0], 3)
+	const line = weapon({ id: 201, cost: 4, min: 30, max: 40, minRange: 1, maxRange: 6, needsLos: true, launchType: LAUNCH_TYPE.LINE, maxUses: 3 })
+	const far = weapon({ id: 202, cost: 8, min: 90, max: 100, minRange: 5, maxRange: 12, needsLos: true, launchType: LAUNCH_TYPE.LINE })
+	const diagonal = weapon({ id: 203, cost: 4, min: 25, max: 30, minRange: 2, maxRange: 6, needsLos: true, launchType: LAUNCH_TYPE.DIAGONAL })
+	const round = weapon({ id: 204, cost: 3, min: 15, max: 20, minRange: 1, maxRange: 7, needsLos: true })
+	const spark = chip({ id: 211, cost: 3, min: 8, max: 16, minRange: 0, maxRange: 10 })
+	const rock = chip({ id: 212, cost: 5, min: 38, max: 39, minRange: 2, maxRange: 6, needsLos: true, cooldown: 1 })
+	const star = chip({ id: 213, cost: 2, min: 20, max: 20, minRange: 1, maxRange: 9, launchType: LAUNCH_TYPE.STAR_INVERTED, cooldown: 1 })
+	const inputs = [
+		addEnemy(grid, me, 2, spots[1], { mp: 4, weaponItem: line, chips: [spark, rock] }).input,
+		addEnemy(grid, me, 3, spots[2], { mp: 7, tp: 14, weaponItem: far, otherWeapons: [round], chips: [star] }).input,
+		addEnemy(grid, me, 4, spots[3], { mp: 3, weaponItem: diagonal, otherWeapons: [line], chips: [rock, spark] }).input,
+		addEnemy(grid, me, 5, spots[4], { mp: 5, weaponItem: round, chips: [star, rock] }).input
+	]
+	let exhaustivePairs = 0
+	for (const count of [1, 2, 4]) {
+		const enemies = inputs.slice(0, count)
+		const reference = exhaustiveZone(grid, me, enemies)
+		const zone = buildTargetZone(me, enemies, 1)
+		const touched = assertSameDamage(zone, reference)
+		assert.ok(touched > 150, `touched ${touched}`)
+		exhaustivePairs = reference.pairsEvaluated
+		assert.ok(zone.pairsEvaluated * 8 < exhaustivePairs, `pairs ${zone.pairsEvaluated} vs ${exhaustivePairs}`)
+		// un fournisseur sans `hitSignature` ni motif déclaré : bornes par portée seule (plus de paires), mêmes dégâts
+		const base = new GeometricShotCells()
+		const plain = { canHit: (a, b, c) => base.canHit(a, b, c) }
+		assertSameDamage(buildTargetZone(me, enemies, 1, { provider: plain, maxPairs: Number.POSITIVE_INFINITY }), reference)
+	}
+	// plusieurs ennemis : au moins une case visée par deux d'entre eux, danger = somme
+	const all = buildTargetZone(me, inputs, 1)
+	assert.ok([...all.entries()].some((entry) => entry.breakdown.length >= 2 &&
+		entry.danger === entry.breakdown.reduce((sum, threat) => sum + threat.damage, 0)))
+	// la case de tir annoncée est une case de tir de l'ennemi d'où l'arme et les puces du plan touchent
+	const check = new GeometricShotCells()
+	for (const entry of all.entries()) {
+		for (const threat of entry.breakdown) {
+			const input = inputs.find((candidate) => candidate.id === threat.enemyId)
+			assert.ok(input.reachable.canReach(threat.shotCell))
+			for (const item of [threat.weapon, ...threat.chips]) {
+				assert.ok(item === null || check.canHit(threat.shotCell, entry.cell, item))
+			}
+		}
+	}
 })
 
 test("target zone: its own operations ceiling (below the planner's) truncates; the danger map is not affected", () => {
@@ -1322,6 +1439,24 @@ test("target zone: its own operations ceiling (below the planner's) truncates; t
 		const complete = buildTargetZone(me, [input], 1)
 		assert.equal(complete.truncated, false)
 		assert.equal(complete.size, 40)
+	} finally {
+		globalThis.System = previous
+	}
+})
+
+test("target zone: reports the operations it consumed; stops at half of the turn's operations, wherever the danger map left them", () => {
+	const previous = globalThis.System
+	try {
+		assert.equal(TARGET_ZONE_OPERATIONS_FRACTION, 0.5)
+		let reads = 0
+		globalThis.System = { maxOperations: 1000, get operations() { return 300 + 2 * reads++ } } // carte de danger déjà à 30 %
+		const { me, input } = targetZoneScenario()
+		const zone = buildTargetZone(me, [input], 1)
+		assert.deepEqual([zone.truncated, zone.size, zone.evaluatedCells], [false, 40, 40])
+		assert.ok(zone.operations > 0)
+		assert.equal(buildThreatMap(me, computeReachableCells(me, 2, 1), [input], 1).operations, null)
+		globalThis.System = undefined
+		assert.equal(buildTargetZone(me, [input], 1).operations, null)
 	} finally {
 		globalThis.System = previous
 	}

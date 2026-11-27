@@ -645,6 +645,18 @@ test("target zone: same sequence as the danger zone under its own context and la
 	})
 })
 
+test("target zone: the log carries the computation summary and says clearly when the zone is truncated", () => {
+	const stats = { candidateCells: 40, evaluatedCells: 12, pairsEvaluated: 30, lineOfSightCalls: 7 }
+	recording(new LogConfig(), () => {
+		showTargetZone(dangerMap([5, 9], { ...stats, truncated: true, operations: 1234 }))
+		assert.equal(trace[1][1], "Target zone: 2 cells, max 9.0 (TRUNCATED: 12/40 candidates evaluated, 30 pairs, 7 LoS, 1234 ops)")
+	})
+	recording(new LogConfig(), () => {
+		showTargetZone(dangerMap([5, 9], { ...stats, evaluatedCells: 40 })) // sans `System` : pas d'opérations
+		assert.equal(trace[1][1], "Target zone: 2 cells, max 9.0 (40/40 candidates evaluated, 30 pairs, 7 LoS)")
+	})
+})
+
 test("target zone: inactive context => no call, no computation; each of the two contexts is independent", () => {
 	let entriesCalls = 0
 	const map = dangerMap([1, 2, 3])
