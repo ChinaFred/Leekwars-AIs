@@ -26,8 +26,8 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, tous les boosts compris (force, PT, agilité, PM) :
 on observe, on compare, on planifie, on exécute ; aucune action n'est lancée ni décidée hors du plan. Exécution commencée, aucun second plan : un échec l'arrête.
 
-**Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ; elle est suivie à part (`[Chest]`, contexte `MEMORY`).
-**Piège du coffre** (`springChestTrap`, `src/Brain/ChestTrap.ts`, entre l'observation et `planAct`) : si je peux frapper un coffre depuis ma case (arme équipée, puce à dégâts, ou autre arme au prix de 1 PT) et qu'un ennemi vivant en est **strictement** plus proche que moi (distance), je tire sur le coffre tant que PT et tirs le permettent (arme équipée, puces, autres armes), puis `moveAwayFrom` le **coffre** avec tous mes PM. Ce tour remplace le plan ; sans tir abouti, le plan normal joue. Ligne `[ChestTrap]` (`PLANNING`). Condition de distance en vol d'oiseau, sans trajet ni PM adverses : heuristique non calibrée.
+**Coffres** (`Targets.ts`) : une entité `Chest` n'est ni ciblée ni comptée comme ennemi (danger, mémoire, plans) ; elle est suivie à part (`[Chest]`, contexte `MEMORY`). **Danger du coffre** (`ChestDanger.ts`, une seule règle, ajoutée par `EnemyMemory.updateThreatMap` à la carte de danger lue par le plan conjoint, le plan B et `BookPlanner`) : tout coffre vivant ajoute un danger forfaitaire `max(CHEST_FLAT_DANGER = 1000, 3 × mes PV max)` aux cases à distance de Manhattan ≤ `CHEST_REACH` = 7, coffre intact ou blessé (un coup tue : combats 55005891 et 55005881, 396 PV d'un coup, touché à 2 et à 7 cases ; l'ennemi le réveille en le blessant). Le coffre n'entre toujours ni dans `enemyCount` ni dans le détail `breakdown`. Le danger compte sur la case FINALE comme tout danger : tirer depuis une case à portée puis la quitter reste permis. Le coffre n'agit qu'à son tour : portée exacte inconnue (entre 7 et 10), arme inconnue de l'API ; heuristique non calibrée, qui peut interdire un disque de rayon 7 autour du coffre.
+**Piège du coffre** (`springChestTrap`, `src/Brain/ChestTrap.ts`, entre l'observation et `planAct`) : si je peux frapper un coffre depuis ma case (arme équipée, puce à dégâts, ou autre arme au prix de 1 PT) et qu'un ennemi vivant en est **strictement** plus proche que moi (distance), je tire sur le coffre tant que PT et tirs le permettent (arme équipée, puces, autres armes), puis `moveAwayFrom` le **coffre** avec tous mes PM. Ce tour remplace le plan ; sans tir abouti, le plan normal joue. Ligne `[ChestTrap]` (`PLANNING`). Condition de distance en vol d'oiseau, sans trajet ni PM adverses : heuristique non calibrée. Interaction avec le danger du coffre : le piège fait foi quand il s'applique (il remplace le plan, ne lit pas la carte et fuit le coffre) ; sinon le plan lit le danger du coffre.
 
 ## Plan conjoint (`TacticalPlanner.ts`)
 
@@ -197,7 +197,7 @@ poireau sont le maximum observé. C'est une photographie du début de mon tour.
 
 ### Carte de danger (`ThreatMap.ts`, `ShotPlan.ts`, `LaunchPattern.ts`)
 
-Pour chaque case que je peux atteindre : somme, sur les ennemis, de leurs meilleurs dégâts potentiels au prochain tour.
+Pour chaque case que je peux atteindre : somme, sur les ennemis, de leurs meilleurs dégâts potentiels au prochain tour. S'y ajoute, sur les cases à portée d'un coffre vivant, le danger forfaitaire du coffre (`ChestDanger.ts`, option `extraDanger`).
 
 - **Armes** : l'arme équipée et les autres armes connues, au prix de 1 PT de changement (`WEAPON_SWAP_TP`) ;
   une arme par plan, 4 au plus par ennemi (`MAX_THREAT_WEAPONS`).

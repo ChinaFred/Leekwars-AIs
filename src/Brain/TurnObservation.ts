@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
@@ -168,7 +168,7 @@ function observeReachableCells(me: Me, allies: EntityList, living: EntityList): 
  */
 function observeThreatMap(me: Me, living: EntityList): void {
 	guarded("observeThreatMap", () => {
-		const update = enemyMemory.updateThreatMap(me, living(), Fight.turn)
+		const update = enemyMemory.updateThreatMap(me, living(), Fight.turn, aliveChests())
 		if (update === null) {
 			log("[Threat] unavailable", LOG_CONTEXT.THREAT)
 			return

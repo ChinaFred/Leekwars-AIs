@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
@@ -256,6 +256,8 @@ export interface ThreatCell {
 export interface ThreatMapOptions {
 	readonly provider?: ShotCellsProvider
 	readonly maxPairs?: number
+	/** Danger ajouté à chaque case de la carte de danger (coffres : `ChestDanger.ts`) ; absent = 0. N'ajoute aucun ennemi. */
+	readonly extraDanger?: (cell: Cell) => number
 }
 
 export interface TargetZoneOptions extends ThreatMapOptions {
@@ -825,6 +827,7 @@ export function buildThreatMap(
 				breakdown.push(threat)
 			}
 		}
+		if (options.extraDanger) danger += options.extraDanger(candidate.cell)
 		byKey.set(cellKey(candidate.cell), { cell: candidate.cell, mpCost: candidate.cost, danger, breakdown })
 	}
 

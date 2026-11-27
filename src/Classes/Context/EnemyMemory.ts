@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 13
+// file version: 14
+import { ChestView, chestDangerOf } from "./ChestDanger.js"
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -231,9 +232,10 @@ export class EnemyMemory {
 	 * puces = connues, offensives et prêtes (`isChipReady`) ; cases de tir = cases atteignables avec ses PM
 	 * (`maxMpSeen`) EN IGNORANT mon entité, recalculées ici (un parcours en largeur de plus par ennemi
 	 * offensif, ≤ ~4 × 500 appels à `Field.cellFromXY`, non stocké). Un ennemi sans item offensif
-	 * n'est pas parcouru du tout.
+	 * n'est pas parcouru du tout. `chests` : coffres vivants, JAMAIS des ennemis : seul un danger forfaitaire est ajouté aux
+	 * cases à leur portée (`ChestDanger.ts`).
 	 */
-	updateThreatMap(me: Me, enemies: readonly Entity[], turn: number): ThreatUpdate | null {
+	updateThreatMap(me: Me, enemies: readonly Entity[], turn: number, chests: readonly ChestView[] = []): ThreatUpdate | null {
 		// Une exception plus bas ne doit pas laisser la carte du tour précédent passer pour celle du tour courant.
 		this.threatMap = null
 		this.threatInputs = null
@@ -272,7 +274,10 @@ export class EnemyMemory {
 				reachable: computeReachableCells(enemy, profile.maxMpSeen, turn, { ignoreEntityId: me.id })
 			})
 		}
-		const map = buildThreatMap(me, mine, inputs, turn, { provider: new GeometricShotCells(this.sightCache) })
+		const map = buildThreatMap(me, mine, inputs, turn, {
+			provider: new GeometricShotCells(this.sightCache),
+			extraDanger: chests.length > 0 ? chestDangerOf(chests, me.maxLife) : undefined
+		})
 		this.threatMap = map
 		this.threatInputs = inputs
 		return {

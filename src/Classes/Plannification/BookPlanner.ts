@@ -1,8 +1,9 @@
 // @version:5.8
-// file version: 6
+// file version: 8
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
+import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
-import { aliveEnemies } from "../Context/Targets.js"
+import { aliveChests, aliveEnemies } from "../Context/Targets.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import {
 	BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, BeamTrace, DuelState, REFINE_KEEP, SimState, TurnStep, Zone, runBeam
@@ -75,11 +76,14 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const catalog = catalogFor(me)
 	budget.link(catalog.book)
 	const rootCells = [...reachable.entries()]
+	// Les coffres sont déjà dans la carte de danger du jeu (`ChestDanger.ts` via `EnemyMemory.updateThreatMap`) : `known` garde le
+	// danger SANS coffre, le terme de coffre est rajouté à toute case (zone du tour 1 ou case simulée) par `dangerAt`.
+	const chestDanger = chestDangerOf(aliveChests(), me.maxLife)
 	const known = new Map<number, { cell: Cell; danger: number }>()
 	for (const entry of rootCells) {
 		const danger = threat.dangerAt(entry.cell)
 		if (danger === null || !Number.isFinite(danger) || danger < 0) return null
-		known.set(entry.cell.x * 4096 + entry.cell.y, { cell: entry.cell, danger })
+		known.set(entry.cell.x * 4096 + entry.cell.y, { cell: entry.cell, danger: Math.max(0, danger - chestDanger(entry.cell)) })
 	}
 	const toZone = (cells: ReadonlyArray<{ cell: Cell; cost: number }>): Zone =>
 		({ cells, byKey: new Map(cells.map((entry, i) => [entry.cell.x * 4096 + entry.cell.y, i])) })
@@ -102,7 +106,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 			}
 			return zone
 		},
-		dangerAt: (cell) => futureDanger(cell),
+		dangerAt: (cell) => futureDanger(cell) + chestDanger(cell),
 		lineOfSight(from, to) {
 			const id = `${from.id}:${to.id}`
 			let seen = sight.get(id)
