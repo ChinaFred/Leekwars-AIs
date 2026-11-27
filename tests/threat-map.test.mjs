@@ -1202,7 +1202,8 @@ async function runTurnCapturingLogs(turn) {
 
 test("turn() builds the threat map, logs one short [Threat] line before TURN END, and plays exactly as with an unarmed enemy", async () => {
 	// tours distincts : le module garde `enemyMemory` (et mes cases atteignables) d'un test à l'autre
-	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
 	const unarmed = makeCombatWorld({ enemy: 120, ally: 121 }, { ...armedGun(), features: [] }, 10)

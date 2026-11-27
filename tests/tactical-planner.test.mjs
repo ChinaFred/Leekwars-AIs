@@ -748,7 +748,8 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 
 test("active turn feeds the stagnation counter: observed once at the start of the turn and handed to the planner", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn, stagnation } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { stagnation } = await import("../dist/Brain/TurnObservation.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
 	Object.assign(w.enemies[0], {
 		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
@@ -776,7 +777,8 @@ test("active turn feeds the stagnation counter: observed once at the start of th
 
 test("active turn hands the enemy positions to the stagnation counter just before observing (a moving enemy keeps the rule out of play)", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn, stagnation } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { stagnation } = await import("../dist/Brain/TurnObservation.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
 	Object.assign(w.enemies[0], {
 		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),

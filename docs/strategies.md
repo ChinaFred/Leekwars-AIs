@@ -12,7 +12,7 @@ seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`C
 
 Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
 
-1. **Observer** : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
+1. **Observer** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
 3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**

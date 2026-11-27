@@ -168,7 +168,8 @@ test("opening weapon: not equipped when a weapon is already held, when dead, or 
 
 test("turn() with a chest as the only enemy: the chest is listed apart, no error, nothing shot", async () => {
 	globalThis.Chest = FakeChest
-	const { turn, enemyMemory, chestMemory } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { enemyMemory, chestMemory } = await import("../dist/Brain/TurnObservation.js")
 	const w = arena({ enemy: false })
 	w.me.weapon = null
 	turn()

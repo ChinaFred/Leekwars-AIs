@@ -4,6 +4,11 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Alliés lus une fois par observation (`Fight.getAllies` : 2 → 1 appel par tour, zones affichées ou non) ; aucun changement de décision.
+- 2026-11-27 — Code mort supprimé : `simpleActionSequence.ts`, `Computations.ts`, `Helpers.ts` et leurs tests (importés par aucune IA).
+- 2026-11-27 — Rangement : `castMpBoost` dans `StrengthBoost.ts`, attribution des coffres par la constante `NEVER_ATTRIBUTE_DAMAGE` ; aucun changement de comportement.
+- 2026-11-27 — Tour robuste : préambule et historique protégés à part, ennemis vivants lus une fois par observation (5 → 1 appel), `Kassbi_test` joue avec le contexte de `Kassbi_Class`.
+- 2026-11-27 — Observation du tour sortie du point d'entrée : `src/Brain/TurnObservation.ts` (mémoires, cartes, stagnation) ; `Kassbi_Class.ts` 332 → 122 lignes, aucun changement de comportement.
 - 2026-11-27 — Zone visée (`TARGET_ZONE`, actif) : danger des cases que les ennemis peuvent toucher, marqué sur le terrain ; jusqu'à 20 % des opérations du tour avant le plan.
 - 2026-11-27 — Posture par rôle (plan conjoint) : poids du danger 0,5 / 1 / 1,5, poids d'approche 1,25 / 1 / 0,75 ; AGGRESSIVE ne recule plus sans tirer, DEFENSIVE se met à couvert librement.
 - 2026-11-27 — Boost de PT (Motivation) sans tir : crédit futur compté aussi avec les puces offensives (meilleur de arme, puces, arme + puces) ; avec tir, inchangé (54991104).

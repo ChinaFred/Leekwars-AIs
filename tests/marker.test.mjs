@@ -445,7 +445,7 @@ test("primitives: gate and context both required, text truncated to 10 character
 
 // --- turn() complet ------------------------------------------------------------------------------
 
-function makeCombatWorld(runId, { getAlliesFailsOnSecondCall = false } = {}) {
+function makeCombatWorld(runId, { allyNameFailsAfterReachable = false } = {}) {
 	const grid = makeGrid(21, 21)
 	const actions = []
 	let tp = 7
@@ -460,8 +460,21 @@ function makeCombatWorld(runId, { getAlliesFailsOnSecondCall = false } = {}) {
 		strength: 0, agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0,
 		weapon: enemyGun, weapons: [], chips: [], effects: [], launchedEffects: []
 	}, 9, 5)
+	// `observeReachableCells` lit le nom de l'alliée puis journalise `[Reachable]` ; la lecture suivante est celle de
+	// `displayAccessibleZones` (source de zone). La faire échouer, une fois, provoque une erreur pendant l'affichage
+	// des zones, et là seulement.
+	let allyNameFailed = false
 	const ally = grid.place({
-		id: 401 + 2 * runId, name: "Alliee", level: 10, life: 100, maxLife: 100, mp: 2, tp: 10, strength: 0, wisdom: 0,
+		id: 401 + 2 * runId,
+		get name() {
+			const reachableLogged = trace.some((call) => call[0] === "log" && String(call[1]).startsWith("[Reachable]"))
+			if (allyNameFailsAfterReachable && reachableLogged && !allyNameFailed) {
+				allyNameFailed = true
+				throw new Error("ally name failed while displaying")
+			}
+			return "Alliee"
+		},
+		level: 10, life: 100, maxLife: 100, mp: 2, tp: 10, strength: 0, wisdom: 0,
 		weapon: null, weapons: [], chips: [], effects: [], launchedEffects: []
 	}, 5, 7)
 	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
@@ -485,7 +498,7 @@ function makeCombatWorld(runId, { getAlliesFailsOnSecondCall = false } = {}) {
 		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
 		moveAwayFrom() { actions.push("retreat") }
 	}, 5, 5)
-	let allyCalls = 0
+	const counts = { getAllies: 0 }
 	globalThis.Fight = {
 		me,
 		turn: 300 + runId,
@@ -493,23 +506,20 @@ function makeCombatWorld(runId, { getAlliesFailsOnSecondCall = false } = {}) {
 		getEnemies: () => [enemy],
 		getAliveEnemies: () => (enemy.life > 0 ? [enemy] : []),
 		getAllies: () => {
-			allyCalls++
-			if (getAlliesFailsOnSecondCall && allyCalls === 2) {
-				throw new Error("getAllies failed while displaying")
-			}
+			counts.getAllies++
 			return [me, ally]
 		}
 	}
 	globalThis.Weapon = { pistol: weakWeapon }
 	globalThis.Chip = { bandage }
-	return { actions }
+	return { actions, counts }
 }
 
 let runCounter = 1
 
 async function playTurn(config, { debug, worldOptions } = {}) {
 	const { turn } = await import("../dist/Main/Kassbi_Class.js")
-	const { actions } = makeCombatWorld(runCounter++, worldOptions)
+	const { actions, counts } = makeCombatWorld(runCounter++, worldOptions)
 	const originalLog = console.log
 	const originalRandom = Math.random
 	Math.random = () => 0
@@ -528,7 +538,10 @@ async function playTurn(config, { debug, worldOptions } = {}) {
 		Math.random = originalRandom
 		resetLeekLogging()
 	}
-	const result = { actions, calls: trace.map((call) => [...call]), fieldCalls: cellFromXYCalls - fieldCallsBefore }
+	const result = {
+		actions, calls: trace.map((call) => [...call]), fieldCalls: cellFromXYCalls - fieldCallsBefore,
+		allyCalls: counts.getAllies
+	}
 	trace.length = 0
 	return result
 }
@@ -575,7 +588,7 @@ test("turn(): plays the same actions when Debug is missing, incomplete or throwi
 	}
 
 	// Une erreur DANS la construction de l'affichage : rapportée en rouge (ERROR), le tour continue.
-	const failing = await playTurn(new LogConfig(), { worldOptions: { getAlliesFailsOnSecondCall: true } })
+	const failing = await playTurn(new LogConfig(), { worldOptions: { allyNameFailsAfterReachable: true } })
 	assert.deepEqual(failing.actions, baseline.actions)
 	const reports = failing.calls.filter((call) => call[0] === "Debug.log" && String(call[1]).includes("displayAccessibleZones"))
 	assert.equal(reports.length, 1)
@@ -583,7 +596,7 @@ test("turn(): plays the same actions when Debug is missing, incomplete or throwi
 	assert.ok(failing.calls.some((call) => call[0] === "log" && String(call[1]).startsWith("Danger zone:")), "the danger zone is still shown")
 
 	// ERROR désactivé : l'erreur d'affichage est masquée, le tour joue quand même.
-	const hidden = await playTurn(new LogConfig().setEnabled(LOG_CONTEXT.ERROR, false), { worldOptions: { getAlliesFailsOnSecondCall: true } })
+	const hidden = await playTurn(new LogConfig().setEnabled(LOG_CONTEXT.ERROR, false), { worldOptions: { allyNameFailsAfterReachable: true } })
 	assert.deepEqual(hidden.actions, baseline.actions)
 	assert.equal(hidden.calls.some((call) => call[0] === "Debug.log"), false)
 })
@@ -599,22 +612,27 @@ test("each zone context can be disabled independently inside turn()", async () =
 
 // --- compléments QA : cas qui laissaient survivre des mutants -------------------------------------
 
-test("turn(): with ACCESSIBLE_ZONE inactive, the zone source list is not even built (one Fight.getAllies call less)", async () => {
+test("turn(): Fight.getAllies is asked once per observation, zones displayed or not", async () => {
 	await playTurn(new LogConfig()) // 1er tour du module (salutation)
-	let calls = 0
-	const count = () => {
-		const original = globalThis.Fight.getAllies
-		globalThis.Fight.getAllies = () => {
-			calls++
-			return original()
-		}
-	}
-	await playTurn(new LogConfig(), { debug: count })
-	const withZone = calls
-	calls = 0
-	await playTurn(new LogConfig().setEnabled(ZONE, false), { debug: count })
-	assert.ok(withZone >= 1)
-	assert.equal(calls, withZone - 1)
+	const withZone = await playTurn(new LogConfig())
+	const withoutZone = await playTurn(new LogConfig().setEnabled(ZONE, false))
+	// Aucun boost de PM dans ce monde : `refreshMaps` n'est pas appelé, le tour ne compte qu'une observation.
+	assert.equal(withZone.allyCalls, 1)
+	assert.equal(withoutZone.allyCalls, 1)
+})
+
+test("turn(): with ACCESSIBLE_ZONE inactive, the zone source list is not even built (no marking, no error from a failing source)", async () => {
+	await playTurn(new LogConfig()) // 1er tour du module (salutation)
+	const failing = { worldOptions: { allyNameFailsAfterReachable: true } }
+	// Contexte actif : la source « alliée » est construite, sa lecture échoue et l'erreur est rapportée.
+	const built = await playTurn(new LogConfig(), failing)
+	assert.equal(built.calls.filter((call) => call[0] === "Debug.log" && String(call[1]).includes("displayAccessibleZones")).length, 1)
+	// Contexte inactif : la même source défaillante n'est jamais lue (aucune erreur) et rien n'est marqué pour les zones.
+	const skipped = await playTurn(new LogConfig().setEnabled(ZONE, false).setEnabled(TARGET, false), failing)
+	assert.equal(skipped.calls.some((call) => call[0] === "Debug.log" && String(call[1]).includes("displayAccessibleZones")), false)
+	assert.equal(skipped.calls.some((call) => String(call[1]).startsWith("Accessible zone:")), false)
+	assert.equal(skipped.calls.filter((call) => call[0] === "pause").length, 1) // la zone de danger seule
+	assert.deepEqual(skipped.actions, built.actions)
 })
 
 test("ERROR red fallback keeps the message exactly once: 2-argument rejection retries Debug.log(value) and never touches console", () => {
@@ -723,7 +741,7 @@ test("target zone: inactive context => no call, no computation; each of the two 
 })
 
 test("turn(): the target zone is shown right after the danger zone and before the plan; inactive => not computed, same actions", async () => {
-	const { enemyMemory } = await import("../dist/Main/Kassbi_Class.js")
+	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	await playTurn(new LogConfig()) // 1er tour du module (salutation) si ce test tourne seul
 	let computed = 0
 	const original = enemyMemory.computeTargetZone

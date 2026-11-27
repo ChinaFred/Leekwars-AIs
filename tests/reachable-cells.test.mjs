@@ -477,7 +477,8 @@ async function runTurnCapturingLogs(turn) {
 }
 
 test("turn() computes the reachable cells of me, my ally and the enemy, logs one short line, and plays as before", async () => {
-	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 20, ally: 21 })
@@ -497,7 +498,8 @@ test("turn() computes the reachable cells of me, my ally and the enemy, logs one
 })
 
 test("turn() still plays when the reachable-cells computation fails, and reports the error", async () => {
-	const { turn, enemyMemory, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 30, ally: 31 })
