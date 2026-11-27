@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -270,6 +270,25 @@ export const LETHAL_PENALTY = 1000
  * dessous. À 60 PV : danger accepté < 45. À poids plein, le seuil reste mes PV (fraction 1). Non calibré en combat.
  */
 export const PASSIVE_DANGER_LIFE_FRACTION = 0.75
+
+/**
+ * Ennemi blessé en fuite : sous cette fraction de ses PV max, le poids du risque est ramené à `WOUNDED_RISK_FACTOR`
+ * (voir `woundedRiskFactor`). Combat 54995131, tour 5 : ennemi à 98/318 PV (31 %) en fuite à distance 13, Kassbi
+ * (346/385) restait sur place faute de case avancée sans danger : 10 PT et 5 PM perdus. 30 % : hypothèse, non mesurée.
+ */
+export const WOUNDED_ENEMY_LIFE_FRACTION = 0.3
+
+/** Facteur de risque face à un ennemi blessé : 0 comme la passivité au plus bas, le seuil létal reste à `PASSIVE_DANGER_LIFE_FRACTION`. Non calibré. */
+export const WOUNDED_RISK_FACTOR = 0
+
+/**
+ * Facteur du poids du risque dû à la cible de progression : `WOUNDED_RISK_FACTOR` si elle a moins de
+ * `WOUNDED_ENEMY_LIFE_FRACTION` de ses PV max, sinon 1. S'ajoute à la passivité (le plus petit des deux s'applique).
+ */
+export function woundedRiskFactor(target: Entity | undefined): number {
+	return target !== undefined && target.maxLife > 0 && target.life / target.maxLife < WOUNDED_ENEMY_LIFE_FRACTION
+		? WOUNDED_RISK_FACTOR : 1
+}
 
 /**
  * Coût de risque d'un plan, en points de score : `weight` × danger après protection, plus `LETHAL_PENALTY` et
