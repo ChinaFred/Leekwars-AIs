@@ -3,13 +3,20 @@
 # `leek-AAAAMMJJ-HHMM` sur le commit déployé, publié seulement si le déploiement réussit. Un tag `leek-*` poussé
 # directement le déclenche aussi (impossible depuis une session Claude cloud : elle ne peut pousser que sa branche).
 # Garden écrit aussi DEPLOYED.ts à la racine des IA du site : version, date, origine et ligne Stratégie.
-# Secret requis : LEEKWARS_API_KEY (Settings > Secrets and variables > Actions).
+# Secrets (Settings > Secrets and variables > Actions) : LEEKWARS_LOGIN et LEEKWARS_PASSWORD (connexion par login :
+# crée les IA et dossiers absents du site, et peut mettre à la corbeille ceux absents du dépôt), sinon
+# LEEKWARS_API_KEY seule (écrit dans les IA existantes, ne crée et ne supprime rien).
 name: Déploiement Leek Wars
 
 on:
   push:
     tags: ["leek-*"]
   workflow_dispatch:
+    inputs:
+      supprimer:
+        description: "Mettre à la corbeille les IA du site absentes du dépôt (connexion par login seulement)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -74,7 +81,10 @@ jobs:
 
       - name: PUSH Garden vers Leek Wars
         env:
+          LEEKWARS_LOGIN: ${{ secrets.LEEKWARS_LOGIN }}
+          LEEKWARS_PASSWORD: ${{ secrets.LEEKWARS_PASSWORD }}
           LEEKWARS_API_KEY: ${{ secrets.LEEKWARS_API_KEY }}
+          LEEKWARS_DELETE_REMOTE_ONLY: ${{ inputs.supprimer == true }}
         run: python LWGarden/src/Garden.py push
 
       # Un tag poussé avec GITHUB_TOKEN ne relance pas ce workflow.

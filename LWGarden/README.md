@@ -79,17 +79,22 @@ them.
 ## Déploiement sans menu
 
 `python LWGarden/src/Garden.py push` déploie les sources sur le compte principal sans
-aucune question, pour un usage automatique. Il lit `LEEKWARS_API_KEY` (ou le compte
-principal de `config.json` s'il existe ; sans `config.json`, les sources sont `src/`),
-ne supprime jamais rien côté serveur, refuse des sources différentes du dernier commit et
-enregistre la publication. Codes de sortie : `0` déployé ou déjà à jour, `1` échec,
-`2` clé absente ou refusée, `3` sources modifiées.
+aucune question, pour un usage automatique. Il se connecte, dans l'ordre, avec
+`LEEKWARS_LOGIN` et `LEEKWARS_PASSWORD`, sinon `LEEKWARS_API_KEY`, sinon le compte
+principal de `config.json` (sans `config.json`, les sources sont `src/`). Une session par
+login crée les IA et dossiers absents du site ; avec `LEEKWARS_DELETE_REMOTE_ONLY=true`
+elle met aussi à la corbeille ceux absents du dépôt. Une clé API n'écrit que dans les IA
+existantes : s'il en manque une, rien n'est déployé ; elle ne supprime jamais rien.
+Garden refuse des sources différentes du dernier commit et enregistre la publication.
+Codes de sortie : `0` déployé ou déjà à jour, `1` échec, `2` identifiants absents ou
+refusés, `3` sources modifiées.
 
 Le workflow `.github/workflows/deploy-leek.yml` l'utilise : il se déclenche à la main dans
 l'onglet Actions (ou sur un tag `leek-*` poussé), lance les tests, déploie, pose le tag
 `leek-AAAAMMJJ-HHMM` du déploiement s'il a été lancé à la main, puis committe
-`Data/publications.json` sur la branche par défaut. Il lui faut le secret
-`LEEKWARS_API_KEY` du dépôt GitHub.
+`Data/publications.json` sur la branche par défaut. Il lui faut les secrets
+`LEEKWARS_LOGIN` et `LEEKWARS_PASSWORD` du dépôt GitHub, ou à défaut `LEEKWARS_API_KEY`.
+La case « supprimer » du lancement manuel active la mise à la corbeille.
 
 Après chaque PUSH réussi (menu ou `push`), Garden écrit `DEPLOYED.ts` à la racine des IA
 sur Leek Wars : un fichier de commentaires, généré et absent de Git, réduit à l'essentiel : la

@@ -120,6 +120,9 @@ class UnattendedApi(DeployFakeApi):
     def connect_with_api_key(self, api_key):
         return api_key == "key"
 
+    def connect(self, login, password):
+        return (login, password) == ("me", "secret")
+
     def get_farmer_self(self):
         return {"farmer": {"login": "me"}}
 
@@ -151,6 +154,38 @@ class UnattendedPushTests(unittest.TestCase):
             with patch.object(FightArchive, "read_git_state", return_value=git_state()):
                 code = Garden.push_unattended(api, {"LEEKWARS_API_KEY": "key"}, config)
         self.assertEqual((code, api.codes, api.created_ais), (1, {"main.ts": "previous"}, []))
+
+    def push_env(self, environ, remote=("main.ts", "old.ts")):
+        with tempfile.TemporaryDirectory() as root:
+            write(root, "main.ts", "code")
+            write(root, "new.ts", "code")
+            config = {"AIs_folder": root, "accounts": [], "data_folder": os.path.join(root, "data")}
+            api = UnattendedApi(ais=[{"path": path} for path in remote],
+                                codes={path: "previous" for path in remote})
+            with patch.object(FightArchive, "read_git_state", return_value=git_state()):
+                code = Garden.push_unattended(api, environ, config)
+        return code, api
+
+    def test_login_push_creates_missing_ais_and_keeps_remote_only_ones_by_default(self):
+        code, api = self.push_env({"LEEKWARS_LOGIN": "me", "LEEKWARS_PASSWORD": "secret",
+                                   "LEEKWARS_API_KEY": "key"})
+        self.assertEqual((code, api.created_ais[0], api.deleted_ais, api.codes["main.ts"]),
+                         (0, ("", "new.ts", 4), [], "code"))
+
+    def test_login_push_trashes_remote_only_ais_only_on_request(self):
+        code, api = self.push_env({"LEEKWARS_LOGIN": "me", "LEEKWARS_PASSWORD": "secret",
+                                   "LEEKWARS_DELETE_REMOTE_ONLY": "true"})
+        self.assertEqual((code, api.deleted_ais), (0, ["old.ts"]))
+
+    def test_api_key_push_never_deletes_even_on_request(self):
+        code, api = self.push_env({"LEEKWARS_API_KEY": "key", "LEEKWARS_DELETE_REMOTE_ONLY": "true"},
+                                  remote=("main.ts", "new.ts", "old.ts"))
+        self.assertEqual((code, api.deleted_ais), (0, []))
+
+    def test_refused_login_does_not_fall_back_to_the_api_key(self):
+        code, api = self.push_env({"LEEKWARS_LOGIN": "me", "LEEKWARS_PASSWORD": "wrong",
+                                   "LEEKWARS_API_KEY": "key"})
+        self.assertEqual((code, api.codes["main.ts"]), (2, "previous"))
 
     def test_refusals_deploy_nothing(self):
         for state, key, expected in ((git_state(dirty=True), "key", 3), (git_state(), "", 2),

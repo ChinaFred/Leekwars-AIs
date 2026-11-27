@@ -38,7 +38,10 @@ git push origin "leek-..."
 ## Après
 
 - Suis l'exécution du workflow et rapporte son résultat réel. Codes de sortie de `Garden.py push` : 1 échec du
-  déploiement, 2 clé `LEEKWARS_API_KEY` absente ou refusée, 3 sources différentes du dernier commit.
+  déploiement, 2 identifiants absents ou refusés, 3 sources différentes du dernier commit.
+- Connexion : secrets `LEEKWARS_LOGIN` et `LEEKWARS_PASSWORD` (crée les IA absentes du site ; la case « supprimer »
+  met à la corbeille celles absentes du dépôt, à ne cocher que sur demande explicite), sinon `LEEKWARS_API_KEY`
+  (ne crée rien : un fichier manquant sur le site fait échouer tout le déploiement).
 - Le workflow écrit aussi `DEPLOYED.ts` à la racine des IA sur Leek Wars (version, date, origine avec le tag, ligne
   `Stratégie:`) : c'est la référence pour savoir ce qui est déployé. Un avertissement « release file not updated »
   dans le journal signifie que ce fichier n'est pas à jour : signale-le.

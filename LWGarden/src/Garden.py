@@ -72,19 +72,39 @@ def record_publication(config, account, summary):
     return record
 
 
+def login_credentials(environ):
+    """(login, password) from LEEKWARS_LOGIN and LEEKWARS_PASSWORD, or None unless both are set."""
+    login = environ.get("LEEKWARS_LOGIN", "").strip()
+    password = environ.get("LEEKWARS_PASSWORD", "")
+    return (login, password) if login and password else None
+
+
 def connect_unattended(api, environ, config):
-    """Connect to the primary account without prompting. Returns (api, farmer or None)."""
+    """Connect to the primary account without prompting. Returns (api, farmer or None).
+
+    LEEKWARS_LOGIN with LEEKWARS_PASSWORD wins over LEEKWARS_API_KEY, which wins over
+    config.json: only a login session can create or delete AIs.
+    """
     environ = os.environ if environ is None else environ
+    credentials = login_credentials(environ)
     api_key = environ.get("LEEKWARS_API_KEY", "").strip()
     principal = next((a for a in config.get("accounts", []) if a.get("primary") == 'true'), None)
-    if not api_key and principal is None:
-        print("Unattended mode needs LEEKWARS_API_KEY (or a primary account in config.json).")
+    if not credentials and not api_key and principal is None:
+        print("Unattended mode needs LEEKWARS_LOGIN and LEEKWARS_PASSWORD, or LEEKWARS_API_KEY "
+              "(or a primary account in config.json).")
         return api, None
     api = LWApi() if api is None else api
-    if not connect_primary(api, principal, api_key):
+    connected = api.connect(*credentials) if credentials else connect_primary(api, principal, api_key)
+    if not connected:
         print("Cannot authenticate to the primary Leek Wars account.")
         return api, None
     return api, api.get_farmer_self()["farmer"]
+
+
+def confirm_unattended_delete(files, folders):
+    for path in list(files) + list(folders):
+        print("Remote-only, moved to trash (LEEKWARS_DELETE_REMOTE_ONLY): " + path)
+    return True
 
 
 def refresh_analysis_files(config):
@@ -112,7 +132,9 @@ def archive_unattended(api=None, environ=None, config=None):
 def push_unattended(api=None, environ=None, config=None):
     """PUSH the sources to the primary account without any prompt (CI, tags).
 
-    Never deletes remote-only items and refuses sources that differ from HEAD, so
+    Creates missing AIs only with a login session (an API key cannot), moves remote-only
+    items to the trash only with a login session and LEEKWARS_DELETE_REMOTE_ONLY=true,
+    and refuses sources that differ from HEAD, so
     that the recorded commit message describes exactly what fights. Returns a
     process exit code: 0 deployed or already up to date, 1 deployment failed,
     2 no credentials or login refused, 3 sources differ from the last commit.
@@ -130,8 +152,11 @@ def push_unattended(api=None, environ=None, config=None):
     print("Unattended PUSH of {0} ({1}) to {2}".format(
         git_state["commit"][:12], git_state["subject"], login))
     try:
-        api_key = (os.environ if environ is None else environ).get("LEEKWARS_API_KEY", "").strip()
-        summary = deploy_local_ais(api, config["AIs_folder"], allow_create=not api_key)
+        environ = os.environ if environ is None else environ
+        by_login = login_credentials(environ) is not None or not environ.get("LEEKWARS_API_KEY", "").strip()
+        delete = by_login and environ.get("LEEKWARS_DELETE_REMOTE_ONLY", "").strip().lower() == "true"
+        summary = deploy_local_ais(api, config["AIs_folder"], allow_create=by_login,
+                                   confirm_delete=confirm_unattended_delete if delete else None)
     except (RuntimeError, ValueError) as error:
         print("PUSH failed: {0}".format(error))
         return 1
