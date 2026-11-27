@@ -1,6 +1,6 @@
 // @version:5.8
-// file version: 2
-import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+// file version: 3
+import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
 import { reportError } from "../Toolbox/Debug.js"
@@ -84,8 +84,7 @@ function observeChests(me: Me): void {
 					LOG_CONTEXT.MEMORY
 				)
 			}
-			// Argument 2 (> 1 ennemi vivant) : toute perte de PV reste « ambiguous », jamais imputée au coffre.
-			const update = chestMemory.update(chest, me, turnNumber, 2)
+			const update = chestMemory.update(chest, me, turnNumber, NEVER_ATTRIBUTE_DAMAGE)
 			if (update !== null && update.newItems.length > 0) {
 				log(() => `[Chest] ${chest.name} (#${chest.id}) observed: ${update.newItems.join(", ")}`, LOG_CONTEXT.MEMORY)
 			}

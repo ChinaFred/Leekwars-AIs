@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -20,8 +20,11 @@ import {
 	tpBoostOf,
 	tpBoostTurns
 } from "../Classes/Context/ShotPlan.js"
+import { actionHistory } from "../Classes/Context/StagnationTracker.js"
+import { aliveEnemies } from "../Classes/Context/Targets.js"
 import { WEAPON_SWAP_TP } from "../Classes/Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Classes/Plannification/ExecutionBudget.js"
+import { TACTICAL_LIMITS } from "../Classes/Plannification/TacticalTypes.js"
 import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
 /** Part créditée des tours futurs couverts par le boost (le contact avec l'ennemi n'est pas garanti). */
@@ -291,6 +294,29 @@ export function decideMpBoost(
 		option,
 		reason: `no firing cell in ${reachable.size} cells with ${me.mp} MP; ${boosted.size} cells with ${boostedMp} MP reach ${unlocked}`
 	}
+}
+
+/**
+ * Boost de PM : seule action décidée AVANT le plan, parce qu'elle en change les entrées (cases atteignables, carte de
+ * danger). `reachable` = mes cases atteignables du tour. Décision et motif (`decideMpBoost`) journalisés avant le
+ * lancer ; puis `refresh` recalcule les deux cartes avec les PM et PT réels, que le lancer ait réussi ou non.
+ * Ce module n'importe pas `Debug.ts` : l'appelant protège l'appel (erreur journalisée sans interrompre le tour).
+ */
+export function castMpBoost(me: Me, reachable: ReachableCells | null, refresh: () => void): void {
+	const decision = decideMpBoost(me, reachable, aliveEnemies(), TACTICAL_LIMITS.cells)
+	const option = decision.option
+	if (option === null) {
+		if (decision.reason !== "") {
+			log(() => `[Boost] MP: not cast: ${decision.reason}`, LOG_CONTEXT.CHIP)
+		}
+		return
+	}
+	const chip = option.chip
+	log(() => `[Boost] MP: casting ${chip.name} (+${option.gain} MP, ${chip.cost} TP) before the plan: ${decision.reason}`,
+		LOG_CONTEXT.CHIP)
+	const result = actionHistory.track(me, chip, me, () => me.useChip(chip, me))
+	log(() => `[Boost] MP: ${chip.name} result ${result}; now ${me.mp} MP, ${me.tp} TP`, LOG_CONTEXT.CHIP)
+	refresh()
 }
 
 /**

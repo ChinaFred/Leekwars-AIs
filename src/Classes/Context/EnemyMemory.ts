@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -11,6 +11,12 @@ export const CRITICAL_FACTOR = 1.3
 
 /** Marge (en PV) sur les bornes de dégâts pour l'arrondi du moteur. */
 export const DAMAGE_TOLERANCE = 1
+
+/**
+ * Valeur de `aliveEnemies` pour `EnemyMemory.update` quand une perte de PV ne doit JAMAIS être imputée à l'entité
+ * observée (un coffre) : elle reste journalisée « ambiguous », comme avec plusieurs ennemis vivants.
+ */
+export const NEVER_ATTRIBUTE_DAMAGE = Number.POSITIVE_INFINITY
 
 type Item = Weapon | Chip
 
@@ -86,8 +92,8 @@ export class EnemyMemory {
 	}
 
 	/**
-	 * À appeler au début de MON tour, avant de planifier. `aliveEnemies` > 1 empêche d'attribuer
-	 * une perte de PV à un ennemi précis (elle est alors journalisée « ambiguous »).
+	 * À appeler au début de MON tour, avant de planifier. `aliveEnemies` > 1 (ou `NEVER_ATTRIBUTE_DAMAGE`) empêche
+	 * d'attribuer une perte de PV à un ennemi précis (elle est alors journalisée « ambiguous »).
 	 */
 	update(entity: Entity, me: Me, turn: number, aliveEnemies = 1): EnemyUpdate | null {
 		const profile = this.profiles.get(entity.id)
