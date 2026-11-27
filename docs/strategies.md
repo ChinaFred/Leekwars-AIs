@@ -117,6 +117,8 @@ Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester blo
 Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 
+Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, 2 à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Aucun seuil ci-dessus n'en dépend.
+
 ## Plan B (`ReservePlan.ts`)
 
 Heuristique séquentielle, utilisée quand le plan conjoint est indisponible ou interrompu. **Pas un optimum.**
