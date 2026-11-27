@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 10
+// file version: 11
+import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "./ReachableCells.js"
@@ -58,7 +59,7 @@ export const MAX_TARGET_ZONE_PAIRS = 16000
  * Valeur déduite de la fenêtre du plan, non mesurée en combat (le log `Target zone:` donne le coût réel en opérations).
  * Contrôlé une fois par anneau du parcours en largeur et une fois par case évaluée ; les marques ne sont pas comptées.
  */
-export const TARGET_ZONE_OPERATIONS_FRACTION = 0.50
+export const TARGET_ZONE_OPERATIONS_FRACTION = OPS_BUDGET.TARGET_ZONE
 
 /**
  * Fournisseur de « cases de tir » : point d'échange pour une implémentation native future
