@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Repli historique et code inatteignable supprimés (`Plannification.ts`, `Items/*`, `src/Tests/`… : 52 → 33 fichiers) ; sans API du plan B, `planAct` journalise et ne joue pas.
 - 2026-11-27 — Portée préférée du profil supprimée (sans effet réel) : « trop près » = distance < 2 (`MIN_SAFE_DISTANCE`), arme du chemin de secours choisie aux dégâts du tour.
 - 2026-11-27 — Alliés lus une fois par observation (`Fight.getAllies` : 2 → 1 appel par tour, zones affichées ou non) ; aucun changement de décision.
 - 2026-11-27 — Code mort supprimé : `simpleActionSequence.ts`, `Computations.ts`, `Helpers.ts` et leurs tests (importés par aucune IA).

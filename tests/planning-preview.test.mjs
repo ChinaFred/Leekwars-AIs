@@ -3,8 +3,6 @@ import assert from "node:assert/strict"
 import { planAct } from "../dist/Brain/PlanActScenario.js"
 import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
 import { executeReservePlan } from "../dist/Classes/Plannification/ReservePlan.js"
-import { Plannification } from "../dist/Classes/Plannification/Plannification.js"
-import { Action } from "../dist/Classes/Plannification/Action.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"
@@ -12,7 +10,6 @@ import { initLeekLogging, getLogConfig, LogConfig, LOG_CONTEXT } from "../dist/T
 
 const TACTICAL = "[Tactical] plan before execution "
 const RESERVE = "[Reserve] plan before execution "
-const LEGACY = "[Plannification] Execute: plan before execution "
 const position = cell => ({ x: cell.x, y: cell.y })
 
 function world({ distance = 7, range = 6, danger = c => c.x === -2 ? 0 : 100 } = {}) {
@@ -250,48 +247,17 @@ for (const failure of ["move", "weapon"]) {
 	})
 }
 
-test("historical planAct: whole queued order and provisional budgets precede execution", () => {
-	const w = world({ distance: 3 }); w.me.chips = [w.heal]
-	delete Fight.weaponCells // chemin de compatibilité réel, pas une imitation du planificateur
-	const trace = capture(w, () => planAct(w.me, w.profile))
-	const p = preview(trace, LEGACY)
-	assert.deepEqual(p.actions.map(a => a.name), ["shoot", "shoot", "heal"])
-	assert.deepEqual(p.tp, { available: 10, remainingPlanned: 0 })
-	assert.deepEqual(p.mp, { available: 4, remainingPlanned: 4 })
-	assert.equal(p.destination, null); assert.equal(p.danger, null); assert.equal(p.score, null)
-	for (let i = 0; i < trace.length; i++) if (trace[i].kind === "action") {
-		assert.match(trace[i - 1].text, /^\[Plannification\]   → .*before action/)
-	}
-	assert.equal(w.me.tp, 0)
-})
-
-test("historical queue exhaustion is not logged as guaranteed action success", () => {
-	const w = world({ distance: 3 }), plan = new Plannification(w.me, w.enemy, w.profile)
-	w.me.refuse = true
-	plan.actions.push(new Action("shoot", () => w.me.useWeapon(w.enemy), "gun"))
-	const trace = capture(w, () => plan.execute())
-	preview(trace, LEGACY)
-	assert.equal(w.me.tp, 10)
-	assert.ok(trace.some(e => e.text?.includes("queue completed, success not inferred")))
-})
-
-for (const mode of ["complete", "reserve", "historical"]) {
+for (const mode of ["complete", "reserve"]) {
 	test(`${mode}: PLANNING off emits nothing even with other contexts enabled; formatting stays lazy`, () => {
-		const w = world({ distance: mode === "historical" ? 3 : 7 }), p = w.complete()
+		const w = world({ distance: 7 }), p = w.complete()
 		let reads = 0
 		let run
 		if (mode === "complete") {
 			Object.defineProperty(p, "score", { get() { reads++; return 50 } })
 			run = () => executeTacticalPlan(w.me, p)
-		} else if (mode === "reserve") {
+		} else {
 			Object.defineProperty(w.gun, "name", { get() { reads++; return "gun" } })
 			run = () => executeReservePlan(w.me, w.profile, w.context)
-		} else {
-			const plan = new Plannification(w.me, w.enemy, w.profile)
-			const action = new Action("shoot", () => w.me.useWeapon(w.enemy))
-			Object.defineProperty(action, "desc", { get() { reads++; return "gun" } })
-			plan.actions.push(action)
-			run = () => plan.execute()
 		}
 		const trace = capture(w, run, false, true)
 		assert.ok(actions(trace).length > 0)

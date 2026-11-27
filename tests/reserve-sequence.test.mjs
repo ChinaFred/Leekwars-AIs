@@ -382,15 +382,13 @@ test("native preparation error reports the unavailable plan and performs no acti
 	assert.ok(r.trace.some(e => e.text?.includes("API failure; stop (movement attempted=false)")))
 })
 
-test("old host remains explicit about deferred native destinations and functional", () => {
+test("old host without Fight.weaponCells: planAct says the reserve API is unavailable and does nothing", () => {
 	const w = arena({ distance: 3 }); w.me.chips = []
 	delete Fight.weaponCells
 	const r = w.run({ contextless: true })
 	assert.equal(r.plan, null)
-	const index = r.trace.findIndex(e => e.text?.includes("historical queue; intent"))
-	assert.ok(index >= 0 && index < r.trace.findIndex(e => e.name))
-	assert.ok(r.trace.some(e => e.text?.includes("reserve API unavailable")))
-	assert.ok(r.actions.some(e => e.name === "shoot"))
+	assert.ok(r.trace.some(e => e.text?.includes("reserve API unavailable; no action")))
+	assert.deepEqual(r.actions, [])
 })
 
 test("PLANNING disabled produces no previews but executes the same preselected sequence", () => {

@@ -61,14 +61,6 @@ runCases("shouldHealWithThreat", [
 	["defensive 80% hp, 8% lost, distance 10", "defensive", 50, [0.80, 0.08, 10], true],
 ])
 
-// shouldUseAttackChip(lifeRatio)
-runCases("shouldUseAttackChip", [
-	["balanced 51% hp", "balanced", 50, [0.51], true],
-	["balanced 50% hp", "balanced", 50, [0.50], true],
-	["balanced 49% hp", "balanced", 50, [0.49], true],
-	["defensive 70% hp (threshold 0.65)", "defensive", 50, [0.70], true],
-])
-
 // shouldShield(lifeRatio, distance, threatRange)
 runCases("shouldShield", [
 	["aggressive 70: 70% hp (only shields at critical hp)", "aggressive", 70, [0.70, 2, 3], false],

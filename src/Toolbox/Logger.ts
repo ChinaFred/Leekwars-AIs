@@ -31,7 +31,7 @@ export const LOG_CONTEXT = {
 	CHIP: "chip",
 	/** Plannification générale (exécution de la liste d'actions). */
 	PLANNING: "planning",
-	/** Options de tir (dumps de ShootingOption/ShootingOptions). */
+	/** Options de tir (aucun émetteur actuellement). */
 	SHOOTING: "shooting",
 	/** Mémoire de l'adversaire. */
 	MEMORY: "memory",

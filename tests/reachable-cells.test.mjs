@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { makeTurnWorld } from "./helpers/turn-world.mjs"
 import test from "node:test"
 
 globalThis.Color = { rgb: () => 0 }
@@ -414,55 +415,19 @@ test("existing EnemyProfile data is unchanged by the base class refactoring", ()
 
 // --- intégration dans turn() ----------------------------------------------
 
+/** Monde jouable par les plans actuels (`helpers/turn-world.mjs`) sur la grille de ce fichier : alliée en (5,7). */
 function makeCombatWorld(ids) {
 	const grid = makeGrid(21, 21)
-	const actions = []
-	let tp = 7
-	let equippedWeapon = null
-	let inRange = false
-	const enemy = grid.place({
-		id: ids.enemy, name: "enemy", level: 10, life: 100, maxLife: 100, mp: 2, tp: 5,
-		strength: 0, agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0,
-		weapon: { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 3, features: [] },
-		weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 9, 5)
-	const ally = grid.place(makeEntity(ids.ally, 2), 5, 7)
-	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
-	const strongWeapon = { name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	const bandage = { name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] }
-	const barrier = { name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] }
-	const attackChip = { name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	const me = grid.place({
-		id: 1, name: "me", level: 10, life: 70, maxLife: 100, mp: 3, tp,
-		strength: 0, wisdom: 0,
-		weapons: [weakWeapon, strongWeapon],
-		chips: [bandage, barrier, attackChip],
-		effects: [], launchedEffects: [],
-		get weapon() { return equippedWeapon },
-		distance: () => 4,
-		say() {},
-		setWeapon(weapon) { actions.push("equip"); equippedWeapon = weapon; tp -= 1 },
-		useChip(chip) { actions.push(chip.name); tp -= chip.cost },
-		chipCells: () => [me.cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() { actions.push("move"); inRange = true },
-		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
-		moveAwayFrom() { actions.push("retreat") }
-	}, 5, 5)
-	globalThis.Fight = {
-		me,
-		turn: 1,
-		getNearestEnemy: () => enemy,
-		getEnemies: () => [enemy],
-		getAliveEnemies: () => (enemy.life > 0 ? [enemy] : []),
-		getAllies: () => [me, ally]
-	}
-	globalThis.Weapon = { pistol: weakWeapon }
-	globalThis.Chip = { bandage }
-	return { actions, grid, me, ally, enemy }
+	const world = makeTurnWorld({
+		turnNumber: 1, grid, enemyId: ids.enemy, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5,
+		enemyWeapon: { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 3, features: [] },
+		ally: makeEntity(ids.ally, 2)
+	})
+	return { ...world, grid }
 }
 
-const EXPECTED_ACTIONS = ["equip", "move", "attack chip", "shoot", "shoot", "bandage"]
+/** Tirs effectués : le plan a joué (deux tirs à 4 PT sur 10 PT), quel que soit le plan retenu pour le reste. */
+const shots = (actions) => actions.filter((action) => action === "shoot").length
 
 async function runTurnCapturingLogs(turn) {
 	const lines = []
@@ -476,7 +441,7 @@ async function runTurnCapturingLogs(turn) {
 	return lines
 }
 
-test("turn() computes the reachable cells of me, my ally and the enemy, logs one short line, and plays as before", async () => {
+test("turn() computes the reachable cells of me, my ally and the enemy, logs one short line, and the plan fires", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
@@ -486,7 +451,7 @@ test("turn() computes the reachable cells of me, my ally and the enemy, logs one
 
 	const lines = await runTurnCapturingLogs(turn)
 
-	assert.deepEqual(actions, EXPECTED_ACTIONS)
+	assert.equal(shots(actions), 2)
 	assert.equal(enemyMemory.getReachable(1).size, 23)
 	assert.equal(enemyMemory.getReachable(21).size, 12)
 	assert.equal(enemyMemory.getReachable(20).size, 13)
@@ -508,7 +473,7 @@ test("turn() still plays when the reachable-cells computation fails, and reports
 
 	await runTurnCapturingLogs(turn)
 
-	assert.deepEqual(actions, EXPECTED_ACTIONS)
+	assert.equal(shots(actions), 2)
 	assert.equal(enemyMemory.has(30), true) // observeEnemies a quand même fonctionné
 	assert.equal(debugLogs.some((entry) => entry.includes("observeReachableCells") && entry.includes("grid down")), true)
 })
@@ -533,13 +498,13 @@ test("turn() logs the operations line after TURN END, and still works when Syste
 		assert.equal(operationsIndex, endIndex + 1)
 		assert.equal(operationsIndex, lines.length - 1)
 		assert.equal(lines[operationsIndex], "Operations: 1234567/20000000 (6.2%)")
-		assert.deepEqual(actions, EXPECTED_ACTIONS)
+		assert.equal(shots(actions), 2)
 	} finally {
 		delete globalThis.System
 	}
 })
 
-test("turn() does not feed the reachable data to planAct: same actions with or without a ring of obstacles", async () => {
+test("turn() still fires when a ring of obstacles leaves me no reachable cell but my own", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
@@ -548,5 +513,5 @@ test("turn() does not feed the reachable data to planAct: same actions with or w
 		grid.cell(x, y).obstacle = true
 	}
 	await runTurnCapturingLogs(turn)
-	assert.deepEqual(actions, EXPECTED_ACTIONS)
+	assert.equal(shots(actions), 2)
 })

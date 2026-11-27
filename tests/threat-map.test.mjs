@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { makeTurnWorld } from "./helpers/turn-world.mjs"
 import test from "node:test"
 
 globalThis.Color = { rgb: () => 0 }
@@ -1136,51 +1137,14 @@ test("EnemyMemory.updateThreatMap: dead enemies are ignored; the enemy BFS runs 
 
 // --- intégration dans turn() ----------------------------------------------
 
+/** Monde jouable par les plans actuels (`helpers/turn-world.mjs`) sur la grille de ce fichier : alliée en (5,7). */
 function makeCombatWorld(ids, enemyWeapon, turnNumber) {
 	const grid = makeGrid(21, 21)
-	const actions = []
-	let tp = 7
-	let equippedWeapon = null
-	let inRange = false
-	const enemy = grid.place({
-		id: ids.enemy, name: "enemy", level: 10, life: 100, maxLife: 100, mp: 2, tp: 5,
-		strength: 0, agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0,
-		weapon: enemyWeapon, weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 9, 5)
-	const ally = grid.place(makeEntity(ids.ally, 2), 5, 7)
-	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
-	const strongWeapon = { name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	const bandage = { name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] }
-	const barrier = { name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] }
-	const attackChip = { name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	const me = grid.place({
-		id: 1, name: "me", level: 10, life: 70, maxLife: 100, mp: 3, tp,
-		strength: 0, wisdom: 0,
-		weapons: [weakWeapon, strongWeapon],
-		chips: [bandage, barrier, attackChip],
-		effects: [], launchedEffects: [],
-		get weapon() { return equippedWeapon },
-		distance: () => 4,
-		say() {},
-		setWeapon(weapon) { actions.push("equip"); equippedWeapon = weapon; tp -= 1 },
-		useChip(chip) { actions.push(chip.name); tp -= chip.cost },
-		chipCells: () => [me.cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() { actions.push("move"); inRange = true },
-		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
-		moveAwayFrom() { actions.push("retreat") }
-	}, 5, 5)
-	globalThis.Fight = {
-		me,
-		turn: turnNumber,
-		getNearestEnemy: () => enemy,
-		getEnemies: () => [enemy],
-		getAliveEnemies: () => (enemy.life > 0 ? [enemy] : []),
-		getAllies: () => [me, ally]
-	}
-	globalThis.Weapon = { pistol: weakWeapon }
-	globalThis.Chip = { bandage }
-	return { actions, grid, me, ally, enemy }
+	const world = makeTurnWorld({
+		turnNumber, grid, enemyId: ids.enemy, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5, enemyWeapon,
+		ally: makeEntity(ids.ally, 2)
+	})
+	return { ...world, grid }
 }
 
 const armedGun = (extra = {}) => ({
@@ -1200,7 +1164,7 @@ async function runTurnCapturingLogs(turn) {
 	return lines
 }
 
-test("turn() builds the threat map, logs one short [Threat] line before TURN END, and plays exactly as with an unarmed enemy", async () => {
+test("turn() builds the threat map, logs one short [Threat] line before TURN END, and fires as with an unarmed enemy", async () => {
 	// tours distincts : le module garde `enemyMemory` (et mes cases atteignables) d'un test à l'autre
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
@@ -1214,8 +1178,9 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 	debugLogs.length = 0
 	const lines = await runTurnCapturingLogs(turn)
 
-	assert.deepEqual(armed.actions, unarmedActions)
-	assert.deepEqual(armed.actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
+	// La carte de danger entre dans le score du plan : seul le nombre de tirs est commun aux deux mondes.
+	assert.equal(unarmedActions.filter((action) => action === "shoot").length, 2)
+	assert.equal(armed.actions.filter((action) => action === "shoot").length, 2)
 	const threatLines = lines.filter((line) => line.startsWith("[Threat]"))
 	assert.equal(threatLines.length, 1)
 	assert.match(threatLines[0], /^\[Threat\] 23\/23 cells, danger max 15\.0 min \d+\.0, safest \(\d+,\d+\), 1 armed enemies, \d+ pairs, 0 LoS$/)
@@ -1240,7 +1205,7 @@ test("turn() still plays and logs reachable cells when the threat map fails, and
 
 	const lines = await runTurnCapturingLogs(turn)
 
-	assert.deepEqual(actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
+	assert.equal(actions.filter((action) => action === "shoot").length, 2)
 	assert.equal(lines.filter((line) => line.startsWith("[Reachable]")).length, 1)
 	assert.equal(lines.some((line) => line.startsWith("[Threat]")), false)
 	assert.equal(debugLogs.some((entry) => entry.includes("observeThreatMap") && entry.includes("los down")), true)
@@ -1251,11 +1216,11 @@ test("turn() logs 'unavailable' when my reachable cells could not be computed", 
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
-	const { actions } = makeCombatWorld({ enemy: 140, ally: 141 }, armedGun(), 13)
+	makeCombatWorld({ enemy: 140, ally: 141 }, armedGun(), 13)
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	const lines = await runTurnCapturingLogs(turn)
-	assert.deepEqual(actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
 	assert.equal(lines.filter((line) => line === "[Threat] unavailable").length, 1)
+	assert.ok(lines.some((line) => line.includes("=== KASSBI TURN END ===")), "the turn still ends normally")
 })
 
 // --- zone visée (buildTargetZone) -------------------------------------------------------------------

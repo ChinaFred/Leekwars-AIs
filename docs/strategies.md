@@ -5,7 +5,7 @@ seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`C
 
 **Sommaire** — [Chaîne de décision](#chaîne-de-décision) · [Plan conjoint](#plan-conjoint-tacticalplannerts) : [score](#score-et-compromis-explicite),
 [stagnation](#sortie-de-stagnation), [bornes et ops](#bornes-et-budget-dopérations) · [Plan B](#plan-b-reserveplants) · [Boosts](#boosts-srcbrainstrengthboostts) ·
-[Séquence historique](#séquence-historique-plannificationts-strategyts) : [seuils](#seuils-par-stratégie), [déplacements](#déplacements-movementbehaviorts) · [Mémoire de l'adversaire](#mémoire-de-ladversaire) :
+[Seuils par stratégie](#seuils-par-stratégie-strategyts) · [Mémoire de l'adversaire](#mémoire-de-ladversaire) :
 [cases atteignables](#cases-atteignables-reachablecellsts), [carte de danger](#carte-de-danger-threatmapts-shotplants-launchpatternts) · [Journalisation](#journalisation-toolboxloggerts-toolboxmarkerts) · [Limites connues](#limites-connues)
 
 ## Chaîne de décision
@@ -19,8 +19,8 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
    (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
-   - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
-     historique** (`Plannification.ts`), sans boost.
+   - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
+     journalisée (`PLANNING`).
 4. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
    (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
@@ -150,17 +150,11 @@ par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Fo
   non tronquées, sans case de tir native d'une arme ou puce offensive prête payable ; zone à PM + gain non tronquée, ≤ 113 cases
   (sinon plan B), avec une case de tir d'une arme payable après le boost (+ 1 PT si non équipée) ; opérations < 80 %.
 
-## Séquence historique (`Plannification.ts`, `Strategy/*.ts`)
+## Seuils par stratégie (`Strategy/*.ts`)
 
-Chemin de compatibilité ; les classes `Strategy` fournissent les seuils du rôle aux trois chemins. Ordre normal : arme → déplacement → tir ou
-puce → bouclier/soin → repli. **Ordre critique** (distance ≤ 8, vie ≤ 60 %, `shouldHide` vrai) : repli → puces → tir → déplacement.
-
-### Seuils par stratégie
-
+Les classes `Strategy` fournissent les seuils du rôle au plan conjoint et au plan B : soin, bouclier, repli (poids `w`).
 `vie` = PV / PV max ; `perte` = 1 − `vie` ; `d` = distance à la cible ; `a` = agressivité / 100 (0,5 par défaut,
-valeur correspondante entre parenthèses). **Portée réelle** : soin et bouclier dans le plan conjoint et le plan B ;
-repli dans les trois chemins (poids `w` des plans, ordre critique de la séquence historique) ; puce d'attaque :
-séquence historique seulement.
+valeur correspondante entre parenthèses).
 
 | Décision | Balanced | Aggressive | Defensive |
 |---|---|---|---|
@@ -169,23 +163,8 @@ séquence historique seulement.
 | Bouclier | `d ≤ portée de menace` et `vie ≤ 0,95 − 0,20a` (0,85) | `d ≤ portée de menace` et `vie ≤ 0,45 − 0,15a` (0,375) | `d ≤ portée de menace + 1` et `vie ≤ 0,98 − 0,10a` (0,93) |
 | Repli (trop près et blessé) | `vie ≤ 0,55 − 0,20a` (0,45) | `vie ≤ 0,30 − 0,15a` (0,225) | `vie ≤ 0,80 − 0,10a` (0,75) |
 | Repli préventif | `d ≤ 8` et `vie ≤ 0,40` | `d ≤ 1` et `vie ≤ 0,50`, ou `d ≤ 10` et `vie ≤ 0,25` | `d ≤ 7` et `vie ≤ 0,55 − 0,10a` (0,50) |
-| Puce d'attaque | `vie ≥ 0,50 − 0,20a` (0,40) | `vie ≥ 0,45 − 0,25a` (0,325) | `vie ≥ 0,75 − 0,20a` (0,65) |
 
 - « Trop près » : `d < 2` (`MIN_SAFE_DISTANCE`, `LeekStrategy.ts`), sans réglage de profil. Portée de menace : PM de l'ennemi + portée max de son arme.
-- Arme de la séquence historique : meilleurs dégâts moyens du tour (première de la liste à égalité).
-- Le soin est sauté si tirer rapporte plus : `dégâts par PT × coût du soin > 2 × soin moyen`.
-- **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux peuvent tirer et `vie ≤ 0,60`.
-
-### Déplacements (`MovementBehavior.ts`)
-
-| Qui peut tirer au prochain tour | Comportement |
-|---|---|
-| L'ennemi seulement | `retreat_to_corner` : case libre voisine d'un obstacle, loin de l'ennemi |
-| Moi seulement | `aggressive_kiting` : rester à la distance moyenne des portées max |
-| Les deux | `zone_control` : avancer, tirer, puis reculer avec les PM restants si cela sort de sa portée |
-| Aucun | `simple_advance` |
-
-Hypothèse de grille : voisins orthogonaux `(x ± 1, y)` et `(x, y ± 1)`, non vérifiée en combat réel.
 
 ## Mémoire de l'adversaire
 

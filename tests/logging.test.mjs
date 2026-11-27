@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { makeTurnWorld } from "./helpers/turn-world.mjs"
 
 globalThis.Color = { rgb: (red, green, blue) => (red << 16) | (green << 8) | blue }
 const debugLogs = []
@@ -12,7 +13,6 @@ globalThis.Fight = { turn: 1, me: { id: 7, name: "Kassbi" } }
 const pristine = await import("../dist/Toolbox/Logger.js?pristine")
 const logger = await import("../dist/Toolbox/Logger.js")
 const debug = await import("../dist/Toolbox/Debug.js")
-const { CombatLogger } = await import("../dist/Toolbox/CombatLogger.js")
 const { LOG_CONTEXT, LOG_CONTEXTS, LogConfig, log, initLeekLogging, resetLeekLogging, getLogConfig, isLogEnabled } = logger
 
 const REQUIRED_CONTEXTS = [
@@ -287,23 +287,6 @@ test("logTurnOperations, begin/end-turn banners, debugSet/debugMap and Operation
 	})
 })
 
-test("CombatLogger.printDecisions follows the COMBAT context", () => {
-	const combat = new CombatLogger()
-	const me = { life: 50, maxLife: 100, distance: () => 3 }
-	const target = { life: 80, maxLife: 100 }
-	combat.setTurn(2)
-	combat.logDecision("shoot", "fire", "in range", 6, 4, 3, 3, me, target, "balanced")
-
-	const active = withConfig(new LogConfig(), () => captureConsole(() => combat.printDecisions()))
-	assert.equal(active.length, 3)
-	assert.equal(active[0][0], "\n=== KASSBI COMBAT DECISIONS LOG ===")
-	assert.match(active[1][0], /\[Tour 2\] shoot\n {2}Decision: fire\n[\s\S]*Behavior: balanced\n$/)
-	assert.equal(active[2][0], "\n=== END LOG ===\n")
-
-	const hidden = withConfig(new LogConfig().setEnabled(LOG_CONTEXT.COMBAT, false), () => captureConsole(() => combat.printDecisions()))
-	assert.deepEqual(hidden, [])
-})
-
 // --- turn() complet --------------------------------------------------------------
 
 function makeGrid(width, height) {
@@ -318,6 +301,7 @@ function makeGrid(width, height) {
 		lineOfSight: () => true
 	}
 	return {
+		cells,
 		place(entity, x, y) {
 			const cell = cells.get(`${x},${y}`)
 			cell.entity = entity
@@ -333,55 +317,17 @@ const makeEntity = (id, mp) => ({
 	weapon: null, weapons: [], chips: [], effects: [], launchedEffects: []
 })
 
+/** Monde jouable par les plans actuels (`helpers/turn-world.mjs`) : alliée en (5,7), ennemi armé à 4 cases. */
 function makeCombatWorld(runId, { enemyLife = 100 } = {}) {
 	const grid = makeGrid(21, 21)
-	const actions = []
-	let tp = 7
-	let equippedWeapon = null
-	let inRange = false
-	const enemyGun = {
-		id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false,
-		features: [{ type: 1, minValue: 10, maxValue: 20 }]
-	}
-	const enemy = grid.place({
-		id: 200 + 2 * runId, name: "enemy", level: 10, life: enemyLife, maxLife: 100, mp: 2, tp: 5,
-		strength: 0, agility: 0, wisdom: 0, resistance: 0, science: 0, magic: 0,
-		weapon: enemyGun, weapons: [], chips: [], effects: [], launchedEffects: []
-	}, 9, 5)
-	const ally = grid.place(makeEntity(201 + 2 * runId, 2), 5, 7)
-	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
-	const strongWeapon = { name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	const bandage = { name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] }
-	const barrier = { name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] }
-	const attackChip = { name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	const me = grid.place({
-		id: 1, name: "me", level: 10, life: 70, maxLife: 100, mp: 3, tp,
-		strength: 0, wisdom: 0,
-		weapons: [weakWeapon, strongWeapon],
-		chips: [bandage, barrier, attackChip],
-		effects: [], launchedEffects: [],
-		get weapon() { return equippedWeapon },
-		distance: () => 4,
-		say() {},
-		setWeapon(weapon) { actions.push("equip"); equippedWeapon = weapon; tp -= 1 },
-		useChip(chip) { actions.push(chip.name); tp -= chip.cost },
-		chipCells: () => [me.cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() { actions.push("move"); inRange = true },
-		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
-		moveAwayFrom() { actions.push("retreat") }
-	}, 5, 5)
-	globalThis.Fight = {
-		me,
-		turn: 100 + runId,
-		getNearestEnemy: () => enemy,
-		getEnemies: () => [enemy],
-		getAliveEnemies: () => (enemy.life > 0 ? [enemy] : []),
-		getAllies: () => [me, ally]
-	}
-	globalThis.Weapon = { pistol: weakWeapon }
-	globalThis.Chip = { bandage }
-	return { actions }
+	return makeTurnWorld({
+		turnNumber: 100 + runId, grid, enemyId: 200 + 2 * runId, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5, enemyLife,
+		ally: makeEntity(201 + 2 * runId, 2),
+		enemyWeapon: {
+			id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false,
+			features: [{ type: 1, minValue: 10, maxValue: 20 }]
+		}
+	})
 }
 
 let runCounter = 1
@@ -396,6 +342,7 @@ async function playTurn(config, options) {
 	const lines = []
 	// `[History]` : le tour et la passivité viennent de l'état partagé du module (un tour de plus à chaque monde).
 	console.log = (...args) => lines.push(args.join(" ").replace(/#\d+/g, "#N").replace(/\be\d+\b/g, "eN")
+		.replace(/"(target|id|awayFrom)":\d+/g, '"$1":N')
 		.replace(/^\[History\] T\d+ (.*) passive \d+ \|/, "[History] TN $1 passive N |"))
 	try {
 		initLeekLogging(config)
@@ -418,14 +365,12 @@ const CONTEXT_LINES = {
 	[LOG_CONTEXT.DANGER_ZONE]: (line) => line.startsWith("Danger zone:"),
 	[LOG_CONTEXT.TARGET_ZONE]: (line) => line.startsWith("Target zone:"),
 	[LOG_CONTEXT.OPERATIONS]: (line) => line.startsWith("Operations: "),
-	[LOG_CONTEXT.WEAPON]: (line) => /^\[Plannification\] (Weapon |ChosenWeapon:|EquipWeapon:|SkipEquipWeapon:|Shoot:|SkipShoot:)/.test(line),
-	[LOG_CONTEXT.MOVEMENT]: (line) => /^\[Plannification\] (Move:|SkipMove:|Hide:|RetreatAfterShoot:)/.test(line),
-	[LOG_CONTEXT.CHIP]: (line) => /^\[Plannification\] (AttackChip:|Heal:|SkipHeal:)/.test(line),
-	[LOG_CONTEXT.ARMOR]: (line) => line.startsWith("[Plannification] Shield"),
-	[LOG_CONTEXT.STRATEGY]: (line) => /^\[Plannification\] (PredictContactNextTurn:|ChipsAfterShoot:|SkipChipsAfterShoot:|HideCheck:|SkipHide:|RetreatCheck:|SkipRetreatAfterShoot:)/.test(line),
-	[LOG_CONTEXT.PLANNING]: (line) => /^\[Plannification\] (Execute:|  →|Done:|SkipShootOrChip:)/.test(line)
+	[LOG_CONTEXT.WEAPON]: (line) => line.startsWith("[Weapon] "),
+	[LOG_CONTEXT.CHIP]: (line) => line.startsWith("[Boost] "),
+	[LOG_CONTEXT.PLANNING]: (line) => /^\[(Tactical|Reserve|Plannification)\] /.test(line)
 }
-const SCENARIO_DEPENDENT = new Set([LOG_CONTEXT.ARMOR]) // aucun bouclier n'est planifié dans ce scénario
+// Ni arme à équiper au tour 1 (une seule arme, déjà en main) ni boost dans ce scénario.
+const SCENARIO_DEPENDENT = new Set([LOG_CONTEXT.WEAPON, LOG_CONTEXT.CHIP])
 
 test("turn() with every context enabled: unchanged lines and order (TURN END, then Operations last)", async () => {
 	const originalRandom = Math.random
@@ -437,13 +382,12 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 		assert.equal(first.lines.filter((line) => line.startsWith("[Speech] Taunt")).length, 1)
 
 		const { lines, actions } = await playTurn(new LogConfig(), { enemyLife: 10 })
-		assert.deepEqual(actions, ["equip", "move", "attack chip", "shoot", "shoot", "bandage"])
+		assert.deepEqual(actions, ["shoot"]) // 10 PV : le premier tir (22) tue, le second est annulé
 		assert.equal(lines[0], "\n=== KASSBI TURN START ===")
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
 		assert.equal(lines.at(-2), "=== KASSBI TURN END ===\n")
-		assert.equal(lines.at(-3), "[History] TN TP 0/7 MP 0/3 dealt 0 taken 0 passive N | " +
-			"equip:?:-; move:?:-; attack chip:?:0; strong:?:0; strong:?:0; bandage:?:-")
-		assert.ok(lines.some((line) => line.startsWith("[Plannification] Move: distance=4")))
+		assert.equal(lines.at(-3), "[History] TN TP 4/10 MP 0/3 dealt 22 taken 0 passive N | machine_gun:1:22")
+		assert.ok(lines.some((line) => line.startsWith("[Tactical] plan before execution")))
 		assert.ok(lines.some((line) => line.startsWith("[Reachable] me:")))
 		assert.ok(lines.some((line) => line.startsWith("[Threat] ")))
 		assert.ok(lines.some((line) => line.startsWith("[EnemyMemory] Identified")))
@@ -509,118 +453,6 @@ test("importing Kassbi_Class installs its own all-enabled config (leekLogConfig)
 	} finally {
 		leekLogConfig.setAll(true)
 		resetLeekLogging()
-	}
-})
-
-// --- planAct seul : contextes ARMOR et laziness de Plannification.debug -----------------------
-
-/** Monde minimal pour `planAct` ; `distanceCalls.count` compte les appels à `me.distance` (log paresseux compris). */
-function makePlanWorld({ life, weapons = [], chips, enemyWeapon = null, enemyMp = 2 }) {
-	const actions = []
-	const distanceCalls = { count: 0 }
-	let tp = 7
-	let equippedWeapon = null
-	let inRange = false
-	const cell = { x: 0, y: 0, empty: false, obstacle: false, entity: null }
-	const target = { id: 2, name: "enemy", cell, mp: enemyMp, life: 100, maxLife: 100, weapon: enemyWeapon }
-	const me = {
-		id: 1, name: "me", cell, life, maxLife: 100, mp: 3, tp, strength: 0, wisdom: 0, weapons, chips,
-		get weapon() { return equippedWeapon },
-		distance: () => { distanceCalls.count++; return 4 },
-		setWeapon(weapon) { actions.push("equip"); equippedWeapon = weapon; tp -= 1 },
-		useChip(chip) { actions.push(chip.name); tp -= chip.cost },
-		chipCells: () => [cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() { actions.push("move"); inRange = true },
-		useWeapon() { actions.push("shoot"); tp -= equippedWeapon.cost },
-		moveAwayFrom() { actions.push("retreat") }
-	}
-	globalThis.Fight = {
-		me, turn: 1, getNearestEnemy: () => target, getEnemies: () => [target], getAliveEnemies: () => [target], getAllies: () => [me]
-	}
-	globalThis.Chip = { bandage: chips.find((chip) => chip.name === "bandage") ?? { name: "bandage", cost: 1, currentCooldown: 0, features: [] } }
-	globalThis.Weapon = {}
-	return { actions, distanceCalls }
-}
-
-async function planWith(config, worldOptions) {
-	const { planAct } = await import("../dist/Brain/PlanActScenario.js")
-	const world = makePlanWorld(worldOptions)
-	const lines = []
-	const original = console.log
-	console.log = (...args) => lines.push(args.join(" "))
-	try {
-		initLeekLogging(config)
-		planAct(globalThis.Fight.me)
-	} finally {
-		console.log = original
-		resetLeekLogging()
-	}
-	return { lines, actions: world.actions, distanceCalls: world.distanceCalls.count }
-}
-
-const SHIELD_WORLD = {
-	life: 50,
-	chips: [{ name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] }],
-	enemyWeapon: { maxRange: 5 }
-}
-const HEAL_WORLD = {
-	// même scénario que tests/plannification.test.mjs : equip, move, attack chip, shoot ×2, bandage
-	life: 70,
-	weapons: [
-		{ name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] },
-		{ name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	],
-	chips: [
-		{ name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] },
-		{ name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] },
-		{ name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	],
-	enemyWeapon: { maxRange: 3 }
-}
-
-test("planAct: Shield logs belong to ARMOR only (the turn() scenario never plans a shield)", async () => {
-	const baseline = await planWith(new LogConfig(), SHIELD_WORLD)
-	assert.deepEqual(baseline.actions, ["shield"])
-	const shieldLines = baseline.lines.filter((line) => line.startsWith("[Plannification] Shield"))
-	assert.equal(shieldLines.length, 1)
-
-	const armorOff = await planWith(new LogConfig().setEnabled(LOG_CONTEXT.ARMOR, false), SHIELD_WORLD)
-	assert.deepEqual(armorOff.lines, baseline.lines.filter((line) => !line.startsWith("[Plannification] Shield")))
-	assert.deepEqual(armorOff.actions, baseline.actions)
-
-	// désactiver tout SAUF ARMOR : seules les lignes de bouclier restent
-	const onlyArmor = await planWith(new LogConfig().setAll(false).setEnabled(LOG_CONTEXT.ARMOR, true), SHIELD_WORLD)
-	assert.deepEqual(onlyArmor.lines, shieldLines)
-	assert.deepEqual(onlyArmor.actions, baseline.actions)
-})
-
-test("planAct: a disabled context neither prints nor evaluates its lazy text (me.distance count), actions unchanged", async () => {
-	const baseline = await planWith(new LogConfig(), HEAL_WORLD)
-	assert.ok(baseline.actions.includes("bandage"), "the scenario must plan the heal")
-	assert.ok(baseline.lines.some((line) => line.startsWith("[Plannification] Heal:")))
-
-	const chipOff = await planWith(new LogConfig().setEnabled(LOG_CONTEXT.CHIP, false), HEAL_WORLD)
-	assert.equal(chipOff.lines.some((line) => line.startsWith("[Plannification] Heal:")), false)
-	assert.deepEqual(chipOff.actions, baseline.actions)
-	assert.ok(chipOff.distanceCalls < baseline.distanceCalls, "the Heal log text (me.distance) must not be evaluated when CHIP is off")
-
-	const silent = await planWith(new LogConfig().setAll(false), HEAL_WORLD)
-	assert.deepEqual(silent.lines, [])
-	assert.deepEqual(silent.actions, baseline.actions)
-	assert.ok(silent.distanceCalls < baseline.distanceCalls, "no log text may be evaluated when every context is off")
-})
-
-test("planAct: lazy log texts that throw are swallowed and never change the planned actions", async () => {
-	const baseline = await planWith(new LogConfig(), HEAL_WORLD)
-	const original = Number.prototype.toFixed
-	Number.prototype.toFixed = function () { throw new Error("formatting failure inside a log text") }
-	try {
-		const broken = await planWith(new LogConfig(), HEAL_WORLD)
-		assert.deepEqual(broken.actions, baseline.actions)
-		assert.ok(broken.lines.length > 0 && broken.lines.length < baseline.lines.length, "the failing lines are dropped, the others kept")
-	} finally {
-		Number.prototype.toFixed = original
 	}
 })
 

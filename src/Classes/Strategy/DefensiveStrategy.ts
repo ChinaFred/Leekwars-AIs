@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { LeekStrategy, MIN_SAFE_DISTANCE } from "./LeekStrategy.js"
 
 export class DefensiveStrategy extends LeekStrategy {
@@ -39,9 +39,5 @@ export class DefensiveStrategy extends LeekStrategy {
 		}
 		
 		return false
-	}
-
-	shouldUseAttackChip(lifeRatio: number): boolean {
-		return lifeRatio >= 0.75 - 0.20 * this.getAggressionRatio()
 	}
 }

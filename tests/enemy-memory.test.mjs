@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { makeTurnWorld } from "./helpers/turn-world.mjs"
 
 globalThis.Color = { rgb: () => 0 }
 const debugLogs = []
@@ -379,95 +380,18 @@ test("the hit journal is bounded and keeps the most recent entries", () => {
 	assert.equal(hits[0].turn, MAX_HIT_LOG + 11 - MAX_HIT_LOG + 1)
 })
 
+/** Monde jouable par le plan conjoint (`helpers/turn-world.mjs`) : ennemi à 4 cases, armé d'un « enemy gun » de portée 0 à 3. */
 function makeCombatWorld(enemyId) {
-	const actions = []
-	let tp = 7
-	let mp = 3
-	let equippedWeapon = null
-	let inRange = false
-	const cell = { x: 0, y: 0, empty: false, obstacle: false, entity: null }
-	const enemy = {
-		id: enemyId,
-		name: "enemy",
-		level: 10,
-		cell,
-		life: 100,
-		maxLife: 100,
-		mp: 2,
-		tp: 5,
-		strength: 0,
-		agility: 0,
-		wisdom: 0,
-		resistance: 0,
-		science: 0,
-		magic: 0,
-		weapon: { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 3, features: [] },
-		weapons: [],
-		chips: [],
-		effects: [],
-		launchedEffects: []
-	}
-	const weakWeapon = { name: "weak", cost: 3, minRange: 0, maxRange: 2, features: [{ type: 1, minValue: 5, maxValue: 10 }] }
-	const strongWeapon = { name: "strong", cost: 2, minRange: 1, maxRange: 5, features: [{ type: 1, minValue: 12, maxValue: 18 }] }
-	const bandage = { name: "bandage", cost: 1, currentCooldown: 0, features: [{ type: 2, minValue: 5, maxValue: 15 }] }
-	const barrier = { name: "shield", cost: 1, currentCooldown: 0, features: [{ type: 3, minValue: 10, maxValue: 10 }] }
-	const attackChip = { name: "attack chip", cost: 1, currentCooldown: 0, features: [{ type: 1, minValue: 4, maxValue: 8 }] }
-	const me = {
-		id: 1,
-		name: "me",
-		cell,
-		life: 70,
-		maxLife: 100,
-		mp,
-		tp,
-		strength: 0,
-		wisdom: 0,
-		weapons: [weakWeapon, strongWeapon],
-		chips: [bandage, barrier, attackChip],
-		get weapon() { return equippedWeapon },
-		distance: () => 4,
-		say() {},
-		setWeapon(weapon) {
-			actions.push("equip")
-			equippedWeapon = weapon
-			tp -= 1
-		},
-		useChip(chip) {
-			actions.push(chip.name)
-			tp -= chip.cost
-		},
-		chipCells: () => [cell],
-		canUseWeapon: () => inRange && equippedWeapon !== null && tp >= equippedWeapon.cost,
-		moveToward() {
-			actions.push("move")
-			mp -= 1
-			inRange = true
-		},
-		useWeapon() {
-			actions.push("shoot")
-			tp -= equippedWeapon.cost
-		},
-		moveAwayFrom() {
-			actions.push("retreat")
-			mp = 0
-		}
-	}
-	globalThis.Fight = {
-		me,
-		turn: 1,
-		getNearestEnemy: () => enemy,
-		getEnemies: () => [enemy],
-		getAliveEnemies: () => [enemy],
-		getAllies: () => [me]
-	}
-	globalThis.Weapon = { pistol: weakWeapon }
-	globalThis.Chip = { bandage }
-	return { actions, enemy, me }
+	return makeTurnWorld({
+		turnNumber: 1, enemyId, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5,
+		enemyWeapon: { id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 3, features: [] }
+	})
 }
 
-const EXPECTED_ACTIONS = ["equip", "move", "attack chip", "shoot", "shoot", "bandage"]
+/** Tirs effectués : le plan a joué (deux tirs à 4 PT sur 10 PT), quel que soit le plan retenu pour le reste. */
+const shots = (actions) => actions.filter((action) => action === "shoot").length
 
-test("turn() identifies the enemy and leaves the tactical actions unchanged", async () => {
+test("turn() identifies the enemy and the plan still fires", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
@@ -476,7 +400,7 @@ test("turn() identifies the enemy and leaves the tactical actions unchanged", as
 
 	turn()
 
-	assert.deepEqual(actions, EXPECTED_ACTIONS)
+	assert.equal(shots(actions), 2)
 	const profile = enemyMemory.getProfile(2)
 	assert.equal(profile.name, "enemy")
 	assert.equal(profile.identifiedTurn, 1)
@@ -495,7 +419,7 @@ test("turn() still plays when the enemy memory fails, and reports the error", as
 
 	turn()
 
-	assert.deepEqual(actions, EXPECTED_ACTIONS)
+	assert.equal(shots(actions), 2)
 	assert.equal(enemyMemory.has(3), true)
 	assert.equal(debugLogs.some((entry) => entry.includes("observeEnemies") && entry.includes("boom")), true)
 })

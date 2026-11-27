@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
@@ -17,7 +17,7 @@ function phase(me: Me, name: string, details: () => unknown): void {
 	})}`, LOG_CONTEXT.PLANNING)
 }
 
-/** Contrôles natifs répétés : un échec ne déclenche jamais une seconde séquence historique après dépense. */
+/** Contrôles natifs répétés : un échec ne déclenche jamais une seconde séquence après dépense. */
 export function executeTacticalPlan(me: Me, plan: TacticalPlan): void {
 	try { execute(me, plan) }
 	catch (error) {

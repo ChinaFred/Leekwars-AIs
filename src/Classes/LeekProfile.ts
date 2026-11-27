@@ -35,7 +35,7 @@ export class LeekProfile {
 	}
 }
 
-/** Stratégie du rôle configuré (seuils de soin, bouclier, repli), sans instancier `Plannification`. */
+/** Stratégie du rôle configuré (seuils de soin, bouclier, repli). */
 export function createStrategy(profile: LeekProfile): LeekStrategy {
 	if (profile.strategyName === "AGGRESSIVE") {
 		return new AggressiveStrategy(profile.aggression)

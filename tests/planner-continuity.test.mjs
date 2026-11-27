@@ -480,36 +480,6 @@ test("entry without context remains effective and never invents known danger", (
 	} finally { delete globalThis.System }
 })
 
-test("historical compatibility is explicitly conditional and its phase log cannot bypass the global guard", () => {
-	const w = arena({ distance: 1, equipped: true, initialOps: 200000 })
-	w.me.chips = []; w.me.weapons = [w.me.weapon]
-	delete w.me.canUseChip
-	try {
-		const t = w.run({ contextless: true, onLog: text => {
-			if (text.includes("; before action;")) w.setOps(701000)
-		} })
-		assert.ok(t.trace.some(e => e.text?.includes("historical compatibility queue only")))
-		assert.ok(t.trace.some(e => e.text?.includes("historical queue; intent")))
-		assert.ok(t.trace.some(e => e.text?.includes("global operations reserve after phase log")))
-		assert.equal(t.trace.some(e => e.kind === "action"), false)
-	} finally { delete globalThis.System }
-})
-
-test("historical compatibility continues at 711002 with small observed execution segments", () => {
-	const w = arena({ distance: 1, equipped: true, initialOps: 711002 })
-	w.me.chips = []; w.me.weapons = [w.me.weapon]
-	delete w.me.canUseChip
-	try {
-		const t = w.run({ contextless: true }), actions = t.trace.filter(e => e.kind === "action")
-		assert.ok(t.trace.some(e => e.text?.includes("historical compatibility queue only")))
-		const entry = t.trace.find(e => e.text?.includes("plan before execution "))
-		const preview = JSON.parse(entry.text.split("plan before execution ")[1])
-		assert.match(preview.executionBudget, /3% total \+ 2 \* largest observed execution segment/)
-		assert.ok(actions.some(e => e.name === "shot"))
-		assert.ok(actions.every(e => e.ops > 711002 && e.ops < 970000))
-	} finally { delete globalThis.System }
-})
-
 test("complete main incumbent survives research80% and executes shots plus retreat beyond it", () => {
 	const w = arena({ turn: 7, distance: 1, life: 170, equipped: true,
 		initialOps: 750000, danger: c => c.x <= -2 ? 60.3 : 100 })

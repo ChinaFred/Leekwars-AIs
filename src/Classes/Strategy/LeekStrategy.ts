@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 /** Sous cette distance (Manhattan) à l'ennemi, le poireau est « trop près » pour `shouldHide`. */
 export const MIN_SAFE_DISTANCE = 2
 
@@ -63,15 +63,5 @@ export class LeekStrategy {
 		}
 		
 		return false
-	}
-
-	shouldUseAttackChip(lifeRatio: number): boolean {
-		return lifeRatio >= 0.50 - 0.20 * this.getAggressionRatio()
-	}
-
-	shouldSkipHealForDamage(healingCost: number, meanHealing: number, tpLeft: number, meanDamagePerTp: number): boolean {
-		if (meanDamagePerTp <= 0 || tpLeft <= 0) return false
-		const potentialDamage = meanDamagePerTp * healingCost
-		return potentialDamage > meanHealing * 2
 	}
 }
