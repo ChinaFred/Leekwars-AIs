@@ -8,7 +8,7 @@ import { load, spec, run } from "./helpers/random-world.mjs"
 // `spec`), toutes en échec sur la première version du filtre (f1b2216) ; `DIST_ROOT` : autre build à contrôler.
 const M = await load(process.env.DIST_ROOT ?? new URL("..", import.meta.url).pathname.replace(/\/$/, ""))
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
-const PROD = { role: "AGGRESSIVE", aggression: 50, range: [3, 8], support: [true, true, true] }
+const PROD = { role: "AGGRESSIVE", aggression: 50, support: [true, true, true] }
 const none = { heal: null, shield: null, wall: null, protein: null, motivation: null }
 const brief = (r) => r.plan && [r.plan.dest, r.plan.protection, r.plan.danger]
 

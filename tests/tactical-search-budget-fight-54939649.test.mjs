@@ -145,7 +145,7 @@ function turn5({ startOps = 100000, searchCost = 0, withSystem = true, stagnatio
 	memory.updateReachable(me, [], [enemy], 5)
 	memory.updateThreatMap(me, [enemy], 5)
 	const profile = new LeekProfile()
-	profile.setRole("BALANCED"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole("BALANCED"); profile.setAggression(50)
 	profile.setSupportOptions(true, true, true)
 	if (withSystem) globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	try {

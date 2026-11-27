@@ -16,7 +16,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
 3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sinon, sur un ancien hôte sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` : **séquence
@@ -159,8 +159,8 @@ puce → bouclier/soin → repli. **Ordre critique** (distance ≤ 8, vie ≤ 60
 
 `vie` = PV / PV max ; `perte` = 1 − `vie` ; `d` = distance à la cible ; `a` = agressivité / 100 (0,5 par défaut,
 valeur correspondante entre parenthèses). **Portée réelle** : soin et bouclier dans le plan conjoint et le plan B ;
-repli dans les trois chemins (poids `w` des plans, ordre critique de la séquence historique) ; puce d'attaque,
-pénalité de portée d'arme et portée préférée max : séquence historique seulement.
+repli dans les trois chemins (poids `w` des plans, ordre critique de la séquence historique) ; puce d'attaque :
+séquence historique seulement.
 
 | Décision | Balanced | Aggressive | Defensive |
 |---|---|---|---|
@@ -170,10 +170,9 @@ pénalité de portée d'arme et portée préférée max : séquence historique s
 | Repli (trop près et blessé) | `vie ≤ 0,55 − 0,20a` (0,45) | `vie ≤ 0,30 − 0,15a` (0,225) | `vie ≤ 0,80 − 0,10a` (0,75) |
 | Repli préventif | `d ≤ 8` et `vie ≤ 0,40` | `d ≤ 1` et `vie ≤ 0,50`, ou `d ≤ 10` et `vie ≤ 0,25` | `d ≤ 7` et `vie ≤ 0,55 − 0,10a` (0,50) |
 | Puce d'attaque | `vie ≥ 0,50 − 0,20a` (0,40) | `vie ≥ 0,45 − 0,25a` (0,325) | `vie ≥ 0,75 − 0,20a` (0,65) |
-| Pénalité de portée d'arme | `0,045 − 0,015a` | `0,02 − 0,01a` | `0,07 − 0,015a` |
 
-- « Trop près » : `d < max(2, portée préférée min − 1)`. Portée de menace : PM de l'ennemi + portée max de son arme.
-- Score d'arme : dégâts moyens du tour − pénalité × écart entre portée moyenne préférée et portée moyenne de l'arme.
+- « Trop près » : `d < 2` (`MIN_SAFE_DISTANCE`, `LeekStrategy.ts`), sans réglage de profil. Portée de menace : PM de l'ennemi + portée max de son arme.
+- Arme de la séquence historique : meilleurs dégâts moyens du tour (première de la liste à égalité).
 - Le soin est sauté si tirer rapporte plus : `dégâts par PT × coût du soin > 2 × soin moyen`.
 - **Défense prioritaire** (bouclier avant soin) : l'ennemi peut tirer au prochain tour et pas moi, ou les deux peuvent tirer et `vie ≤ 0,60`.
 

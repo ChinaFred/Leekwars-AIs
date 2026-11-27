@@ -184,7 +184,7 @@ export function world({ turn = 12, k = KASSBI_STUCK, e = ENEMY_CORNER, enemyLife
 		threat.dangerAt = (cell) => dangerOverride(cell, native(cell)) ?? native(cell)
 	}
 	const profile = new LeekProfile()
-	profile.setRole("BALANCED"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole("BALANCED"); profile.setAggression(50)
 	profile.setSupportOptions(true, true, true)
 	const context = { reachable: memory.getReachable(me.id), threat, ...(stagnation ? { stagnation } : {}) }
 	return { me, enemy, memory, context, profile, threat,

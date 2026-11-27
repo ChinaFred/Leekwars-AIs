@@ -1,15 +1,10 @@
 // @version:5.8
-// file version: 4
-import { LeekStrategy } from "./LeekStrategy.js"
+// file version: 5
+import { LeekStrategy, MIN_SAFE_DISTANCE } from "./LeekStrategy.js"
 
 export class DefensiveStrategy extends LeekStrategy {
 	constructor(aggressionValue = 50) {
 		super("DEFENSIVE", aggressionValue)
-	}
-
-	scoreWeapon(damage: number, preferredMid: number, weaponMid: number): number {
-		const rangePenalty = Math.abs(preferredMid - weaponMid) * (0.07 - 0.015 * this.getAggressionRatio())
-		return damage - rangePenalty
 	}
 
 	shouldHeal(lifeRatio: number, lostLifeRatio: number): boolean {
@@ -28,9 +23,8 @@ export class DefensiveStrategy extends LeekStrategy {
 		return distance <= threatRange + 1 && lifeRatio <= 0.98 - 0.10 * this.getAggressionRatio()
 	}
 
-	shouldHide(lifeRatio: number, distance: number, preferredMinRange: number): boolean {
-		const minSafeDistance = Math.max(2, preferredMinRange - 1)
-		const isTooClose = distance < minSafeDistance
+	shouldHide(lifeRatio: number, distance: number): boolean {
+		const isTooClose = distance < MIN_SAFE_DISTANCE
 		const isWounded = lifeRatio <= 0.80 - 0.10 * this.getAggressionRatio()
 		
 		if (isTooClose && isWounded) {

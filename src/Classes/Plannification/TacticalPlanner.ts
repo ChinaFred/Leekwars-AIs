@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 37
+// file version: 38
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
@@ -190,7 +190,7 @@ function evaluate(
 	// le remplacent ; sans un tel plan, ou s'il vise une case déjà visitée par une sortie de stagnation (refusée ensuite :
 	// plan nul), le recul est gardé. Vaut aussi quand aucune attaque n'est possible ce tour (phase d'approche).
 	const freeRetreat = stance.retreat === "free" || doomed || enemies.length !== 1 ||
-		(profile.allowHiding && strategy.shouldHide(lifeRatio, closestDistance, profile.preferredMinRange))
+		(profile.allowHiding && strategy.shouldHide(lifeRatio, closestDistance))
 	const originDanger = dangers.get(key(me.cell))!
 	let leaderRetreat = false
 	let substitute: TacticalPlan | null = null

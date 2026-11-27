@@ -162,7 +162,7 @@ function arena({ mp = 5, k = 164, e = 255, turn = 4, obstacles = FIGHT_OBSTACLES
 	memory.updateReachable(me, [], [enemy], turn)
 	memory.updateThreatMap(me, [enemy], turn)
 	const profile = new LeekProfile()
-	profile.setRole("BALANCED"); profile.setAggression(50); profile.setPreferredRange(3, 8)
+	profile.setRole("BALANCED"); profile.setAggression(50)
 	profile.setSupportOptions(true, true, true)
 	const context = { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() }
 	return { me, enemy, cells, stats, memory, context, profile, nativeOps: () => stats.weaponCells * NATIVE_PROVIDER_OPS +

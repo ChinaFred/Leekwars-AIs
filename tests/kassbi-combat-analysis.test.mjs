@@ -111,7 +111,6 @@ test("planHide() should not add hide action when target is dead", () => {
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(2, 2)
 	profile.setSupportOptions(true, true, true)
 
 	globalThis.Effect = {
@@ -141,17 +140,17 @@ test("planHide() correctly checks if hiding is needed when wounded with zone con
 	const strategy = new BalancedStrategy(50)
 	
 	// Test case 1: Player at 40% HP and 1 cell away (should hide - wounded + too close)
-	const shouldHide1 = strategy.shouldHide(0.4, 1, 2)
+	const shouldHide1 = strategy.shouldHide(0.4, 1)
 	assert.equal(shouldHide1, true, "Should hide at 40% HP and 1 cell away")
 	
 	// Test case 2: Player at 60% HP and 1 cell away (should NOT hide - not wounded enough)
-	const shouldHide2 = strategy.shouldHide(0.6, 1, 2)
+	const shouldHide2 = strategy.shouldHide(0.6, 1)
 	assert.equal(shouldHide2, false, "Should NOT hide at 60% HP")
 	
 	// Test case 3: Player at 40% HP but 10 cells away (should NOT hide - far enough)
 	// BUT now with zone_control trap: distance <= 8 && lifeRatio <= 0.40
 	// At distance=10: 10 > 8, so zone_control doesn't trigger
-	const shouldHide3 = strategy.shouldHide(0.4, 10, 2)
+	const shouldHide3 = strategy.shouldHide(0.4, 10)
 	assert.equal(shouldHide3, false, "Should NOT hide when far away (distance > 8)")
 	
 	console.log("All shouldHide() formula tests passed correctly")
@@ -164,14 +163,13 @@ test("shouldHide() formula is correct for BALANCED strategy (aggression=50)", ()
 	const strategy = new BalancedStrategy(50)
 
 	// Test case: Kassbi wounded and too close
-	// minSafeDistance = max(2, 2 - 1) = 2
+	// MIN_SAFE_DISTANCE = 2
 	// isTooClose = distance < 2 = true
 	// isWounded = lifeRatio <= 0.55 - 0.20 * 0.5 = 0.45
 	const lifeRatio = 0.4 // 40% HP
 	const distance = 1 // 1 cell away
-	const preferredMinRange = 2
 
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	assert.equal(shouldHide, true, "Should hide when at 40% HP and 1 cell away with BALANCED strategy")
 })
 
@@ -181,22 +179,20 @@ test("shouldHide() should NOT hide when player is healthy", () => {
 	// lifeRatio = 0.6 > 0.45, so isWounded = false
 	const lifeRatio = 0.6 // 60% HP
 	const distance = 1
-	const preferredMinRange = 2
 
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	assert.equal(shouldHide, false, "Should NOT hide when at 60% HP")
 })
 
 test("shouldHide() should NOT hide when player is far away from zone_control", () => {
 	const strategy = new BalancedStrategy(50)
 
-	// distance = 10 > minSafeDistance = 2, so isTooClose = false
+	// distance = 10 > MIN_SAFE_DISTANCE = 2, so isTooClose = false
 	// distance = 10 > 8 (zone_control trap boundary), so zone_control escape doesn't trigger
 	const lifeRatio = 0.4 // 40% HP (would be wounded)
 	const distance = 10 // Far away
-	const preferredMinRange = 2
 
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	assert.equal(shouldHide, false, "Should NOT hide when far away (distance > 8)")
 })
 
@@ -205,9 +201,8 @@ test("shouldHide() should hide when both wounded AND too close", () => {
 
 	const lifeRatio = 0.3 // 30% HP (wounded)
 	const distance = 1 // Too close
-	const preferredMinRange = 2
 
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	assert.equal(shouldHide, true, "Should hide when wounded AND too close")
 })
 
@@ -271,7 +266,6 @@ test("Combat sequence should correctly handle target death", () => {
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(2, 2)
 	profile.setSupportOptions(true, true, true)
 
 	globalThis.Effect = {
@@ -364,7 +358,6 @@ test("planHide() should check target.maxLife > 0 to prevent post-victory moves",
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(2, 2)
 	profile.setSupportOptions(true, true, true)
 
 	globalThis.Effect = {
@@ -450,7 +443,6 @@ test("planHide() should still work when target is alive and player wounded", () 
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(2, 2)
 	profile.setSupportOptions(true, true, true)
 
 	globalThis.Effect = {
@@ -474,7 +466,7 @@ test("planHide() should still work when target is alive and player wounded", () 
 	// - mpLeft = 4 > 0
 	// - me.maxLife = 100 > 0
 	// - target.maxLife = 100 > 0 ← NEW GUARD passes (target alive)
-	// - distance = 1 < minSafeDistance = 2
+	// - distance = 1 < MIN_SAFE_DISTANCE = 2
 	// - lifeRatio = 0.3 <= 0.45
 
 	const actionsAfterHide = plan.actions.length

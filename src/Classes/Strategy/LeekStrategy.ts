@@ -1,5 +1,8 @@
 // @version:5.8
-// file version: 4
+// file version: 5
+/** Sous cette distance (Manhattan) à l'ennemi, le poireau est « trop près » pour `shouldHide`. */
+export const MIN_SAFE_DISTANCE = 2
+
 export class LeekStrategy {
 	public name = "BALANCED"
 	public aggression = 50
@@ -22,11 +25,6 @@ export class LeekStrategy {
 		return this.aggression / 100.0
 	}
 
-	scoreWeapon(damage: number, preferredMid: number, weaponMid: number): number {
-		const rangePenalty = Math.abs(preferredMid - weaponMid) * (0.045 - 0.015 * this.getAggressionRatio())
-		return damage - rangePenalty
-	}
-
 	shouldHeal(_lifeRatio: number, lostLifeRatio: number): boolean {
 		return lostLifeRatio >= 0.15 + 0.10 * this.getAggressionRatio()
 	}
@@ -47,9 +45,8 @@ export class LeekStrategy {
 		return distance <= threatRange && lifeRatio <= 0.95 - 0.20 * this.getAggressionRatio()
 	}
 
-	shouldHide(lifeRatio: number, distance: number, preferredMinRange: number): boolean {
-		const minSafeDistance = Math.max(2, preferredMinRange - 1)
-		const isTooClose = distance < minSafeDistance
+	shouldHide(lifeRatio: number, distance: number): boolean {
+		const isTooClose = distance < MIN_SAFE_DISTANCE
 		const isWounded = lifeRatio <= 0.55 - 0.20 * this.getAggressionRatio()
 		
 		// Hide if TOO CLOSE + WOUNDED (classic case)

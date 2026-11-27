@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { Plannification } from "../Classes/Plannification/Plannification.js"
 import { nearestEnemy } from "../Classes/Context/Targets.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
@@ -36,7 +36,7 @@ export function planAct(me: Me, profile = createDefaultProfile(), context?: Tact
 	const distance = me.distance(target)
 	const isCriticalSituation = distance <= 8 && lifeRatio <= 0.60
 	
-	if (isCriticalSituation && plan.strategy.shouldHide(lifeRatio, distance, profile.preferredMinRange)) {
+	if (isCriticalSituation && plan.strategy.shouldHide(lifeRatio, distance)) {
 		// Prioritize escape when in danger zone
 		plan.planHide()
 		plan.planChipsActionsAfterShoot()
@@ -61,7 +61,6 @@ function createDefaultProfile(): LeekProfile {
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(3, 8)
 	profile.setSupportOptions(true, true, true)
 	return profile
 }
