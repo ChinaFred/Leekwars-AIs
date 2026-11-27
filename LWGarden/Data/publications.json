@@ -1,24 +1,5 @@
 [
  {
-  "id": "6bee74e",
-  "account": "Kassbi",
-  "published_at": 1795727693,
-  "published_at_iso": "2026-11-26T21:14:53Z",
-  "commit": "6bee74ebcc75555a083ccb02cf1a9b07c6a385ca",
-  "committed_at": 1795727612,
-  "subject": "feat(boost): boost d'agilité en remplissage des PT inutilisés",
-  "message": "feat(boost): boost d'agilité en remplissage des PT inutilisés\n\nPourquoi : la puce Étirement (agilité brute +80 à 100, 2 tours, 3 PT, délai 3) n'était jamais lancée ; son gain attendu est faible (+9 points de critique, soit environ +2,7 % de dégâts moyens) alors que les combats archivés laissent des PT inutilisés.\nStratégie: plan conjoint seulement : une fois le plan retenu, le meilleur boost d'agilité prêt est ajouté en fin des boosts (avant protection et tirs) si les PT que le plan n'emploie pas (PT - PT dépensés, sans compter les PT attendus d'un boost de PT, - 1 PT gardé pour l'arme du tour 1) couvrent son coût, sans effet d'agilité actif, et si le plan attaque ce tour ou (durée >= 2 et ennemi à portée de boost sans tir). Score et choix du plan inchangés ; jamais de PT pris à un tir, une protection, un soin ou un autre boost ; une erreur du remplissage rend le plan inchangé. Avant : jamais lancé. Plan B : jamais lancé.\nTests: npm test (697/697), npm run typecheck ; tests/agility-boost.test.mjs (nouveau, 12 cas dont boost de PT plus faible ou refusé et exception du remplissage).\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6c6Fk8qAmdoqHaAzGo",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 3,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "28942a4",
   "account": "Kassbi",
   "published_at": 1795727747,
@@ -179,6 +160,25 @@
   "committed_at": 1795789961,
   "subject": "refactor(profil): supprime la portée préférée sans effet réel",
   "message": "refactor(profil): supprime la portée préférée sans effet réel\n\nPourquoi : preferredMinRange/preferredMaxRange n'influençaient pas le plan\ntactique ; le min ne servait qu'au seuil « trop près » de shouldHide\n(max(2, min - 1), soit 2 pour tout min de 0 à 3) et le max qu'à une pénalité\nnégligeable (0,02 à 0,07 par case) dans le choix d'arme du chemin de secours.\nStratégie: aucun changement de comportement pour les profils de src/Main (portée 3-8 et 2-8) : « trop près » = distance < 2 (MIN_SAFE_DISTANCE) ; chemin de secours : arme choisie aux dégâts moyens du tour, sans pénalité de portée.\nTests: npm test (740 réussites, 0 échec), npm run typecheck ; tests scoreWeapon supprimés, riskWeight vérifie la constante (distance 1 -> 2, distance 2 -> 1).\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cFHDi4iPqcChRwJgH",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 11,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "9737131",
+  "account": "Kassbi",
+  "published_at": 1795790229,
+  "published_at_iso": "2026-11-27T14:37:09Z",
+  "commit": "97371313dff2ba3d636653b2bec88d77da16f245",
+  "committed_at": 1795790174,
+  "subject": "chore(merge): fusion de Master (portée préférée supprimée)",
+  "message": "chore(merge): fusion de Master (portée préférée supprimée)\n\nPourquoi : Master a retiré la portée préférée du profil pendant la suppression\ndu repli historique ; shouldHide prend MIN_SAFE_DISTANCE, Plannification.ts et\nses tests restent supprimés.\nStratégie: aucun changement de comportement en jeu.\nTests: npm run typecheck, npm test (suite complète) sur l'état fusionné.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6ePc62UD35gKG15kVw",
   "has_strategy_section": true,
   "dirty": false,
   "dirty_files": [],
