@@ -11,8 +11,8 @@ Python qui déploie les sources et archive les combats.
 
 Point d'entrée : `turn()` dans [`src/Main/Kassbi_Class.ts`](src/Main/Kassbi_Class.ts).
 
-1. **Contexte** : mémoire de l'adversaire, cases atteignables de chaque poireau, carte de danger de mes cases,
-   compteur de stagnation.
+1. **Contexte** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, cases atteignables de
+   chaque poireau, carte de danger de mes cases, compteur de stagnation.
 2. **Planification** (`planAct`, comportement réglé par `leekProfile`) : un plan conjoint attaque / boost /
    protection / déplacement choisi par un score dégâts − risque ; à défaut un plan B séquentiel borné en opérations.
 3. **Exécution** : le plan est affiché en entier avant la première action, puis chaque action est revérifiée
@@ -26,7 +26,7 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 | Dossier | Rôle |
 |---|---|
 | `src/Main/` | Points d'entrée déployés : `Kassbi_Class.ts` (IA de combat), `Kassbi_test.ts` (variante de test) |
-| `src/Brain/` | Scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
+| `src/Brain/` | Observation du tour (`TurnObservation.ts`), scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
 | `src/Classes/Context/` | Ce que l'IA sait du combat : mémoire de l'adversaire, cases atteignables, carte de danger, stagnation, cibles |
 | `src/Classes/Items/` | Armes, puces et effets |
 | `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations, séquence historique |

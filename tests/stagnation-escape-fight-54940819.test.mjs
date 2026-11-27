@@ -430,7 +430,7 @@ function turnsToFirstShotVsFleeing(k0, e0, stagnationOn, flee = fleeStep, active
 		for (let i = -3; i < 0; i++) { tracker.noteEnemyPositions(String(e)); tracker.observe(i, 60, d) }
 	}
 	for (let turn = 1; turn <= 30; turn++) {
-		tracker.noteEnemyPositions(String(e)) // le jeu réel fournit les positions ennemies (Kassbi_Class.observeStagnation)
+		tracker.noteEnemyPositions(String(e)) // le jeu réel fournit les positions ennemies (TurnObservation.observeStagnation)
 		tracker.observe(turn, 60, distance(cells[k], cells[e]))
 		const w = world({ turn, k, e, enemyLife: 60, stagnation: stagnationOn ? tracker : undefined })
 		const { plan } = quiet(() => w.evaluate())

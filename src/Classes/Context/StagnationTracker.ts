@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 
 /**
@@ -20,7 +20,7 @@ export const PASSIVE_TURNS_AT_FULL_RISK = 2
 export const PASSIVE_RISK_STEP = 0.5
 
 /**
- * Compteur de tours consécutifs SANS PROGRÈS RÉEL. Mémorisé entre les tours par `Kassbi_Class.ts` (même mécanisme
+ * Compteur de tours consécutifs SANS PROGRÈS RÉEL. Mémorisé entre les tours par `TurnObservation.ts` (même mécanisme
  * que `enemyMemory`) et lu par le planificateur via `TacticalContext`.
  *
  * Définition : un tour est sans progrès s'il n'a ni infligé de dégâts (la somme des PV ennemis vivants n'a pas

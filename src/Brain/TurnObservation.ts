@@ -1,0 +1,224 @@
+// @version:5.8
+// file version: 1
+import { EnemyMemory } from "../Classes/Context/EnemyMemory.js"
+import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
+import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
+import { reportError } from "../Toolbox/Debug.js"
+import { isLogEnabled, log, LOG_CONTEXT } from "../Toolbox/Logger.js"
+import { AccessibleZoneSource, showAccessibleZones, showDangerZone } from "../Toolbox/Marker.js"
+
+/** Mémoire et cartes du tour ; seules les cartes sont transmises à planAct. */
+export const enemyMemory = new EnemyMemory()
+
+/** Coffres : listés et observés à part, jamais ciblés ni comptés comme ennemis. */
+export const chestMemory = new EnemyMemory()
+
+/** Tours consécutifs sans tir ni progrès, mémorisés entre les tours (sortie de minimum local). */
+export const stagnation = new StagnationTracker()
+
+/** Exécute une collecte ou un affichage : une erreur est journalisée (`ERROR`) sans interrompre le tour. */
+function guarded(name: string, action: () => void): void {
+	try {
+		action()
+	} catch (error) {
+		reportError("src/Brain/TurnObservation.ts", name, error)
+	}
+}
+
+/**
+ * Met à jour le compteur de stagnation au début du tour (PV ennemis vivants, distance au plus proche, dégâts de mes
+ * actions au tour précédent : voir `StagnationTracker`), puis ouvre le tour dans l'historique des actions.
+ * Une erreur est journalisée sans interrompre le tour.
+ */
+function observeStagnation(me: Me): void {
+	guarded("observeStagnation", () => {
+		const enemies = aliveEnemies()
+		const enemyLife = enemies.reduce((total, enemy) => total + enemy.life, 0)
+		const enemyDistance = enemies.reduce((best, enemy) =>
+			Math.min(best, Math.abs(me.cell.x - enemy.cell.x) + Math.abs(me.cell.y - enemy.cell.y)), Number.POSITIVE_INFINITY)
+		stagnation.noteEnemyPositions(enemies.map((enemy) => `${enemy.cell.x},${enemy.cell.y}`).sort().join(";"))
+		stagnation.observe(Fight.turn, enemyLife, enemyDistance, actionHistory.lastDealt, enemies.length)
+		actionHistory.begin(Fight.turn, me, enemyMemory.lifeLostSinceMyTurn(me), stagnation.passiveTurns)
+	})
+}
+
+/**
+ * Liste les coffres vivants et enregistre leurs actions (armes/puces vues). Les coups attribués par la mémoire
+ * sont ignorés : l'attribution des dégâts n'a de sens que pour un adversaire.
+ */
+function observeChests(me: Me): void {
+	guarded("observeChests", () => {
+		const chests = aliveChests()
+		const turnNumber = Fight.turn
+		for (const chest of chests) {
+			if (!chestMemory.has(chest.id)) {
+				chestMemory.identify(chest, turnNumber)
+				log(
+					() => `[Chest] Listed ${chest.name} (#${chest.id}) ${chest.life}/${chest.maxLife} HP ` +
+						`at (${chest.cell.x},${chest.cell.y}); not an enemy`,
+					LOG_CONTEXT.MEMORY
+				)
+			}
+			// Argument 2 (> 1 ennemi vivant) : toute perte de PV reste « ambiguous », jamais imputée au coffre.
+			const update = chestMemory.update(chest, me, turnNumber, 2)
+			if (update !== null && update.newItems.length > 0) {
+				log(() => `[Chest] ${chest.name} (#${chest.id}) observed: ${update.newItems.join(", ")}`, LOG_CONTEXT.MEMORY)
+			}
+		}
+		if (chests.length > 0) {
+			log(
+				() => `[Chest] ${chests.map((chest) => `#${chest.id} ${chest.life}/${chest.maxLife} HP`).join(", ")}`,
+				LOG_CONTEXT.MEMORY
+			)
+		}
+	})
+}
+
+/**
+ * Identifie les ennemis vivants nouveaux et met à jour les connus. Une erreur est journalisée
+ * mais n'interrompt pas le tour : la collecte de données ne doit jamais empêcher de jouer.
+ */
+function observeEnemies(me: Me): void {
+	guarded("observeEnemies", () => {
+		const turnNumber = Fight.turn
+		const enemies = aliveEnemies()
+		for (const enemy of enemies) {
+			if (!enemyMemory.has(enemy.id)) {
+				const profile = enemyMemory.identify(enemy, turnNumber)
+				log(
+					() => `[EnemyMemory] Identified ${profile.name} (#${profile.id}) lvl ${profile.level}, ` +
+						`${profile.maxLife} HP, ${profile.knownWeapons.length} weapons, ${profile.knownChips.length} chips`,
+					LOG_CONTEXT.MEMORY
+				)
+			}
+			const update = enemyMemory.update(enemy, me, turnNumber, enemies.length)
+			if (update === null) {
+				continue
+			}
+			if (update.newItems.length > 0) {
+				log(() => `[EnemyMemory] ${enemy.name} observed: ${update.newItems.join(", ")}`, LOG_CONTEXT.MEMORY)
+			}
+			if (update.hit !== null && update.hit.item !== null) {
+				const hit = update.hit
+				log(
+					() => `[EnemyMemory] ${enemy.name} hit ${hit.amount} with ${hit.item?.name} (${hit.source})`,
+					LOG_CONTEXT.MEMORY
+				)
+			}
+		}
+	})
+}
+
+/**
+ * Calcule les cases atteignables utilisées par le planificateur et les visualisations.
+ * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour.
+ */
+function observeReachableCells(me: Me): void {
+	guarded("observeReachableCells", () => {
+		const allies = Fight.getAllies().filter((ally) => ally.id !== me.id)
+		const updates = enemyMemory.updateReachable(me, allies, aliveEnemies(), Fight.turn)
+		log(() => {
+			const summary = updates
+				.map((update) => {
+					const who = update.side === "me" ? "me" : `${update.side}#${update.entityId}`
+					return `${who}:${update.size}${update.truncated ? "+" : ""} (${update.mp} MP)`
+				})
+				.join(", ")
+			return `[Reachable] ${summary}`
+		}, LOG_CONTEXT.REACHABLE)
+	})
+}
+
+/**
+ * Calcule la carte de danger utilisée par planAct à partir des cases atteignables.
+ * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour ; son coût
+ * est inclus dans la ligne d'opérations de `logTurnOperations`.
+ */
+function observeThreatMap(me: Me): void {
+	guarded("observeThreatMap", () => {
+		const update = enemyMemory.updateThreatMap(me, aliveEnemies(), Fight.turn)
+		if (update === null) {
+			log("[Threat] unavailable", LOG_CONTEXT.THREAT)
+			return
+		}
+		log(() => {
+			const safest = update.safestCell === null ? "none" : `(${update.safestCell.x},${update.safestCell.y})`
+			return `[Threat] ${update.size}/${update.candidateCells} cells, danger max ${update.maxDanger.toFixed(1)} ` +
+				`min ${update.minDanger.toFixed(1)}, safest ${safest}, ${update.enemies} armed enemies, ` +
+				`${update.pairsEvaluated} pairs, ${update.lineOfSightCalls} LoS${update.truncated ? ", TRUNCATED" : ""}`
+		}, LOG_CONTEXT.THREAT)
+	})
+}
+
+/**
+ * Affichage visuel (contexte ACCESSIBLE_ZONE) de la zone accessible de chaque poireau vivant, dans l'ordre moi,
+ * alliés, ennemis, à partir des cases déjà calculées par `observeReachableCells` (aucun appel API de plus pour
+ * les cases). Sans effet (et sans calcul) si le contexte est inactif. Aucun effet sur planAct ; une erreur est
+ * journalisée sans interrompre le tour.
+ */
+function displayAccessibleZones(me: Me): void {
+	guarded("displayAccessibleZones", () => {
+		if (!isLogEnabled(LOG_CONTEXT.ACCESSIBLE_ZONE)) {
+			return
+		}
+		const seen = new Set<number>([me.id])
+		const sources: AccessibleZoneSource[] = [
+			{ name: me.name, side: "me", reachable: enemyMemory.getReachable(me.id) }
+		]
+		for (const ally of Fight.getAllies()) {
+			if (seen.has(ally.id) || !(ally.life > 0)) {
+				continue
+			}
+			seen.add(ally.id)
+			sources.push({ name: ally.name, side: "ally", reachable: enemyMemory.getReachable(ally.id) })
+		}
+		for (const enemy of aliveEnemies()) {
+			if (seen.has(enemy.id) || !(enemy.life > 0)) {
+				continue
+			}
+			seen.add(enemy.id)
+			sources.push({ name: enemy.name, side: "enemy", reachable: enemyMemory.getReachable(enemy.id) })
+		}
+		showAccessibleZones(sources)
+	})
+}
+
+/**
+ * Affichage visuel (contexte DANGER_ZONE) de la carte de danger calculée par `observeThreatMap`. Sans effet si
+ * le contexte est inactif ou si la carte est absente. Aucun effet sur planAct.
+ */
+function displayDangerZone(): void {
+	guarded("displayDangerZone", () => {
+		if (!isLogEnabled(LOG_CONTEXT.DANGER_ZONE)) {
+			return
+		}
+		showDangerZone(enemyMemory.getThreatMap())
+	})
+}
+
+/**
+ * Observation complète du début de tour, dans l'ordre : ennemis, coffres, cases atteignables (et leur affichage),
+ * carte de danger (et son affichage), stagnation et ouverture de l'historique des actions.
+ */
+export function observeTurn(me: Me): void {
+	observeEnemies(me)
+	observeChests(me)
+	observeReachableCells(me)
+	displayAccessibleZones(me)
+	observeThreatMap(me)
+	displayDangerZone()
+	observeStagnation(me)
+}
+
+/** Recalcule cases atteignables puis carte de danger avec les PM et PT réels (après le boost de PM). */
+export function refreshMaps(me: Me): void {
+	observeReachableCells(me)
+	observeThreatMap(me)
+}
+
+/** Mémorise mes PV de fin de tour (attribution des dégâts subis au tour suivant). */
+export function recordMyTurnEnd(me: Me): void {
+	guarded("recordMyTurnEnd", () => {
+		enemyMemory.endMyTurn(me, Fight.turn)
+	})
+}
