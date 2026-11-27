@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-27 — Stagnation : plafond de route progressif (4 % × tours bloqués, max 30 %) + repli ; fractions d'ops dans `Budgets.ts`.
 - 2026-11-27 — Zone visée complète : recherche bornée (une à quelques paires par case au lieu de toutes les cases de tir), mêmes dégâts ; arrêt à 50 % des opérations (20 % avant), coût dans le log.
 - 2026-11-27 — Piège du coffre : coffre à portée et ennemi plus proche que moi → tir sur le coffre puis fuite du coffre avec tous les PM (`ChestTrap.ts`).
 - 2026-11-27 — Repli historique et code inatteignable supprimés (`Plannification.ts`, `Items/*`, `src/Tests/`… : 52 → 33 fichiers) ; sans API du plan B, `planAct` journalise et ne joue pas.
