@@ -261,10 +261,10 @@ test("doomed turn: a kill of the target (mean damage >= its life, under KILL_MAR
 
 test("a protection that brings one cell under the lethal threshold: not a doomed turn, survival still comes first", () => {
 	// 54969530, tour 8, case 126 ramenée de 177,975 à 150 : létale sans protection (150 >= 96 PV), plus avec cure + helmet
-	// (150 - 15 = 135 < 96 + 42). Le plan reste celui d'avant le changement : soin, casque, repli, aucun tir.
+	// (150 - 15 = 135 < 96 + 42). Soin, casque, repli, aucun tir ; motivation part avec les PT restants (10 - 4 + 2 - 7 = 1).
 	const w = arena("54969530:8", { 126: 150 })
 	assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [])
-	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], [], ["cure", "helmet"], 7, 0, 150, -23.81))
+	assert.deepEqual(w.plan, plan(57, 126, null, 0, [], ["motivation"], ["cure", "helmet"], 11, 0, 150, -2.21))
 })
 
 // RECUL SANS TIR (plan sans dégâts qui s'éloigne de la cible vers une case moins dangereuse). Plans joués dans les combats,
@@ -284,10 +284,10 @@ const RETREAT_CASES = [
 	// 54969622:2 : spark est absorbé par le helmet adverse (aucun plan à dégâts). BALANCED garde le repli du combat (test
 	// des trois rôles ci-dessous) ; AGGRESSIVE le remplace par protein + 1 pas d'avance (danger 184 < 0,75 x PV, 0 dégât) :
 	// changement VOULU de la posture, plus exposé que le repli (effet en combat non mesuré).
-	["54969622:2", 0, 1, plan(233, 217, null, 0, [], ["protein"], [], 3, 0, 184, -39.45), "replaced by an advance (AGGRESSIVE posture)"],
+	["54969622:2", 0, 1, plan(233, 217, null, 0, [], ["motivation", "protein"], [], 7, 0, 184, -17.85), "replaced by an advance (AGGRESSIVE posture)"],
 	["54969622:3", 1, 0, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -35.7)],
-	// 54976625:3 : à `w` = 0,5 les sparks sont en tête d'eux-mêmes (47,86), plus de recul à refuser.
-	["54976625:3", 0, 0, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 47.86), "not needed: the damaging plan leads"],
+	// 54976625:3 : le recul avec motivation (crédit futur du boost de PT) repasse en tête ; il cède aux sparks.
+	["54976625:3", 1, 0, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 47.86)],
 	["54976625:4", 1, 0, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, 18.7)],
 	["54974628:3", 1, 0, plan(427, 409, null, 0, SPARKS, [], [], 9, 11.88, 118, -47.12)],
 	// Garde de non-régression : « tir puis recul » (rock + shotgun depuis 361, fin en 414), plan du combat, inchangé.
@@ -330,8 +330,7 @@ test("retreat without damage: replaced only by a damaging plan under the danger 
 		// AGGRESSIVE (posture `advance`) : sans plan à dégâts, l'avance en 168 remplace le recul (ligne `aggressive posture`).
 		["no damaging plan (0 TP): AGGRESSIVE advances instead of the retreat", {}, { tp: 0 }, 168, [], [], 0],
 		["retreat + useful heal (cure, life 120): not a filtered retreat", low, { life: 120, cooldowns: { protein: 1 } }, 277, [], ["cure"], 0],
-		// À `w` = 0,5 (AGGRESSIVE) et danger 60, les sparks sont en tête d'eux-mêmes : aucun recul à refuser.
-		["same without the heal: sparks lead on their own", low, { life: 120, cooldowns: { protein: 1, cure: 1 } }, 187, SPARKS, [], 0]
+		["same without the heal: sparks replace the retreat", low, { life: 120, cooldowns: { protein: 1, cure: 1 } }, 187, SPARKS, [], 1]
 	]
 	for (const [label, danger, change, destination, chips, protection, refused] of cases) {
 		const w = arena("54976625:4", danger, change)

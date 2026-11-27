@@ -141,8 +141,8 @@ par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Fo
   (partie entière du gain moyen) ; dégâts calculés avec la force boostée : le gain de ce tour est dans `U`.
   `F` = `FUTURE_TURN_WEIGHT` (0,75) × (durée − 1) tours pleins de l'arme du plan (force : gain % des dégâts de base ;
   PT : tirs entiers en plus), plafonné par 0,75 × les PV restants de la cible : un boost ne bat jamais le coup fatal.
-- **Plan avec tir** : pas de boost sous 50 % de PV (`MIN_LIFE_RATIO_FOR_BOOST`). **Plan sans tir** : boost seulement si
-  `F > 0` (durée ≥ 2) et si l'ennemi le plus proche est à portée max de mes armes + 2 × mes PM + ses PM.
+- **Plan avec tir** : pas de boost sous 50 % de PV (`MIN_LIFE_RATIO_FOR_BOOST`). **Plan sans tir** : boost seulement si `F > 0` (durée ≥ 2) et si l'ennemi le plus proche est à portée max de mes armes + 2 × mes PM + ses PM.
+  Sans tir seulement (PT sinon perdus ; combat 54991104), `F` de PT = le meilleur de trois scénarios de portée en maximum exact (`planShots`) : arme, puces offensives prêtes de cooldown de base 0 ou 1, arme + puces. Crédit optimiste assumé.
 - **Plan B** : avec un tir d'arme, gain net du modèle à une arme (`boostNetDamage`, `tpBoostNetDamage`) > 0 et PV ≥ 50 % ;
   les tirs prévus sont réduits d'autant. Sinon, règle « sans tir » avec les PT que ni l'attaque ni les supports n'emploient.
 - **Agilité, boost de remplissage** (`withAgilityFill`, `pickAgilityBoost` ; `BUFF_AGILITY` ou effet 41, dont Étirement) : ajouté au plan conjoint **retenu**, hors score et hors recherche, si les PT que le plan n'emploie pas (PT − dépensés, sans les PT attendus d'un boost de PT ; − 1 PT gardé pour l'arme du tour 1) couvrent son coût, sans effet d'agilité actif, gain ≥ 1, `canUseChip` sur moi, et si le plan attaque ce tour ou (durée ≥ 2 et ennemi à la portée « sans tir » ci-dessus). Lancé après PT et force, avant protection et tirs ; pas de seuil de PV ; jamais en plan B.

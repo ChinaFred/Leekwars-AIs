@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 36
+// file version: 37
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
@@ -204,15 +204,18 @@ function evaluate(
 	for (const variant of attackBoosts) maxTp = Math.max(maxTp, me.tp - variant.cost + variant.tpGain)
 	// Arme de référence du crédit futur quand le plan ne tire pas à l'arme.
 	const referenceWeapon = me.weapon ?? weapons[0] ?? null
-	// Sans tir, le crédit ne dépend pas de la case : la meilleure variante est choisie une fois par protection.
+	// Sans tir, le crédit ne dépend pas de la case : la meilleure variante est choisie une fois par protection. Seul ce
+	// crédit compte les puces offensives (`idle`) : sans tir, les PT du boost seraient perdus ; avec tir, non.
 	const idleTarget = !doomed && boosts.length > 1 && closest !== null && closestDistance <= boostReach(me, closest) ? closest : null
+	const idleCredits = boosts.map((variant) => idleTarget === null || variant.cost === 0 ? 0 :
+		Math.min(idleTarget.life * FUTURE_TURN_WEIGHT, boostFuture(me, variant, referenceWeapon, idleTarget.life, true)))
 	const idleBoosts = support.map((protection) => {
 		let best = { variant: boosts[0]!, credit: 0 }
 		if (idleTarget === null) return best
-		for (const variant of boosts) {
+		for (let v = 0; v < boosts.length; v++) {
+			const variant = boosts[v]!
 			if (variant.cost === 0 || me.tp - variant.cost + variant.tpGain < protection.cost) continue
-			const credit = Math.min(idleTarget.life * FUTURE_TURN_WEIGHT,
-				boostFuture(me, variant, referenceWeapon, idleTarget.life))
+			const credit = idleCredits[v]!
 			if (credit > best.credit || (credit === best.credit && credit > 0 && variant.cost < best.variant.cost)) {
 				best = { variant, credit }
 			}

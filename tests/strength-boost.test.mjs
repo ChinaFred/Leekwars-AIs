@@ -153,6 +153,47 @@ test("tpBoostNetDamage: whole shots only, capped by the enemy life, a boost give
 	assert.equal(net(4, 10, 10, true, undefined, { ...machineGun, cost: 0 }), 0)
 })
 
+// Combat 54991104 : motivation (+2 PT) jamais lancée. En tirs entiers d'une arme à 5 PT, 12 PT = 10 PT = 2 tirs.
+test("tpBoostFutureDamage: weapon only by default; idle mode takes the best of three range scenarios", () => {
+	const gun = { id: 60, name: "gun", cost: 5, minRange: 1, maxRange: 6, needsLos: false, features: [{ type: 1, minValue: 20, maxValue: 20 }] }
+	const attack = (name, cost, cooldown, damage, extra = {}) => ({
+		id: cost * 100 + damage, name, cost, cooldown, currentCooldown: 0, minRange: 0, maxRange: 10, needsLos: false,
+		features: [{ type: 1, minValue: damage, maxValue: damage }], ...extra
+	})
+	const option = { chip: tpChip(2), gain: 2, turns: 3 }
+	const credit = (idle) => (chips, weapon = gun, life = undefined, strength = 10) =>
+		tpBoostFutureDamage(makeMe({ chips, weapon, strength }).me, weapon, option, 10, life, idle)
+	const future = credit(true) // plan sans tir
+	const firing = credit(undefined) // défaut : plans qui tirent, arme seule en tirs entiers
+	// Arme seule : 2 tirs à 10 comme à 12 PT (0). Arme + puces : 2 tirs = 40, puis 4 puces = 48 (+ 8). Puces seules :
+	// 3 lancers puis 4 (+ 12) : le scénario le plus favorable est retenu. Force 10, 2 tours.
+	const expected = 2 * 12 * 1.1 * FUTURE_TURN_WEIGHT
+	assert.ok(Math.abs(future([attack("zap", 3, 0, 12)]) - expected) < 1e-9)
+	assert.equal(firing([attack("zap", 3, 0, 12)]), 0) // un plan qui tire n'échange pas un lancer certain contre ce crédit
+	assert.ok(Math.abs(future([attack("zap", 3, 0, 12), protein(), tpChip(2)]) - expected) < 1e-9) // boosts : pas des tirs
+	assert.equal(future([attack("zap", 3, 0, 12)], gun, 39), 0) // 3 lancers (39,6) ou 2 tirs (44) tuent déjà sans le boost
+	assert.equal(future([]), 0) // arme seule : 2 tirs à 10 comme à 12 PT
+	// Aucun scénario ne profite de 2 PT : puce limitée à 1 lancer par tour (cooldown 1, maxUses 1), en cooldown, ou de
+	// cooldown de base long (pas disponible à chaque tour couvert).
+	assert.equal(future([attack("once", 3, 1, 12)]), 0)
+	assert.equal(future([attack("capped", 3, 0, 12, { maxUses: 1 })]), 0)
+	assert.equal(future([attack("cooling", 3, 0, 12, { currentCooldown: 1 })]), 0)
+	assert.equal(future([attack("slow", 2, 4, 30)]), 0)
+	assert.ok(future([attack("jab", 2, 1, 5)]) > 0) // cooldown 1 : une fois par tour, paie les 2 PT en plus
+	// Arme seule en tirs entiers (ancien calcul) : jamais moins, même si les puces remplissent déjà les 10 PT.
+	const rifle = { ...gun, cost: 4, features: [{ type: 1, minValue: 20, maxValue: 20 }] }
+	assert.ok(Math.abs(future([attack("heavy", 5, 1, 30)], rifle) - 2 * 20 * 1.1 * FUTURE_TURN_WEIGHT) < 1e-9)
+	assert.equal(firing([attack("heavy", 5, 1, 30)], rifle), future([attack("heavy", 5, 1, 30)], rifle))
+	// Équipement du combat 54991104 (force 20). Tout à portée : 12 PT n'achètent rien de plus (shotgun + rock = 10 PT).
+	// Shotgun hors de portée : rock + spark (8 PT) puis rock + 2 sparks (11 PT), + 12 de base par tour.
+	const shotgun = { ...gun, name: "shotgun", maxRange: 5, maxUses: 2, features: [{ type: 1, minValue: 33, maxValue: 43 }] }
+	const kit = [{ ...attack("rock", 5, 1, 0), features: [{ type: 1, minValue: 38, maxValue: 39 }] },
+		{ ...attack("spark", 3, 0, 0), features: [{ type: 1, minValue: 8, maxValue: 16 }] }]
+	assert.ok(Math.abs(future(kit, shotgun, undefined, 20) - 21.6) < 1e-9)
+	assert.equal(firing(kit, shotgun, undefined, 20), 0)
+	assert.equal(future(kit.slice(0, 1), shotgun, undefined, 20), 0) // sans spark : rock une fois, 2 tirs de shotgun
+})
+
 test("the chip inventory is logged once, with identifiers, costs, cooldowns and effect types", () => {
 	const lines = []
 	const config = new LogConfig()

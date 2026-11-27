@@ -1,12 +1,12 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import {
 	BoostOption, MIN_LIFE_RATIO_FOR_BOOST, boostNetDamage, boostReach, pickBoost, readyBoosts, readyTpBoosts,
-	tpBoostNetDamage
+	tpBoostFutureDamage, tpBoostNetDamage
 } from "../../Brain/StrengthBoost.js"
 import { TacticalContext, TacticalPreparation } from "./TacticalTypes.js"
 import { riskWeight } from "./TacticalScore.js"
@@ -436,13 +436,14 @@ export function executeReservePlan(
 			return nearest
 		}
 		// Sans tir d'arme : boost avec les seuls PT que ni l'attaque ni les supports retenus n'emploient, s'il couvre le
-		// tour suivant (durée ≥ 2) et que l'ennemi le plus proche peut être à portée d'ici là.
+		// tour suivant (durée ≥ 2) et que l'ennemi le plus proche peut être à portée d'ici là. Ces PT seraient perdus :
+		// crédit de PT optimiste du plan sans tir (`idle` : puces offensives comptées), comme le plan conjoint.
 		const boostEnemy = shot?.weapon ? null : nearestFrom(origin)
 		const boostWeapon = boostEnemy ? me.weapon ?? weapons[0] ?? null : null
 		if (boostEnemy && boostWeapon && Math.abs(origin.x - boostEnemy.cell.x) +
 			Math.abs(origin.y - boostEnemy.cell.y) <= boostReach(me, boostEnemy)) {
 			const tpBoost = bestBoost(readyTpBoosts(me, projectedTp).filter((option) => option.turns >= 2), (option) =>
-				tpBoostNetDamage(me, boostWeapon, option, projectedTp, me.tp, false, boostEnemy.life))
+				tpBoostFutureDamage(me, boostWeapon, option, me.tp, boostEnemy.life, true))
 			if (tpBoost) {
 				boostPlan.push(tpBoost.chip)
 				projectedTp += Math.floor(tpBoost.gain) - tpBoost.chip.cost
