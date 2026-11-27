@@ -5,11 +5,11 @@ Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ;
 ## 7092a85 — feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur
 Compte Kassbi, publié le 2026-11-27T21:00:53Z.
 Stratégie : Kassbi_Book seulement (non branché aux IA actives). Corrige le
-Combats : 10 — 9 victoires, 0 défaites, 1 nuls (90 % de victoires), 0 sans logs.
-Ops : pic maximal 52 % (combat 55006374), médiane des pics 40 %.
-Ressources : 131 tours joués, 42 sans aucune action payante (32 %), 41 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 59 % inutilisés sur 1352 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55006373 (33/64, nul), 55006376 (1/4, victoire), 55006380 (2/8, victoire), 55006367 (1/5, victoire), 55006379 (1/5, victoire).
+Combats : 20 — 19 victoires, 0 défaites, 1 nuls (95 % de victoires), 0 sans logs.
+Ops : pic maximal 52 % (combat 55006374), médiane des pics 38 %.
+Ressources : 208 tours joués, 56 sans aucune action payante (27 %), 41 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 52 % inutilisés sur 2134 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55006373 (33/64, nul), 55006498 (6/19, victoire), 55006497 (2/7, victoire), 55006376 (1/4, victoire), 55006380 (2/8, victoire).
 
 ## 7e7313d — fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan
 Compte Kassbi, publié le 2026-11-27T19:54:53Z.
