@@ -37,8 +37,8 @@ Choisis le plus petit circuit qui couvre la demande.
 - IA actives : `src/**/*.ts`. `src/_oldLeekScript/` est une archive : ne pas y toucher.
 - Tout `.ts` commence par `// @version:5.8` (version du langage, ne pas la changer) puis `// file version: N` ;
   incrémente `N` dans chaque fichier modifié.
-- Nouveau fichier `.ts` sous `src/` : seulement si l'utilisateur le demande. Le déploiement ne le crée sur Leek Wars
-  qu'avec une connexion par login (secrets `LEEKWARS_LOGIN` et `LEEKWARS_PASSWORD`), pas avec la clé API seule.
+- Nouveau fichier `.ts` sous `src/` : permis quand il clarifie la structure (une responsabilité par fichier). Le
+  workflow « Déploiement Leek Wars » se connecte par login et crée sur le site les IA et dossiers absents.
 - `types/leekwars.d.ts` est un sous-ensemble local de l'API du jeu : vérifie une fonction absente dans la
   documentation officielle avant de l'utiliser.
 - Un changement de seuil, de condition ou d'ordre de planification met à jour `docs/strategies.md` et a un test
