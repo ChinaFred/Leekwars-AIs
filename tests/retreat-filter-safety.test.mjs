@@ -46,19 +46,33 @@ test("seed 754: a shield that covers nothing does not buy the retreat, and an ad
 	assert.deepEqual([brief(r), r.plan.boost, r.refused], [[[-1, 0], [], 0], ["motivation"], 0])
 })
 
-test("the filter is off with several enemies (G only measures the first one) and while the stagnation rule is engaged", () => {
-	// PV 400/400, 0 PT, 3 PM, ennemi à 12 ; danger 60 partout sauf 0 à 3 cases de recul. Un ennemi : recul refusé, avance.
-	const base = (o) => ({ ...spec(1), size: 14, obstacles: [], maxLife: 400, life: 400, weapons: [], equipped: -1, chips: [], support: none, profile: PROD,
-		stag: null, tp: 0, mp: 3, turn: 5, strength: 0, enemies: [{ x: 12, y: 0, life: 300, absoluteShield: 0, relativeShield: 0, mp: 4, range: 6 }],
-		danger: (cell) => dist(cell, { x: 12, y: 0 }) >= 15 ? 0 : 60, ...o })
+test("the retreat is replaced only by a damaging plan under the margin; never with several enemies, under the role threshold, or by a move without damage", () => {
+	// Arme 1-5 (2 tirs de 10), ennemi à 7, 10 PT, 4 PM : 2 PM d'approche, tir depuis (2,0) (danger 60 comme ma case), U 20 ; ou recul
+	// de 3 cases (danger 0). Le score préfère le recul (20 - 45 + N 15 < 0).
+	const gun = { name: "gun", cost: 4, damage: 10, minRange: 1, maxRange: 5, maxUses: -1, needsLos: false }
+	const base = (o) => ({ ...spec(1), size: 14, obstacles: [], maxLife: 400, life: 400, weapons: [gun], equipped: 0, chips: [], support: none, profile: PROD,
+		stag: null, tp: 10, mp: 4, turn: 5, strength: 0, enemies: [{ x: 7, y: 0, life: 300, absoluteShield: 0, relativeShield: 0, mp: 4, range: 6 }],
+		danger: (cell) => dist(cell, { x: 7, y: 0 }) >= 10 ? 0 : 60, ...o })
 	const second = { x: 0, y: 13, life: 300, absoluteShield: 0, relativeShield: 0, mp: 4, range: 6 }
-	const engaged = { count: 3, stillTurns: 3, passive: 0, engaged: false, record: 12, visited: [] }
-	for (const [label, change, destination, refused] of [
-		["one enemy: refused, advance at equal danger", {}, [3, 0], 1],
-		["two enemies: retreat kept", { enemies: [base({}).enemies[0], second] }, [-3, 0], 0],
-		["stagnation rule active: retreat kept", { stag: engaged }, [-3, 0], 0]
+	for (const [label, change, damage, refused] of [
+		["one enemy, full life: replaced by the shots", {}, 20, 1],
+		["two enemies (G only measures the first one): kept", { enemies: [base({}).enemies[0], second] }, 0, 0],
+		["no damaging plan (0 TP): kept, not replaced by an advance or a side step", { tp: 0 }, 0, 0],
+		["just above the AGGRESSIVE retreat threshold (104/400 at distance 7): replaced", { life: 104 }, 20, 1],
+		["at the threshold (100/400): kept", { life: 100 }, 0, 0],
+		["danger margin, 81 life (60 < 0.75 x 81): replaced", { life: 81, maxLife: 81 }, 20, 1],
+		["danger margin, 80 life (60 >= 0.75 x 80): kept", { life: 80, maxLife: 80 }, 0, 0]
 	]) {
 		const r = run(M, base(change))
-		assert.deepEqual([r.plan.dest, r.refused], [destination, refused], label)
+		assert.deepEqual([r.plan.U, r.plan.dest, r.refused], [damage, damage ? [2, 0] : [-3, 0], refused], label)
+	}
+})
+
+test("exclusions kept: a move that closes the Manhattan distance is not a retreat (seed 85), a replacement aiming at a visited cell is not taken (seed 9092)", () => {
+	// 85 : (0,1) rapproche en Manhattan (G du trajet futur < 0), danger 306 -> 229 ; sans la condition Manhattan : (-1,1), 233.
+	// 9092 : compteur de stagnation inactif, (-1,-3) déjà visitée ; sans la garde : recul (0,-4) remplacé par (-1,-3), danger 105,8.
+	for (const [seed, expected] of [[85, [[0, 1], [], 229]], [9092, [[0, -4], [], 75.8]]]) {
+		const r = run(M, spec(seed))
+		assert.deepEqual([brief(r), r.refused], [expected, 0], `seed ${seed}`)
 	}
 })

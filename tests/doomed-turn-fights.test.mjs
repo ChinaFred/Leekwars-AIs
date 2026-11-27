@@ -272,12 +272,14 @@ test("a protection that brings one cell under the lethal threshold: not a doomed
 //   54969622:3  repli 161 -> 141 (11 -> 16, danger 416,6 -> 0), 0 PT, score 0
 //   54976625:3  repli 169 -> 223 (12 -> 15, danger 130 -> 0), score 32,4 (N seul) ; 54976625:4 : 223 -> 277, idem
 //   54974628:3  repli 496 -> 550 (12 -> 15, danger 118 -> 0), score 0
-// Maintenant refusé (ligne `retreat without damage refused`) quand le meilleur plan admis agit sous la marge de danger
-// (0,75 x PV), sauf seuil de repli du rôle ou soin / protection utile dans le plan. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
+// Maintenant remplacé (ligne `retreat without damage refused`) par le meilleur plan qui INFLIGE DES DÉGÂTS sous la marge
+// de danger (0,75 x PV), sauf seuil de repli du rôle ou soin / protection utile dans le plan ; sans un tel plan, gardé. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
 const SPARKS = ["spark", "spark", "spark"]
 const REFUSED = /^\[Tactical\] retreat without damage refused: /
 const RETREAT_CASES = [
-	["54969622:2", 1, plan(233, 217, null, 0, [], ["protein"], [], 3, 0, 184, -85.7)],
+	// 54969622:2 : spark est absorbé par le helmet adverse (aucun plan à dégâts) : le repli du combat est GARDÉ. Une première
+	// version le remplaçait par protein + 1 pas d'avance (danger 184) ; s'exposer sans tirer n'est pas le but de la règle.
+	["54969622:2", 0, plan(233, 161, null, 0, [], ["protein"], [], 3, 0, 0, 47.3)],
 	["54969622:3", 1, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -87.12)],
 	["54976625:3", 1, plan(150, 150, null, 0, SPARKS, [], [], 9, 72.36, 130, 7.26)],
 	["54976625:4", 1, plan(187, 169, null, 0, SPARKS, [], [], 9, 43.2, 130, -21.9)],
@@ -286,7 +288,7 @@ const RETREAT_CASES = [
 	["54969527:5", 0, plan(361, 414, "shotgun", 1, ["rock"], [], [], 10, 61.8, 181.365, -27.87)]
 ]
 for (const [name, refused, expected] of RETREAT_CASES) {
-	test(`combat ${name.replace(":", ", turn ")}: retreat without a shot ${refused ? "refused" : "not in play (shot then retreat unchanged)"}`, () => {
+	test(`combat ${name.replace(":", ", turn ")}: retreat without damage ${refused ? "replaced by a damaging plan" : "not replaced (plan of the fight)"}`, () => {
 		const w = arena(name)
 		assert.deepEqual(w.zone, w.logged, "reachable zone = the one logged in the fight")
 		assert.equal(w.logs.filter(line => REFUSED.test(line)).length, refused)
@@ -294,24 +296,22 @@ for (const [name, refused, expected] of RETREAT_CASES) {
 	})
 }
 
-test("retreat without a shot: allowed under the role's retreat threshold, with a protection, or when nothing else survives", () => {
-	// 54976625, tour 4, sans tir possible (0 PT, ou spark en cooldown) : rester en 223 (danger 130), avancer, ou reculer en
-	// 277 (danger 0, distance 12 -> 15). `low` : dangers non nuls ramenés à 60 (aucune case létale). Ennemi en 218 : distance 10.
+test("retreat without damage: replaced only by a damaging plan under the danger margin; kept with a useful heal or when no such plan exists", () => {
+	// 54976625, tour 4 : rester en 223 (danger 130), reculer en 277 (danger 0, distance 12 -> 15), ou 2 PM + spark x 3 puis
+	// retour en 169 (danger 130, U 43,2). `low` : dangers non nuls ramenés à 60. Marge : 130 < 0,75 x PV dès 174 PV.
 	const low = Object.fromEntries(Object.entries(RETREATS["54976625:4"].danger)
 		.flatMap(([value, ids]) => Number(value) > 0 ? ids.map(id => [id, 60]) : []))
-	const off = { spark: 1, rock: 1, protein: 1, motivation: 1, helmet: 1, cure: 1 }
 	const cases = [
-		["full life (enemy slower than me, 4 MP < 5: no exemption): refused, advance at equal danger", {}, { tp: 0 }, 168, [], 1],
-		["every other plan lethal (life 120 <= danger 130), not a doomed turn: allowed", {}, { tp: 0, life: 120 }, 277, [], 0],
-		["retreat + heal (cure): allowed", low, { tp: 4, life: 120, cooldowns: { ...off, cure: 0 } }, 277, ["cure"], 0],
-		["same without the heal: refused", low, { tp: 4, life: 120, cooldowns: off }, 133, [], 1],
-		["AGGRESSIVE retreat threshold (distance 10, life 95/381 <= 25 %): allowed", low, { tp: 0, life: 95, enemy: 218 }, 277, [], 0],
-		["just above it (96/381): refused", low, { tp: 0, life: 96, enemy: 218 }, 273, [], 1]
+		["life 174: sparks under the margin replace the retreat", {}, { life: 174 }, 169, SPARKS, [], 1],
+		["life 173 (130 >= 0.75 x 173): retreat kept", {}, { life: 173 }, 277, [], [], 0],
+		["no damaging plan (0 TP): retreat kept, never an advance without a shot", {}, { tp: 0 }, 277, [], [], 0],
+		["retreat + useful heal (cure, life 120): not a filtered retreat", low, { life: 120, cooldowns: { protein: 1 } }, 277, [], ["cure"], 0],
+		["same without the heal: sparks replace the retreat", low, { life: 120, cooldowns: { protein: 1, cure: 1 } }, 187, SPARKS, [], 1]
 	]
-	for (const [label, danger, change, destination, protection, refused] of cases) {
+	for (const [label, danger, change, destination, chips, protection, refused] of cases) {
 		const w = arena("54976625:4", danger, change)
-		assert.deepEqual([w.plan.destination, w.plan.protection, w.plan.usefulDamage, w.logs.filter(line => REFUSED.test(line)).length],
-			[destination, protection, 0, refused], label)
+		assert.deepEqual([w.plan.destination, w.plan.chips, w.plan.protection, w.logs.filter(line => REFUSED.test(line)).length],
+			[destination, chips, protection, refused], label)
 		assert.deepEqual(w.logs.filter(line => DOOMED.test(line)), [], label)
 	}
 })

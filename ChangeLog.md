@@ -4,7 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
-- 2026-11-27 — Repli sans tir refusé : un plan sans tir ni protection ne recule plus vers une case moins dangereuse, hors seuil de repli du rôle, tour condamné ou repli seul plan non létal.
+- 2026-11-27 — Repli sans tir refusé : un recul sans dégâts vers une case plus sûre cède au meilleur plan à dégâts sous 0,75 × PV de danger (hors seuil de repli, tour condamné) ; sinon il est gardé.
 - 2026-11-26 — Tour condamné (tous les plans létaux) : cible tuée avant le score, crédit futur des boosts à 0 ; soin, protection et case finale inchangés (54969530, 54969527, 54969622).
 - 2026-11-26 — Valeur de position `N` : la case finale est créditée de 0,75 × les dégâts possibles au tour suivant depuis elle ; nul si un kill est possible ce tour ou si la case est létale.
 - 2026-11-26 — Boost d'agilité (Étirement) en remplissage : lancé avec les seuls PT que le plan conjoint n'emploie pas ; le workflow de déploiement pose lui-même le tag `leek-*`.
