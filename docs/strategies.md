@@ -16,7 +16,7 @@ Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
 2. **Boost de PM** (`castMpBoost`) : lancé si la règle de « Boosts » le demande ; cases atteignables et danger recalculés.
 3. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, portée préférée 3–8, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
+   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
@@ -164,7 +164,7 @@ valeur correspondante entre parenthèses).
 | Repli (trop près et blessé) | `vie ≤ 0,55 − 0,20a` (0,45) | `vie ≤ 0,30 − 0,15a` (0,225) | `vie ≤ 0,80 − 0,10a` (0,75) |
 | Repli préventif | `d ≤ 8` et `vie ≤ 0,40` | `d ≤ 1` et `vie ≤ 0,50`, ou `d ≤ 10` et `vie ≤ 0,25` | `d ≤ 7` et `vie ≤ 0,55 − 0,10a` (0,50) |
 
-- « Trop près » : `d < max(2, portée préférée min − 1)`. Portée de menace : PM de l'ennemi + portée max de son arme.
+- « Trop près » : `d < 2` (`MIN_SAFE_DISTANCE`, `LeekStrategy.ts`), sans réglage de profil. Portée de menace : PM de l'ennemi + portée max de son arme.
 
 ## Mémoire de l'adversaire
 

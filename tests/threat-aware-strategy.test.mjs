@@ -22,27 +22,27 @@ function runCases(method, cases) {
 	}
 }
 
-// shouldHide(lifeRatio, distance, preferredMinRange)
+// shouldHide(lifeRatio, distance)
 // Thresholds: Balanced hp <= 0.40 & distance <= 8 | Aggressive hp <= 0.25 & distance <= 10
 // | Defensive hp <= 0.50 (aggr. 50) & distance <= 7 | Base: hp <= 0.45 - 0.10 * aggression & distance <= 8
 runCases("shouldHide", [
-	["balanced 35% hp, distance 6 (critical)", "balanced", 50, [0.35, 6, 3], true],
-	["balanced 62% hp, distance 7 (pre-critical)", "balanced", 50, [0.62, 7, 3], false],
-	["balanced 50% hp, distance 6 (just above 40%)", "balanced", 50, [0.50, 6, 3], false],
-	["balanced exactly 40% hp, distance 6", "balanced", 50, [0.40, 6, 3], true],
-	["balanced 40% hp, distance 8 (boundary)", "balanced", 50, [0.40, 8, 3], true],
-	["balanced 40% hp, distance 9 (just beyond)", "balanced", 50, [0.40, 9, 3], false],
-	["balanced very close (1) + wounded 40%", "balanced", 50, [0.40, 1, 3], true],
-	["balanced very close (1) + healthy 60%", "balanced", 50, [0.60, 1, 3], false],
-	["balanced 80% hp, distance 10 (normal case)", "balanced", 50, [0.80, 10, 3], false],
-	["aggressive 70: 50% hp, distance 6", "aggressive", 70, [0.50, 6, 3], false],
-	["aggressive 70: exactly 25% hp (panic), distance 6", "aggressive", 70, [0.25, 6, 3], true],
-	["aggressive 50: 40% hp, distance 8", "aggressive", 50, [0.40, 8, 3], false],
-	["aggressive 50: 24% hp (panic), distance 8", "aggressive", 50, [0.24, 8, 3], true],
-	["defensive 50% hp, distance 6", "defensive", 50, [0.50, 6, 3], true],
-	["defensive 50% hp, distance 8 (> 7)", "defensive", 50, [0.50, 8, 3], false],
-	["base aggression 70: 42% hp, distance 8 (threshold 0.38)", "base", 70, [0.42, 8, 3], false],
-	["base aggression 20: 42% hp, distance 8 (threshold 0.43)", "base", 20, [0.42, 8, 3], true],
+	["balanced 35% hp, distance 6 (critical)", "balanced", 50, [0.35, 6], true],
+	["balanced 62% hp, distance 7 (pre-critical)", "balanced", 50, [0.62, 7], false],
+	["balanced 50% hp, distance 6 (just above 40%)", "balanced", 50, [0.50, 6], false],
+	["balanced exactly 40% hp, distance 6", "balanced", 50, [0.40, 6], true],
+	["balanced 40% hp, distance 8 (boundary)", "balanced", 50, [0.40, 8], true],
+	["balanced 40% hp, distance 9 (just beyond)", "balanced", 50, [0.40, 9], false],
+	["balanced very close (1) + wounded 40%", "balanced", 50, [0.40, 1], true],
+	["balanced very close (1) + healthy 60%", "balanced", 50, [0.60, 1], false],
+	["balanced 80% hp, distance 10 (normal case)", "balanced", 50, [0.80, 10], false],
+	["aggressive 70: 50% hp, distance 6", "aggressive", 70, [0.50, 6], false],
+	["aggressive 70: exactly 25% hp (panic), distance 6", "aggressive", 70, [0.25, 6], true],
+	["aggressive 50: 40% hp, distance 8", "aggressive", 50, [0.40, 8], false],
+	["aggressive 50: 24% hp (panic), distance 8", "aggressive", 50, [0.24, 8], true],
+	["defensive 50% hp, distance 6", "defensive", 50, [0.50, 6], true],
+	["defensive 50% hp, distance 8 (> 7)", "defensive", 50, [0.50, 8], false],
+	["base aggression 70: 42% hp, distance 8 (threshold 0.38)", "base", 70, [0.42, 8], false],
+	["base aggression 20: 42% hp, distance 8 (threshold 0.43)", "base", 20, [0.42, 8], true],
 ])
 
 // shouldHeal(lifeRatio, lostLifeRatio)

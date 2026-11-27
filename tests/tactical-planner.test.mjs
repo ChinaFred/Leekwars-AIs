@@ -937,7 +937,6 @@ test("riskWeight: role factor x (1.5 - aggression/100), doubled under the role's
 	const weight = (role, life, range, change = () => {}) => {
 		const profile = new LeekProfile()
 		profile.setRole(role)
-		profile.setPreferredRange(3, 8)
 		change(profile)
 		return riskWeight(profile, createStrategy(profile), life, range)
 	}
@@ -951,9 +950,9 @@ test("riskWeight: role factor x (1.5 - aggression/100), doubled under the role's
 	assert.equal(weight("DEFENSIVE", 0.51, 7), 1.5)
 	assert.equal(weight("AGGRESSIVE", 0.40, 5), 0.5) // AGGRESSIVE ne se replie qu'à d ≤ 1 ou vie ≤ 0,25
 	assert.equal(weight("AGGRESSIVE", 0.25, 5), 0.5 * RETREAT_RISK_FACTOR)
-	// La portée préférée minimale définit « trop près » : d < max(2, min − 1), blessé (vie ≤ 0,45 pour BALANCED).
-	assert.equal(weight("BALANCED", 0.43, 4, (profile) => profile.setPreferredRange(6, 8)), 2)
-	assert.equal(weight("BALANCED", 0.43, 4, (profile) => profile.setPreferredRange(3, 8)), 1)
+	// « Trop près » : d < MIN_SAFE_DISTANCE (2), blessé (vie ≤ 0,45 pour BALANCED).
+	assert.equal(weight("BALANCED", 0.43, 1), 2)
+	assert.equal(weight("BALANCED", 0.43, 2), 1)
 })
 
 test("under the retreat threshold the danger weighs twice: the same shot is taken when healthy, declined when wounded", () => {

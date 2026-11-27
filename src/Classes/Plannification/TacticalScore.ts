@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -205,11 +205,11 @@ export function posture(profile: LeekProfile, approachMax: number): RolePosture 
 /**
  * Poids du risque, commun au plan conjoint et au plan B : facteur de rôle (`RolePosture.risk`) × (1,5 − agressivité /
  * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `strategy.shouldHide` le demande
- * (`distance` : Manhattan à l'ennemi vivant le plus proche ; « trop près » dépend de `profile.preferredMinRange`).
+ * (`distance` : Manhattan à l'ennemi vivant le plus proche ; « trop près » : `distance < MIN_SAFE_DISTANCE`).
  */
 export function riskWeight(profile: LeekProfile, strategy: LeekStrategy, lifeRatio: number, distance: number): number {
 	const weight = rolePosture(profile).risk * (1.5 - profile.aggression / 100)
-	return profile.allowHiding && strategy.shouldHide(lifeRatio, distance, profile.preferredMinRange)
+	return profile.allowHiding && strategy.shouldHide(lifeRatio, distance)
 		? weight * RETREAT_RISK_FACTOR : weight
 }
 

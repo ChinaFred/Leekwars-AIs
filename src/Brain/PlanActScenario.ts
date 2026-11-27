@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { nearestEnemy } from "../Classes/Context/Targets.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { TacticalContext } from "../Classes/Plannification/TacticalTypes.js"
@@ -31,7 +31,6 @@ function createDefaultProfile(): LeekProfile {
 	const profile = new LeekProfile()
 	profile.setRole("BALANCED")
 	profile.setAggression(50)
-	profile.setPreferredRange(3, 8)
 	profile.setSupportOptions(true, true, true)
 	return profile
 }

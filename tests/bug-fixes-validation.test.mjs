@@ -151,9 +151,8 @@ test("BUG #3a: shouldHide() = FALSE at distance=2, HP=71% (Balanced doesn't have
 	const strategy = new BalancedStrategy(50)
 	const lifeRatio = 0.71
 	const distance = 2
-	const preferredMinRange = 3 // Typical ranged weapon
 	
-	const result = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const result = strategy.shouldHide(lifeRatio, distance)
 	
 	// ACTUAL result is FALSE (bug)
 	assert.equal(result, false, "BUG: Balanced.shouldHide() lacks preemptive condition")
@@ -167,9 +166,8 @@ test("BUG #3b: shouldHide() = FALSE at distance=5, HP=71% (too far)", () => {
 	const strategy = new BalancedStrategy(50)
 	const lifeRatio = 0.71
 	const distance = 5
-	const preferredMinRange = 3
 	
-	const result = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const result = strategy.shouldHide(lifeRatio, distance)
 	
 	assert.equal(result, false, "Should NOT hide when distance > 2")
 	console.log("✓ shouldHide = FALSE at distance=5, HP=71% (too far)")
@@ -184,10 +182,9 @@ test("BUG #3c: Defensive.shouldHide() zone control trap detection", () => {
 	const strategy = new DefensiveStrategy(50)
 	const lifeRatio = 0.75  // 75% HP
 	const distance = 2
-	const preferredMinRange = 3
 	
-	// minSafeDistance = max(2, 3-1) = 2
-	// isTooClose = 2 < 2 -> FALSE (distance must be STRICTLY less than minSafeDistance)
+	// MIN_SAFE_DISTANCE = 2
+	// isTooClose = 2 < 2 -> FALSE (distance must be STRICTLY less than MIN_SAFE_DISTANCE)
 	// isWounded = 0.75 <= 0.80 - 0.10*0.50 = 0.75 <= 0.75 -> TRUE
 	// So: isTooClose && isWounded = FALSE && TRUE = FALSE
 	// 
@@ -196,12 +193,12 @@ test("BUG #3c: Defensive.shouldHide() zone control trap detection", () => {
 	// 
 	// Result: FALSE (not escaping)
 	
-	const result = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const result = strategy.shouldHide(lifeRatio, distance)
 	
 	// Actually at distance=2 with Defensive at exactly 75% HP, this is NOT a zone control trap.
 	// Let's test the ACTUAL zone control scenario:
 	// distance=6, HP=50% (moderately wounded)
-	const resultZoneControl = strategy.shouldHide(0.50, 6, 3)
+	const resultZoneControl = strategy.shouldHide(0.50, 6)
 	
 	// distance <= 7? YES (6 <= 7)
 	// isModeratelyWounded = 0.50 <= 0.55 - 0.10*0.50 = 0.50 <= 0.50 -> TRUE
@@ -218,9 +215,8 @@ test("BUG #3d: Aggressive.shouldHide() = FALSE at distance=2, HP=71% (uses diffe
 	const strategy = new AggressiveStrategy(50)
 	const lifeRatio = 0.71
 	const distance = 2
-	const preferredMinRange = 3
 	
-	const result = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const result = strategy.shouldHide(lifeRatio, distance)
 	
 	assert.equal(result, false, "Aggressive should NOT hide with these parameters")
 	console.log("✓ Aggressive.shouldHide = FALSE at distance=2, HP=71%")
@@ -339,11 +335,10 @@ test("REF: Kassbi Tour 4 - distance=5, HP=92% → heal=false, hide=false", () =>
 	const lifeRatio = 0.92
 	const lostLifeRatio = 0.08 // 100% - 92% = 8%
 	const distance = 5
-	const preferredMinRange = 3
 	
 	// Checks
 	const shouldHeal = strategy.shouldHealWithThreat(lifeRatio, lostLifeRatio, distance)
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	
 	assert.equal(shouldHeal, false, "Tour 4: Should NOT heal (HP too high)")
 	assert.equal(shouldHide, false, "Tour 4: Should NOT hide (too far)")
@@ -358,11 +353,10 @@ test("REF: Kassbi Tour 5 - distance=2, HP=62% → heal=true (threat-aware OR fal
 	const lifeRatio = 0.62
 	const lostLifeRatio = 0.224 // ~22.4% damage taken
 	const distance = 2
-	const preferredMinRange = 3
 	
 	// Checks
 	const shouldHeal = strategy.shouldHealWithThreat(lifeRatio, lostLifeRatio, distance)
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	
 	// Analysis:
 	// - shouldHealWithThreat with preemptive condition:
@@ -385,7 +379,6 @@ test("REF: Kassbi Tour 6 - distance=1, HP=39% → defense=true, heal=true, hide=
 	const lifeRatio = 0.39
 	const lostLifeRatio = 0.33 // ~33% damage taken (more than tour 5)
 	const distance = 1
-	const preferredMinRange = 3
 	
 	// Mutual contact (both can shoot)
 	const predictContactResult = {
@@ -401,7 +394,7 @@ test("REF: Kassbi Tour 6 - distance=1, HP=39% → defense=true, heal=true, hide=
 	})()
 	
 	const shouldHeal = strategy.shouldHealWithThreat(lifeRatio, lostLifeRatio, distance)
-	const shouldHide = strategy.shouldHide(lifeRatio, distance, preferredMinRange)
+	const shouldHide = strategy.shouldHide(lifeRatio, distance)
 	
 	assert.equal(shouldDefense, true, "Tour 6: Should prioritize defense")
 	assert.equal(shouldHeal, true, "Tour 6: Should heal (critical HP + threat)")
@@ -434,10 +427,10 @@ test("EDGE: shouldHide() at exact boundary distance=2 (zone control detection)",
 	const strategy = new DefensiveStrategy(50)
 	
 	// At distance=2 with moderate wounded (50% HP):
-	// minSafeDistance = max(2, 3-1) = 2
+	// MIN_SAFE_DISTANCE = 2
 	// isTooClose = 2 < 2 = FALSE
 	// But zone_control rule: distance <= 7 && isModeratelyWounded (0.50 <= 0.55)? TRUE
-	const result = strategy.shouldHide(0.50, 2, 3)
+	const result = strategy.shouldHide(0.50, 2)
 	
 	assert.equal(result, true, "Defensive should escape zone control trap at distance=2")
 	console.log("✓ Defensive escapes zone control at distance=2 (boundary)")
@@ -445,9 +438,9 @@ test("EDGE: shouldHide() at exact boundary distance=2 (zone control detection)",
 
 test("EDGE: shouldHide() just outside boundary distance=3 (Balanced)", () => {
 	const strategy = new BalancedStrategy(50)
-	const result = strategy.shouldHide(0.70, 3, 3)
+	const result = strategy.shouldHide(0.70, 3)
 	
-	// distance=3, minSafeDistance=max(2,3-1)=2, so isTooClose=(3<2)=false
+	// distance=3, MIN_SAFE_DISTANCE = 2, so isTooClose=(3<2)=false
 	// isWounded=false (70% > 55%)
 	// Result: false && false = false
 	assert.equal(result, false, "Should NOT hide when distance > 2")

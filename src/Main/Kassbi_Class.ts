@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 26
+// file version: 27
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { castMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -23,14 +23,13 @@ initLeekLogging(leekLogConfig)
  * `AGGRESSIVE`, `DEFENSIVE`) et l'agressivité (0–100) fixent les seuils de soin, de bouclier et de repli, et la
  * posture du plan conjoint (`posture`, `TacticalScore.ts`) : poids du danger, poids de l'approche, plancher de
  * passivité, recul sans tir, arme visée par le trajet futur. `AGGRESSIVE` va à portée de sa meilleure arme et ne
- * recule qu'après avoir tiré ; `DEFENSIVE` reste à couvert ; `BALANCED` est entre les deux. La portée préférée
- * minimale définit « trop près » ; les trois options autorisent soin, bouclier, repli. Effets détaillés :
+ * recule qu'après avoir tiré ; `DEFENSIVE` reste à couvert ; `BALANCED` est entre les deux. Les trois
+ * options autorisent soin, bouclier, repli. Effets détaillés :
  * `docs/strategies.md` (« Comportement configuré »).
  */
 export const leekProfile = new LeekProfile()
 leekProfile.setRole("AGGRESSIVE")
 leekProfile.setAggression(50)
-leekProfile.setPreferredRange(3, 8)
 leekProfile.setSupportOptions(true, true, true)
 
 let isFirstTurn = true

@@ -375,7 +375,7 @@ test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, 
 		return w
 	}
 	assert.equal(leekProfile.strategyName, "AGGRESSIVE")
-	assert.deepEqual([leekProfile.aggression, leekProfile.preferredMinRange, leekProfile.preferredMaxRange], [50, 3, 8])
+	assert.equal(leekProfile.aggression, 50)
 	assert.deepEqual([leekProfile.allowHealing, leekProfile.allowShielding, leekProfile.allowHiding], [true, true, true])
 	const aggressive = play(61) // seuil de soin AGGRESSIVE : vie ≤ 0,325 (0,50 sous menace) ; ici 0,82
 	assert.equal(aggressive.actions.includes("bandage"), false)
