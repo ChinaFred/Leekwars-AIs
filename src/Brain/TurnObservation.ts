@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
@@ -26,27 +26,33 @@ function guarded(name: string, action: () => void): void {
 }
 
 /**
- * Ennemis vivants du tour : demandés au jeu au premier besoin, puis la même liste sert à toutes les étapes.
- * Une erreur de l'API n'est pas mémorisée : chaque étape (protégée) la rencontre et la journalise à son tour.
+ * Liste d'entités du tour (ennemis vivants, alliés) : demandée au jeu au premier besoin, puis la même liste sert à
+ * toutes les étapes. Une erreur de l'API n'est pas mémorisée : chaque étape (protégée) la rencontre et la journalise
+ * à son tour.
  */
-type EnemyList = () => readonly Entity[]
+type EntityList = () => readonly Entity[]
 
-function enemyList(): EnemyList {
+function lazyList(read: () => Entity[]): EntityList {
 	let list: Entity[] | null = null
 	return () => {
 		if (list === null) {
-			list = aliveEnemies()
+			list = read()
 		}
 		return list
 	}
 }
+
+const enemyList = (): EntityList => lazyList(aliveEnemies)
+
+/** Alliés tels que listés par le jeu (moi compris, morts compris) : chaque étape filtre ce dont elle a besoin. */
+const allyList = (): EntityList => lazyList(() => Fight.getAllies())
 
 /**
  * Met à jour le compteur de stagnation au début du tour (PV ennemis vivants, distance au plus proche, dégâts de mes
  * actions au tour précédent : voir `StagnationTracker`). Sans ennemi vivant, la distance vaut +∞ : `observe` ne fait
  * que la comparer (jamais de record, tour compté sans progrès). Une erreur est journalisée sans interrompre le tour.
  */
-function observeStagnation(me: Me, living: EnemyList): void {
+function observeStagnation(me: Me, living: EntityList): void {
 	guarded("observeStagnation", () => {
 		const enemies = living()
 		const enemyLife = enemies.reduce((total, enemy) => total + enemy.life, 0)
@@ -102,7 +108,7 @@ function observeChests(me: Me): void {
  * Identifie les ennemis vivants nouveaux et met à jour les connus. Une erreur est journalisée
  * mais n'interrompt pas le tour : la collecte de données ne doit jamais empêcher de jouer.
  */
-function observeEnemies(me: Me, living: EnemyList): void {
+function observeEnemies(me: Me, living: EntityList): void {
 	guarded("observeEnemies", () => {
 		const turnNumber = Fight.turn
 		const enemies = living()
@@ -137,10 +143,10 @@ function observeEnemies(me: Me, living: EnemyList): void {
  * Calcule les cases atteignables utilisées par le planificateur et les visualisations.
  * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour.
  */
-function observeReachableCells(me: Me, living: EnemyList): void {
+function observeReachableCells(me: Me, allies: EntityList, living: EntityList): void {
 	guarded("observeReachableCells", () => {
-		const allies = Fight.getAllies().filter((ally) => ally.id !== me.id)
-		const updates = enemyMemory.updateReachable(me, allies, living(), Fight.turn)
+		const others = allies().filter((ally) => ally.id !== me.id)
+		const updates = enemyMemory.updateReachable(me, others, living(), Fight.turn)
 		log(() => {
 			const summary = updates
 				.map((update) => {
@@ -158,7 +164,7 @@ function observeReachableCells(me: Me, living: EnemyList): void {
  * Une erreur est journalisée sans interrompre le tour. Un seul log court par tour ; son coût
  * est inclus dans la ligne d'opérations de `logTurnOperations`.
  */
-function observeThreatMap(me: Me, living: EnemyList): void {
+function observeThreatMap(me: Me, living: EntityList): void {
 	guarded("observeThreatMap", () => {
 		const update = enemyMemory.updateThreatMap(me, living(), Fight.turn)
 		if (update === null) {
@@ -176,11 +182,11 @@ function observeThreatMap(me: Me, living: EnemyList): void {
 
 /**
  * Affichage visuel (contexte ACCESSIBLE_ZONE) de la zone accessible de chaque poireau vivant, dans l'ordre moi,
- * alliés, ennemis, à partir des cases déjà calculées par `observeReachableCells` (aucun appel API de plus pour
- * les cases). Sans effet (et sans calcul) si le contexte est inactif. Aucun effet sur planAct ; une erreur est
+ * alliés, ennemis, à partir des cases et de la liste d'alliés déjà obtenues par `observeReachableCells` (aucun appel
+ * API de plus). Sans effet (et sans calcul) si le contexte est inactif. Aucun effet sur planAct ; une erreur est
  * journalisée sans interrompre le tour.
  */
-function displayAccessibleZones(me: Me, living: EnemyList): void {
+function displayAccessibleZones(me: Me, allies: EntityList, living: EntityList): void {
 	guarded("displayAccessibleZones", () => {
 		if (!isLogEnabled(LOG_CONTEXT.ACCESSIBLE_ZONE)) {
 			return
@@ -189,7 +195,7 @@ function displayAccessibleZones(me: Me, living: EnemyList): void {
 		const sources: AccessibleZoneSource[] = [
 			{ name: me.name, side: "me", reachable: enemyMemory.getReachable(me.id) }
 		]
-		for (const ally of Fight.getAllies()) {
+		for (const ally of allies()) {
 			if (seen.has(ally.id) || !(ally.life > 0)) {
 				continue
 			}
@@ -223,14 +229,15 @@ function displayDangerZone(): void {
 /**
  * Observation complète du début de tour, dans l'ordre : ennemis, coffres, cases atteignables (et leur affichage),
  * carte de danger (et son affichage), stagnation, puis ouverture de l'historique des actions. Chaque étape est
- * protégée séparément ; la liste des ennemis vivants n'est demandée au jeu qu'une fois.
+ * protégée séparément ; la liste des ennemis vivants et celle des alliés ne sont demandées au jeu qu'une fois.
  */
 export function observeTurn(me: Me): void {
 	const living = enemyList()
+	const allies = allyList()
 	observeEnemies(me, living)
 	observeChests(me)
-	observeReachableCells(me, living)
-	displayAccessibleZones(me, living)
+	observeReachableCells(me, allies, living)
+	displayAccessibleZones(me, allies, living)
 	observeThreatMap(me, living)
 	displayDangerZone()
 	observeStagnation(me, living)
@@ -240,7 +247,7 @@ export function observeTurn(me: Me): void {
 /** Recalcule cases atteignables puis carte de danger avec les PM et PT réels (après le boost de PM). */
 export function refreshMaps(me: Me): void {
 	const living = enemyList()
-	observeReachableCells(me, living)
+	observeReachableCells(me, allyList(), living)
 	observeThreatMap(me, living)
 }
 
