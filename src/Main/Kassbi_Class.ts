@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 23
+// file version: 24
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { decideMpBoost, logChipInventory } from "../Brain/StrengthBoost.js"
@@ -33,6 +33,54 @@ leekProfile.setSupportOptions(true, true, true)
 
 let isFirstTurn = true
 
+/** Exécute une étape annexe du tour : une erreur est journalisée (`ERROR`) sans interrompre le tour. */
+function guarded(name: string, action: () => void): void {
+	try {
+		action()
+	} catch (error) {
+		reportError("src/Main/Kassbi_Class.ts", name, error)
+	}
+}
+
+/**
+ * Préambule du tour : PV et distance de l'ennemi le plus proche, salutation et inventaire des puces au premier
+ * tour, provocation sous 15 % de PV. Journal et paroles uniquement : rien n'y est décidé.
+ */
+function announceTurn(me: Me): void {
+	const target = nearestEnemy()
+
+	log(() => `My HP: ${me.life}/${me.maxLife}, TP: ${me.tp}, MP: ${me.mp}`, LOG_CONTEXT.COMBAT)
+	if (target) {
+		log(
+			() => `Enemy: ${target.name}, HP: ${target.life}/${target.maxLife}, Distance: ${me.distance(target)}`,
+			LOG_CONTEXT.COMBAT
+		)
+	}
+
+	if (isFirstTurn) {
+		const greeting = getRandomMessage(SPEECH.GREETINGS)
+		log(() => `[Speech] Greeting: "${greeting}"`, LOG_CONTEXT.SPEECH)
+		me.say(greeting)
+		try {
+			logChipInventory(me)
+		} catch (error) {
+			reportError("src/Brain/StrengthBoost.ts", "logChipInventory", error)
+		}
+		isFirstTurn = false
+	}
+
+	if (target !== null) {
+		const lifePercentage = (target.life / target.maxLife) * 100
+		log(() => `Enemy HP: ${lifePercentage.toFixed(1)}%`, LOG_CONTEXT.COMBAT)
+
+		if (target.life > 0 && target.maxLife > 0 && lifePercentage <= 15) {
+			const taunt = getRandomMessage(SPEECH.TAUNTS)
+			log(() => `[Speech] Taunt (${lifePercentage.toFixed(1)}% HP): "${taunt}"`, LOG_CONTEXT.SPEECH)
+			me.say(taunt)
+		}
+	}
+}
+
 /**
  * Boost de PM : seule action décidée AVANT le plan, parce qu'elle en change les entrées (cases atteignables, carte de
  * danger). Décision et motif (`decideMpBoost`) journalisés avant le lancer ; puis les deux cartes sont recalculées avec
@@ -62,39 +110,9 @@ function castMpBoost(me: Me): void {
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Class.ts", "turn", () => {
 		const me = Fight.me
-		const target = nearestEnemy()
-
 		log(`\n=== KASSBI TURN START ===`, LOG_CONTEXT.SYSTEM)
-		log(() => `My HP: ${me.life}/${me.maxLife}, TP: ${me.tp}, MP: ${me.mp}`, LOG_CONTEXT.COMBAT)
-		if (target) {
-			log(
-				() => `Enemy: ${target.name}, HP: ${target.life}/${target.maxLife}, Distance: ${me.distance(target)}`,
-				LOG_CONTEXT.COMBAT
-			)
-		}
-
-		if (isFirstTurn) {
-			const greeting = getRandomMessage(SPEECH.GREETINGS)
-			log(() => `[Speech] Greeting: "${greeting}"`, LOG_CONTEXT.SPEECH)
-			me.say(greeting)
-			try {
-				logChipInventory(me)
-			} catch (error) {
-				reportError("src/Brain/StrengthBoost.ts", "logChipInventory", error)
-			}
-			isFirstTurn = false
-		}
-
-		if (target !== null) {
-			const lifePercentage = (target.life / target.maxLife) * 100
-			log(() => `Enemy HP: ${lifePercentage.toFixed(1)}%`, LOG_CONTEXT.COMBAT)
-
-			if (target.life > 0 && target.maxLife > 0 && lifePercentage <= 15) {
-				const taunt = getRandomMessage(SPEECH.TAUNTS)
-				log(() => `[Speech] Taunt (${lifePercentage.toFixed(1)}% HP): "${taunt}"`, LOG_CONTEXT.SPEECH)
-				me.say(taunt)
-			}
-		}
+		// Journal et paroles : une erreur y est journalisée, le tour continue vers l'observation et le plan.
+		guarded("announceTurn", () => announceTurn(me))
 
 		// Observation du tour (mémoire, coffres, cartes, stagnation, historique) : `src/Brain/TurnObservation.ts`.
 		observeTurn(me)

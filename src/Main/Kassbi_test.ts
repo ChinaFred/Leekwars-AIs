@@ -1,6 +1,8 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { planAct } from "../Brain/PlanActScenario.js"
+import { enemyMemory, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
+import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, LogConfig } from "../Toolbox/Logger.js"
@@ -9,13 +11,27 @@ import { initLeekLogging, LogConfig } from "../Toolbox/Logger.js"
 export const leekLogConfig = new LogConfig()
 initLeekLogging(leekLogConfig)
 
+/**
+ * Variante d'essai : même observation et même contexte de plan que `Kassbi_Class.turn()` (cases atteignables, carte de
+ * danger, stagnation, historique), avec son propre profil ; sans boost de PM d'avant plan ni arme du tour 1.
+ */
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_test.ts", "turn", () => {
+		const me = Fight.me
 		const profile = new LeekProfile()
 		profile.setRole("AGGRESSIVE")
 		profile.setAggression(75)
 		profile.setPreferredRange(2, 8)
 		profile.setSupportOptions(true, true, false)
-		planAct(Fight.me, profile)
+
+		observeTurn(me)
+		planAct(me, profile, {
+			reachable: enemyMemory.getReachable(me.id),
+			threat: enemyMemory.getThreatMap(),
+			stagnation
+		})
+		// Références du tour suivant (dégâts subis) et ligne `[History]` du tour ouvert par `observeTurn`.
+		recordMyTurnEnd(me)
+		actionHistory.end()
 	})
 }
