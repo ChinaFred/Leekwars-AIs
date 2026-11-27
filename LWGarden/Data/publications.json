@@ -1,24 +1,5 @@
 [
  {
-  "id": "09838c1",
-  "account": "Kassbi",
-  "published_at": 1795714611,
-  "published_at_iso": "2026-11-26T17:36:51Z",
-  "commit": "09838c12b862acd446630a4ca7a4bdc369b2be38",
-  "committed_at": 1795714555,
-  "subject": "fix(tactique): historique des actions dans un fichier existant",
-  "message": "fix(tactique): historique des actions dans un fichier existant\n\nPourquoi : le déploiement de f418b84 a échoué à mi-chemin. La clé API\nne peut pas créer une IA sur Leek Wars (wrong_token), donc\nActionHistory.ts n'a pas été créé alors que six fichiers qui\nl'importent étaient déjà mis à jour.\n\n- ActionHistory.ts est déplacé tel quel dans StagnationTracker.ts.\n- Garden : un PUSH par clé API vérifie avant toute écriture qu'aucune\n  IA ni dossier n'est à créer, et refuse sinon sans rien modifier.\n- CLAUDE.md : pas de nouveau fichier .ts sous src/.\n\nStratégie: aucun changement de comportement par rapport à f418b84 (passivité tirée des dégâts mesurés de mes actions, poids du risque 1 / 0,5 / 0 à 2 / 3 / 4 tours passifs, marge de 0,75 x (PV + soin) à poids réduit, ligne [History] en fin de tour) ; seul l'emplacement du code change.\nTests: npm test (664), npm run typecheck, suite Python (125) ; un test ajouté pour le refus sans écriture.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6ajnf6q7XW95zWUvCX",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 6,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "b6b7ab7",
   "account": "Kassbi",
   "published_at": 1795726518,
@@ -184,6 +165,25 @@
   "dirty_files": [],
   "changes": {
    "created": 0,
+   "updated": 5,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "d81e6a6",
+  "account": "Kassbi",
+  "published_at": 1795789032,
+  "published_at_iso": "2026-11-27T14:17:12Z",
+  "commit": "d81e6a6c33cb13a48c887f57bfcf37c66fbbd589",
+  "committed_at": 1795788988,
+  "subject": "chore(merge): fusion de Master (zone visée, posture par rôle)",
+  "message": "chore(merge): fusion de Master (zone visée, posture par rôle)\n\nPourquoi : Master a reçu la zone visée et la posture par rôle pendant le\ndéplacement de l'observation ; displayTargetZone rejoint Brain/TurnObservation.ts.\nStratégie: aucun changement de comportement (zone visée affichée au même moment).\nTests: npm run typecheck, npm test (suite complète) sur l'état fusionné.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6ePc62UD35gKG15kVw",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
    "updated": 5,
    "deleted_files": 0,
    "deleted_folders": 0
