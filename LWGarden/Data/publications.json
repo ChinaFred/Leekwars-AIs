@@ -1,24 +1,5 @@
 [
  {
-  "id": "b6b7ab7",
-  "account": "Kassbi",
-  "published_at": 1795726518,
-  "published_at_iso": "2026-11-26T20:55:18Z",
-  "commit": "b6b7ab7448617ace875b0817955139450c35fd8d",
-  "committed_at": 1795726454,
-  "subject": "chore(merge): Master dans la branche bottes et puce après déplacement",
-  "message": "chore(merge): Master dans la branche bottes et puce après déplacement\n\nPourquoi : Master a reçu le rôle AGGRESSIVE par défaut et les puces sans cooldown lancées plusieurs fois par tour ; conflits dans TacticalPlanner.ts, docs/strategies.md, ChangeLog.md et le combat rejoué 54942202.\nStratégie: combinaison des deux lignes, sans règle nouvelle : une puce sans cooldown créditée après déplacement est lancée plusieurs fois (54939649 tour 5 : ice x2 depuis 463 ; refus de combat : avance et ice x2 dès le 3e tour passif au lieu du 4e) ; rôle AGGRESSIVE (poids du risque 0,75) conservé.\nTests: npm test (685/685), npm run typecheck, scripts/check-doc-budget.mjs ; attendus de 54942202, 54939649 et 54940819 relevés sur le code fusionné.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6c6Fk8qAmdoqHaAzGo",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 6,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "6bee74e",
   "account": "Kassbi",
   "published_at": 1795727693,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 1,
    "updated": 5,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "21a7ecc",
+  "account": "Kassbi",
+  "published_at": 1795790004,
+  "published_at_iso": "2026-11-27T14:33:24Z",
+  "commit": "21a7ecc53b91355636b6cda6e7898aefa01fd238",
+  "committed_at": 1795789961,
+  "subject": "refactor(profil): supprime la portée préférée sans effet réel",
+  "message": "refactor(profil): supprime la portée préférée sans effet réel\n\nPourquoi : preferredMinRange/preferredMaxRange n'influençaient pas le plan\ntactique ; le min ne servait qu'au seuil « trop près » de shouldHide\n(max(2, min - 1), soit 2 pour tout min de 0 à 3) et le max qu'à une pénalité\nnégligeable (0,02 à 0,07 par case) dans le choix d'arme du chemin de secours.\nStratégie: aucun changement de comportement pour les profils de src/Main (portée 3-8 et 2-8) : « trop près » = distance < 2 (MIN_SAFE_DISTANCE) ; chemin de secours : arme choisie aux dégâts moyens du tour, sans pénalité de portée.\nTests: npm test (740 réussites, 0 échec), npm run typecheck ; tests scoreWeapon supprimés, riskWeight vérifie la constante (distance 1 -> 2, distance 2 -> 1).\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cFHDi4iPqcChRwJgH",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 11,
    "deleted_files": 0,
    "deleted_folders": 0
   }
