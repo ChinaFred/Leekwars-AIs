@@ -272,10 +272,10 @@ test("a protection that brings one cell under the lethal threshold: not a doomed
 //   54969622:3  repli 161 -> 141 (11 -> 16, danger 416,6 -> 0), 0 PT, score 0
 //   54976625:3  repli 169 -> 223 (12 -> 15, danger 130 -> 0), score 32,4 (N seul) ; 54976625:4 : 223 -> 277, idem
 //   54974628:3  repli 496 -> 550 (12 -> 15, danger 118 -> 0), score 0
-// Maintenant refusé (ligne `retreat without shot refused`) sauf seuil de repli du rôle, soin ou protection dans le plan,
-// ou aucun plan admis non létal. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
+// Maintenant refusé (ligne `retreat without damage refused`) quand le meilleur plan admis agit sous la marge de danger
+// (0,75 x PV), sauf seuil de repli du rôle ou soin / protection utile dans le plan. Un ennemi plus lent ne l'autorise pas : 54976625 et 54974628 (ennemi 4 PM, moi 5) tirent.
 const SPARKS = ["spark", "spark", "spark"]
-const REFUSED = /^\[Tactical\] retreat without shot refused: /
+const REFUSED = /^\[Tactical\] retreat without damage refused: /
 const RETREAT_CASES = [
 	["54969622:2", 1, plan(233, 217, null, 0, [], ["protein"], [], 3, 0, 184, -85.7)],
 	["54969622:3", 1, plan(179, 232, null, 0, SPARKS, [], [], 9, 29.21, 184, -87.12)],
