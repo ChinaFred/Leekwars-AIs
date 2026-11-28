@@ -1,24 +1,5 @@
 [
  {
-  "id": "8150386",
-  "account": "Kassbi",
-  "published_at": 1795815675,
-  "published_at_iso": "2026-11-27T21:41:15Z",
-  "commit": "8150386151e0df213ed81a8b67642844f31db3c7",
-  "committed_at": 1795815619,
-  "subject": "feat(book): crédit de boost sans tir et rejeu du compteur de duel",
-  "message": "feat(book): crédit de boost sans tir et rejeu du compteur de duel\n\nPourquoi : combat 55005891 et cinq autres : tours 1 et 2 quasi vides (0 PT sur\n10 au tour 2 dans 5 combats sur 6, ennemi à 17-21 cases).\nStratégie: Kassbi_Book seulement. Boost de force sans tir crédité de\nIDLE_BOOST_SHOT_WEIGHT 0,75 × (durée − tour de contact) × gain de dégâts,\nseulement s'il n'existe aucun tir non létal (durées lues : protein 2 tours,\nmotivation 3). Rejeu hors ligne du duel : déclenchement au tour 9 sur 55005067,\njamais sur 55005897.\nTests: typecheck OK ; tests de boost et de duel prouvés par mutation ; npm test\nexit 0 (789 points comptés) ; ops réelles non mesurées.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6fCuBuhoey8NDFqq4G",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 1,
-   "updated": 5,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "b046e07",
   "account": "Kassbi",
   "published_at": 1795856745,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 7,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "db21aac",
+  "account": "Kassbi",
+  "published_at": 1795866817,
+  "published_at_iso": "2026-11-28T11:53:37Z",
+  "commit": "db21aac66827333a2bb7fea9e4e05f750cd3b7ce",
+  "committed_at": 1795866741,
+  "subject": "feat(book): arme du tour 1 choisie selon les tours 2-3 du meilleur plan",
+  "message": "feat(book): arme du tour 1 choisie selon les tours 2-3 du meilleur plan\n\nStratégie: l'arme équipée au tour 1 est celle que le meilleur enchaînement du livre utilise en premier aux tours simulés suivants (TacticalPlan.later). Sans arme prévue (pas de plan, profondeur 1, repli planAct) : dégâts moyens/PT × part des distances de tir plausibles du prochain contact, donc une arme à distance passe devant le corps à corps tant que le contact n'est pas plausible (Magnum au lieu de l'Épée large à 20-32 cases ; l'Épée large redevient éligible à 1-2 cases). Aucune constante nouvelle.\nTests: tests/opening-weapon-plan.test.mjs (8 ; (a) et (b) échouent sans le changement, 4 mutations détectées) ; npm run typecheck et npm test OK (754/754).\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cYkCTfzcK3tpELByK",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 4,
    "deleted_files": 0,
    "deleted_folders": 0
   }
