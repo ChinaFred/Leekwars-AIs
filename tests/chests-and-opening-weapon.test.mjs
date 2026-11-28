@@ -105,7 +105,7 @@ test("turn 1 with no TP left or no weapon: nothing is equipped", () => {
 
 test("turn(): a chest is listed and observed apart, never identified as an enemy, and a weapon is equipped on turn 1", async () => {
 	globalThis.Chest = FakeChest
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("./helpers/joint-turn.mjs")
 	const { enemyMemory, chestMemory } = await import("../dist/Brain/TurnObservation.js")
 	const equipped = []
 	const me = entity(1, 0, {

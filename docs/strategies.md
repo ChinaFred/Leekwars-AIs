@@ -10,17 +10,21 @@ seulement) et ajoute ou ajuste un test de régression. L'historique est dans [`C
 
 ## Chaîne de décision
 
-Un tour, dans l'ordre (`src/Main/Kassbi_Class.ts`, `turn()`) :
+**Stratégie principale : le livre de combos** (`src/Main/Kassbi_Book.ts`, `turn()`). Le **plan conjoint** (`TacticalPlanner.ts`, plan B `ReservePlan.ts`, exécution `TacticalExecution.ts`) est le **repli gelé** du livre : il ne reçoit plus d'évolution et ne sert que si le livre ne rend pas de plan.
 
-1. **Observer** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
+Un tour, dans l'ordre :
+
+1. **Paroles** : salutation au tour 1 (`greetOnce`), puis récit du poireau avec les PT restants en fin de tour (`tellLeekLife`) ; 2 `say` au plus par tour (`TurnSpeech.ts`).
+2. **Observer** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, coffres, cases atteignables, carte de danger, stagnation, historique.
    Chaque collecte est protégée : une erreur est journalisée (`ERROR`) sans interrompre le tour.
-2. **`planAct`** (`src/Brain/PlanActScenario.ts`) avec `leekProfile`, le **point de réglage du comportement**
-   (`Kassbi_Class.ts` : `AGGRESSIVE`, agressivité 100, soin/bouclier/repli autorisés ; voir « Comportement configuré ») :
+3. **Piège du coffre** (`springChestTrap`) : s'il s'applique, il remplace le plan.
+4. **Livre** (`planWithBook`, `BookPlanner.ts`) avec `leekProfile` (`Kassbi_Book.ts` : `AGGRESSIVE`, agressivité 50, soin/bouclier/repli autorisés), l'objectif `OBJECTIVES.damage` (`BookObjective.ts`) et le compteur de duel `StandoffTracker`. Le tour 1 du meilleur enchaînement est exécuté par `executeTacticalPlan`.
+5. **Repli** : sans plan du livre (données absentes, budget coupé, aucune action utile, erreur), `planAct` (`src/Brain/PlanActScenario.ts`) avec le même `leekProfile` :
    - **plan conjoint** (`TacticalPlanner.ts`) si les cartes du tour sont complètes ;
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
      journalisée (`PLANNING`).
-3. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
+6. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
    (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
 
 Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, tous les boosts compris (force, PT, agilité, PM) :
@@ -123,7 +127,7 @@ Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
 La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 60 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
 
-Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, jusqu'à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Repli après tir cherché par groupe d'actions classé sur son potentiel (danger final nul), pas sur son score « sur place ». Niveau 2 seulement en duel (AGGRESSIVE, `BookStandoff.ts` : ≥ 6 tours, mes PV stables, dégâts infligés ≥ 15 % des PV max adverses mais baisse nette < 15 %) ou si un plan non létal inflige plus ; en duel limite létale × (1 + 0,25 par tour au-delà de la fenêtre, 2,0 au plus), jamais à 2 × mes PV ni sous 50 % de PV, poids du danger réduit, budget 0,30 au lieu de 0,25. Aucun seuil ci-dessus n'en dépend. Boost de force posé sans tir (cible lointaine) : crédit `IDLE_BOOST_SHOT_WEIGHT` = 0,75 × (durée − tour du premier tir) × gain de dégâts du boost, seulement si aucun tour suivant n'est simulé ; durées relevées dans fight.json : protein 2 tours, motivation 3 (le tour du lancer compte pour 1, effet retiré au début de mon tour suivant).
+**Livre** (stratégie principale, voir « Chaîne de décision ») : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, jusqu'à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli gelé sur `planAct`. Repli après tir cherché par groupe d'actions classé sur son potentiel (danger final nul), pas sur son score « sur place ». Niveau 2 seulement en duel (AGGRESSIVE, `BookStandoff.ts` : ≥ 6 tours, mes PV stables, dégâts infligés ≥ 15 % des PV max adverses mais baisse nette < 15 %) ou si un plan non létal inflige plus ; en duel limite létale × (1 + 0,25 par tour au-delà de la fenêtre, 2,0 au plus), jamais à 2 × mes PV ni sous 50 % de PV, poids du danger réduit, budget 0,30 au lieu de 0,25. Les seuils du plan conjoint ci-dessus ne s'appliquent qu'au repli. Boost de force posé sans tir (cible lointaine) : crédit `IDLE_BOOST_SHOT_WEIGHT` = 0,75 × (durée − tour du premier tir) × gain de dégâts du boost, seulement si aucun tour suivant n'est simulé ; durées relevées dans fight.json : protein 2 tours, motivation 3 (le tour du lancer compte pour 1, effet retiré au début de mon tour suivant).
 
 ## Plan B (`ReservePlan.ts`)
 

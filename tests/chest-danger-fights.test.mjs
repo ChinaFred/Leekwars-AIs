@@ -151,7 +151,7 @@ for (const id of [55005891, 55005881]) {
 		assert.notEqual(step.target?.enemy.id, 2, "the chest is never a target")
 	})
 
-	test(`combat ${id}: the joint plan (Kassbi_Class) does not end its turn within the reach of the armed chest`, () => {
+	test(`combat ${id}: the joint plan (fallback of the book) does not end its turn within the reach of the armed chest`, () => {
 		const w = replay(id)
 		const result = evaluateTacticalPlans(w.me, w.profile, w.context)
 		assert.notEqual(result.plan, null, result.reason)

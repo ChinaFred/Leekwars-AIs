@@ -4,7 +4,7 @@ import test from "node:test"
 globalThis.Color = { rgb: () => 0 }
 globalThis.Debug = { log() {}, pause() {} }
 
-// Paroles partagées par `Kassbi_Class` et `Kassbi_Book` : salutation au premier tour, récit avec les PT restants.
+// Paroles de `Kassbi_Book` : salutation au premier tour, récit avec les PT restants.
 const { greetOnce, startTurnSpeech, tellLeekLife } = await import("../dist/Brain/TurnSpeech.js")
 
 const makeMe = (tp) => ({ tp, said: [], say(message) { this.said.push(message) } })
