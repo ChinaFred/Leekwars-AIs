@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 13
+// file version: 14
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -170,22 +170,30 @@ export function planWithBook(me: Me, context: TacticalContext, profile: LeekProf
 	const run = planBeam(me, context, profile, options)
 	if (run === null || run.result.best === null) return null
 	const { catalog } = run
-	const best = run.result.best
 	const result = run.result
 	const enemies = aliveEnemies().filter((enemy) => enemy.life > 0)
-	const first = best.steps[0]!
-	if (first.combo.items.length === 0 && first.boosts.length === 0 && first.supports.length === 0 &&
-		first.finalCell === me.cell) {
-		log(() => "[Book] best sequence does nothing this turn: fallback", LOG_CONTEXT.PLANNING)
-		return null
+	// Le faisceau est classé du meilleur au moins bon : un plan laser écarté (`laserChecked`) cède au plan SUIVANT du faisceau, pas à un
+	// autre planificateur. Un plan qui ne fait rien arrête la liste (repli). Les nœuds d'un même premier tour donnent le même plan : jugé une fois.
+	const refused = new Set<string>()
+	for (const [rank, node] of result.beam.entries()) {
+		const first = node.steps[0]!
+		if (refused.has(first.key)) continue
+		if (first.combo.items.length === 0 && first.boosts.length === 0 && first.supports.length === 0 &&
+			first.finalCell === me.cell) {
+			log(() => "[Book] best sequence does nothing this turn: fallback", LOG_CONTEXT.PLANNING)
+			return null
+		}
+		const plan = laserChecked(me, toPlan(me, catalog, first, enemies, result.depth, result.cut, node.score, laterOf(catalog, node.steps)))
+		if (plan === null) { refused.add(first.key); continue }
+		if (rank === 0) log(() => unchosen(first, run.trace, catalog.book.items, me.mp), LOG_CONTEXT.PLANNING)
+		log(() => `[Book] chosen${rank > 0 ? ` (beam rank ${rank + 1}, laser plans refused before)` : ""}: ${describe({ ...node, steps: [first] }, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
+		return plan
 	}
-	log(() => unchosen(first, run.trace, catalog.book.items, me.mp), LOG_CONTEXT.PLANNING)
-	log(() => `[Book] chosen: ${describe({ ...best, steps: [first] }, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
-	return laserChecked(me, toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score, laterOf(catalog, best.steps)))
+	return null
 }
 
 /**
- * Laser : le faisceau ne simule pas la ligne. Le plan retenu est écarté (repli sur `planAct`, qui la simule) si la ligne
+ * Laser : le faisceau ne simule pas la ligne. Le plan est écarté (`planWithBook` prend alors le plan suivant du faisceau) si la ligne
  * touche un coffre, ou si les alliés touchés coûtent plus que les ennemis ne rapportent ; sinon il note les alliés acceptés
  * pour la revérification avant tir. Pas d'optimisation de la visée dans le livre.
  */

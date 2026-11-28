@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -30,10 +30,12 @@ export const DAMAGE_TAKEN_FRACTION = 0.5
  * Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus. Le coût est mesuré sur le niveau 1 (une seule
  * racine, qui calcule aussi ses cases atteignables) ; combat 55027536 (e7ef19c) : les nœuds du niveau 2 coûtent environ la
  * moitié (≤ 87k contre 120-155k estimés). À 2, 3 nœuds sur 5 étaient ouverts aux tours 5 et 6 alors que le tour finissait à
- * 44 % / 41 % des ops. Risque à 1,2 : un niveau coupé en cours est abandonné (travail perdu, le niveau précédent reste). Jamais
+ * 44 % / 41 % des ops. Combat 55029308 tour 1 : racine 293 708 ops, nœuds du niveau 2 ≈ 175 k (0,6 ×), du niveau 3 ≈ 95 k (0,55 ×) ;
+ * à 1,2 le faisceau était réduit à 4 puis 2 nœuds sur 5 et le tour finissait à 64,5 % des ops (plafond 70 %). À 0,7 : 5 nœuds au
+ * niveau 2, 3 au niveau 3. Risque : un niveau coupé en cours est abandonné (travail perdu, le niveau précédent reste). Jamais
  * au-delà du plafond global : `SEARCH_GLOBAL_FRACTION` (0,80) et `BOOK_SEARCH_FRACTION` (0,70) bornent toujours la recherche.
  */
-export const NODE_COST_MARGIN = 1.2
+export const NODE_COST_MARGIN = 0.7
 /**
  * Crédit d'un boost de force posé SANS tir (voir `idleBoostCredit`) : part des dégâts supplémentaires du boost sur les tours
  * où il sert, à 0,75 comme les autres crédits de tours futurs (`FUTURE_TURN_WEIGHT`). Durées relevées dans fight.json : protein 2

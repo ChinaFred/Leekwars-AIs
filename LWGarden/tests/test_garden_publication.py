@@ -263,7 +263,7 @@ class RetentionBoundaryTests(unittest.TestCase):
         for index in range(count):
             FightArchive.record_publication(
                 self.data, account, git_state((account[0] + "%06x" % index).ljust(40, "0")),
-                "ab" * 20, {}, now=start + index * 100
+                "ab" * 20, {}, now=start + index * 100, retention=10
             )
 
     def store_fight(self, fight_id, date, account):
@@ -274,7 +274,7 @@ class RetentionBoundaryTests(unittest.TestCase):
     def test_nine_publications_keep_everything_ten_start_pruning_at_the_oldest_kept(self):
         self.publish("me", 9)
         self.store_fight(1, 10, "me")
-        self.assertEqual(FightArchive.prune(self.data), {"publications": 0, "fights": 0})
+        self.assertEqual(FightArchive.prune(self.data, retention=10), {"publications": 0, "fights": 0})
         self.publish("me", 1, start=1900)
         self.assertEqual(len(FightArchive.load_publications(self.data)), 10)
         self.assertEqual(FightArchive.list_archived_fights(self.data), [])
@@ -283,14 +283,14 @@ class RetentionBoundaryTests(unittest.TestCase):
         self.publish("me", 12)  # kept: published_at 1200 .. 2100
         self.store_fight(1, 1199, "me")
         self.store_fight(2, 1200, "me")
-        FightArchive.prune(self.data)
+        FightArchive.prune(self.data, retention=10)
         self.assertEqual([m["fight_id"] for m in FightArchive.list_archived_fights(self.data)], [2])
 
     def test_retention_is_per_account(self):
         self.publish("me", 12)
         self.publish("other", 2, start=500)
         self.store_fight(1, 600, "other")
-        FightArchive.prune(self.data)
+        FightArchive.prune(self.data, retention=10)
         accounts = [p["account"] for p in FightArchive.load_publications(self.data)]
         self.assertEqual(accounts.count("me"), 10)
         self.assertEqual(accounts.count("other"), 2)
