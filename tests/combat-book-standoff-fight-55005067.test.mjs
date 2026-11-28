@@ -359,11 +359,11 @@ test("search cut: a deeper level refused or narrowed by the operations allowance
 	}
 })
 
-test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 nodes of level 2 (margin 1.2; margin 2 gave 3)", async () => {
+test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 nodes of level 2 (margin 0.7; margin 1.2 gave 3)", async () => {
 	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
 	const { NODE_COST_MARGIN } = await import("../dist/Classes/Plannification/BookBeam.js")
 	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
-	assert.equal(NODE_COST_MARGIN, 1.2)
+	assert.equal(NODE_COST_MARGIN, 0.7)
 	const budgetOf = (cap) => new class extends BookBudget {
 		ops() { return this.work * 250 }
 		remainingOps() { return cap - this.work * 250 }
@@ -378,9 +378,9 @@ test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 node
 		const level1Run = planBeam(w.me, w.context, w.profile, { depth: 1, standoff: duel(6) })
 		const level1 = level1Run.work * 250
 		assert.equal(level1Run.result.beam.length, 5, "5 nodes at the beam")
-		// reste = 6,9 x coût d'un nœud : 6,9 / 1,2 = 5 nœuds payés ; avec la marge 2, 6,9 / 2 = 3.
+		// reste = 3,6 x coût d'un nœud (combat 55029308 : 5 > 4 à 64,5 % des ops) : 3,6 / 0,7 = 5 nœuds payés ; avec la marge 1,2, 3.
 		w = replay(5); initLeekLogging(errors); lines.length = 0
-		const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: budgetOf(level1 * 7.9) })
+		const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: budgetOf(level1 * 4.6) })
 		assert.equal(run.result.depth, 2)
 		assert.deepEqual(lines.filter((line) => line.includes("beam nodes bound")), [])
 	} finally {
@@ -432,7 +432,7 @@ test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9,
 	// fenêtre de 6 tours est pleine au tour 6 mais les dégâts bruts n'atteignent 15 % des PV max qu'à partir du tour 9.
 	const { readFileSync } = await import("node:fs")
 	const replayDuel = (id) => {
-		const f = JSON.parse(readFileSync(new URL(`../LWGarden/Data/fights/${id}/fight.json`, import.meta.url), "utf8"))
+		const f = JSON.parse(readFileSync(new URL(`./data/fight-${id}.json`, import.meta.url), "utf8"))
 		const me = f.data.leeks.find((l) => l.farmer === 98285)
 		const foes = f.data.leeks.filter((l) => l.team !== me.team && l.type !== 3)
 		const life = new Map(f.data.leeks.map((l) => [l.id, l.life])), max = new Map(life)

@@ -25,11 +25,12 @@ const motivation = () => chip(12, "motivation", 2, 6, [feature(8, 4, 4, 3)])
 const cure = (heal = 40) => chip(13, "cure", 4, 2, [feature(2, heal, heal)])
 
 /** Grille ouverte 25 x 11 ; `danger(cell)` : carte de danger du jeu ; ennemis : `[x, y, life, extra]`. */
-function world({ me: at = [6, 5], tp = 10, mp = 3, life = 300, strength = 0, chips = [], enemies = [[10, 5, 1000]], danger = () => 0, turn = 1, effects = [] } = {}) {
+function world({ me: at = [6, 5], tp = 10, mp = 3, life = 300, strength = 0, chips = [], enemies = [[10, 5, 1000]], danger = () => 0, turn = 1, effects = [], walls = [] } = {}) {
 	delete globalThis.System
 	resetBookCache()
 	const cells = new Map()
 	for (let x = 0; x < 25; x++) for (let y = 0; y < 11; y++) cells.set(`${x},${y}`, { id: y * 25 + x, x, y, empty: true, obstacle: false, entity: null })
+	for (const [x, y] of walls) cells.get(`${x},${y}`).obstacle = true
 	globalThis.Field = { cellFromXY: (x, y) => cells.get(`${x},${y}`) ?? null, lineOfSight: () => true }
 	const weapon = gun()
 	const me = { id: 1, name: "me", level: 25, life, maxLife: 300, mp, tp, strength, magic: 0, agility: 0, wisdom: 0, science: 0, resistance: 0,
@@ -250,7 +251,7 @@ const archived = (id) => existsSync(new URL(`../LWGarden/Data/fights/${id}/fight
 
 test("boost durations in the archived fight 55005067: protein lasts 2 turns, motivation 3, removed at the start of my turn that follows", { skip: !archived(55005067) && "archive 55005067 absente" }, async () => {
 	const { readFileSync } = await import("node:fs")
-	const f = JSON.parse(readFileSync(new URL("../LWGarden/Data/fights/55005067/fight.json", import.meta.url), "utf8"))
+	const f = JSON.parse(readFileSync(new URL("./data/fight-55005067.json", import.meta.url), "utf8"))
 	const added = new Map(), removed = []
 	let turn = 0, entity = null
 	for (const a of f.data.actions) {
@@ -347,6 +348,26 @@ test("a defensive enemy retreats at the simulated turns, the others advance", as
 		return step.plan.state.enemies[0].cell.x - run.result.best.steps[0].finalCell.x
 	}
 	assert.ok(second(() => "defensive") > second(() => "aggressive"), "l'ennemi défensif est plus loin au tour 2")
+})
+
+test("laser: a best plan whose line hits a chest is dropped and the NEXT beam plan is played, not a fallback", () => {
+	globalThis.Chest = class {}
+	try {
+		const w = world({ me: [6, 5], mp: 1, chips: [rock()], enemies: [[10, 5, 1000]], danger: (c) => (c.y === 5 ? 0 : 30) }) // la rangée du coffre est la moins dangereuse : ses plans passent en premier
+		const chest = Object.assign(new globalThis.Chest(), { id: 50, name: "chest", life: 100, maxLife: 100, mp: 0, tp: 0, effects: [], cell: w.cells.get("8,5") })
+		chest.cell.entity = chest
+		w.foes.push(chest)
+		w.me.weapon.area = 2 // laser : la ligne (6,5) -> (10,5) traverse le coffre (8,5)
+		resetBookCache()
+		const best = planBeam(w.me, w.context, w.profile, { depth: 1 }).result.best.steps[0]
+		const run = planBeam(w.me, w.context, w.profile, { depth: 1 })
+		assert.ok(best.combo.weaponShots > 0 && best.shotCell.y === 5, "the best beam plan shoots the laser along the chest row")
+		const plan = planWithBook(w.me, w.context, w.profile, { depth: 1 })
+		assert.ok(plan !== null, "no fallback: the next beam plan is played")
+		assert.notEqual(plan.shotCell.y, 5, "the plans aligned with the chest are dropped; the next one (off the row) is played")
+	} finally {
+		delete globalThis.Chest
+	}
 })
 
 test("level 2 always opened: a lone best plan (no boost, no duel, nothing better) is still simulated two turns (fight 55029810, turn 2)", () => {
