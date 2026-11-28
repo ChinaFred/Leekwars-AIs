@@ -1,24 +1,5 @@
 [
  {
-  "id": "7092a85",
-  "account": "Kassbi",
-  "published_at": 1795813253,
-  "published_at_iso": "2026-11-27T21:00:53Z",
-  "commit": "7092a85536d904be32e1149f3ef280f62ff3cb45",
-  "committed_at": 1795813186,
-  "subject": "feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur",
-  "message": "feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur\n\nPourquoi : combat 55005067 (nul, 64 tours) : duel de dégâts annulé par les\nsoins adverses (2479 infligés, 2269 soignés), faisceau en profondeur 1 dans\n58 tours sur 64, tir létal jamais raffiné avec un repli sûr.\nStratégie: Kassbi_Book seulement (non branché aux IA actives). Corrige le\nraffinement des replis par groupe d'actions ; compteur de duel (6 tours,\n< 15 % de PV nets, dégâts infligés ≥ 15 %) ; en AGGRESSIVE pendant un duel,\nlimite létale life × (1 + 0,25 × tours au-delà), plafond 2,0, poids du danger\nréduit, jamais si danger ≥ 2 × PV ni sous 50 % de PV ; niveau 2 ouvert\nseulement en duel ou si un plan non létal frappe plus, part de budget 0,25 →\n0,30 en duel. DEFENSIVE inchangée.\nTests: typecheck OK ; 42 tests ciblés OK ; npm test exit 0 (764 points\ncomptés) ; garde-fous et budget prouvés par mutation ; ops réelles non mesurées.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6fCuBuhoey8NDFqq4G",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 1,
-   "updated": 5,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "8150386",
   "account": "Kassbi",
   "published_at": 1795815675,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 3,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "01b60ad",
+  "account": "Kassbi",
+  "published_at": 1795866400,
+  "published_at_iso": "2026-11-28T11:46:40Z",
+  "commit": "01b60ad420ff41a2b8753e4642050e102d8f5abe",
+  "committed_at": 1795866328,
+  "subject": "chore(merge): fusion de Master (ennemi défensif) dans le boost de PM",
+  "message": "chore(merge): fusion de Master (ennemi défensif) dans le boost de PM\n\nStratégie: les deux comportements cohabitent : ennemi défensif simulé en recul\naux tours 2-3 (moverByStance), niveau 3 ouvert sous 30 % d'ops, marge de nœud\n1,2, pénalité de fuite sans tir, et boost de PM / PT sans tir (zone(state,k,mp),\ninvestsInBoost : niveau 3 ouvert si l'un OU l'autre critère l'autorise, borné\npar 0,70 / 0,80 et le coût d'un nœud).\nTests: typecheck ok ; npm test ok (746 tests, 0 échec).\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cYkCTfzcK3tpELByK",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 7,
    "deleted_files": 0,
    "deleted_folders": 0
   }
