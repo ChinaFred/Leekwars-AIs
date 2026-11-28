@@ -357,7 +357,7 @@ async function playTurn(config, options) {
 }
 
 const CONTEXT_LINES = {
-	[LOG_CONTEXT.SYSTEM]: (line) => line.includes("=== KASSBI BOOK TURN START ===") || line.includes("=== KASSBI BOOK TURN END ==="),
+	[LOG_CONTEXT.SYSTEM]: (line) => line.includes("=== KASSBI BOOK TURN START ===") || line.startsWith("Version : ") || line.includes("=== KASSBI BOOK TURN END ==="),
 	[LOG_CONTEXT.COMBAT]: (line) => /^(My HP:|Enemy:|Enemy HP:|\[History\] )/.test(line),
 	[LOG_CONTEXT.SPEECH]: (line) => line.startsWith("[Speech]"),
 	[LOG_CONTEXT.MEMORY]: (line) => line.startsWith("[EnemyMemory]"),
@@ -385,6 +385,7 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 		const { lines, actions } = await playTurn(new LogConfig(), { enemyLife: 10 })
 		assert.deepEqual(actions, ["shoot"]) // 10 PV : le premier tir (22) tue, le second est annulé
 		assert.equal(lines[0], "\n=== KASSBI BOOK TURN START ===")
+		assert.equal(lines[1], "Version : locale (non déployée)") // `DEPLOYED_VERSION`, réécrit par Garden à chaque PUSH
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
 		assert.equal(lines.at(-2), "=== KASSBI BOOK TURN END ===\n")
 		// Sans provocation, les 2 `say` du tour sont des lignes du récit du poireau.
