@@ -207,5 +207,24 @@
    "deleted_files": 0,
    "deleted_folders": 0
   }
+ },
+ {
+  "id": "a96daa8",
+  "account": "Kassbi",
+  "published_at": 1795873760,
+  "published_at_iso": "2026-11-28T13:49:20Z",
+  "commit": "a96daa83ae795f7b7c8339f12403301d21b6c457",
+  "committed_at": 1795873721,
+  "subject": "chore: fusion de Master dans la branche de travail",
+  "message": "chore: fusion de Master dans la branche de travail\n\nStratégie: aucun changement de comportement ; fusion du plan à deux armes avec le repli laser de Master (un plan laser écarté cède au plan suivant du faisceau, y compris un plan à deux armes avec laser) et de la marge de nœud 0,7.\nTests: typecheck et npm test verts après fusion.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bTmmwxDmkPjSgSirS",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 4,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
  }
 ]
