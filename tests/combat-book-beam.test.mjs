@@ -328,3 +328,20 @@ test("flee penalty: only a retreat without damage, heal or shield at turn 1", ()
 	penalizeFleeNoShot(lethalOnly)
 	assert.deepEqual(lethalOnly.map((s) => s.fleePenalty), [0, 0], "aucun tir non létal : pas de pénalité")
 })
+
+test("a defensive enemy retreats at the simulated turns, the others advance", async () => {
+	const { retreatFromMe, moverByStance } = await import("../dist/Classes/Plannification/BookEnemyModel.js")
+	const w = world({ enemies: [[10, 5, 1000]] })
+	const enemy = { cell: w.foes[0].cell, mp: 3, id: 2 }
+	assert.equal(retreatFromMe(enemy, w.me.cell).x, 13)
+	assert.equal(retreatFromMe({ cell: w.cells.get("24,5"), mp: 3 }, w.me.cell).x, 24, "bord : reste")
+	assert.equal(moverByStance(() => "defensive")(enemy, w.me.cell).x, 13)
+	for (const stance of ["aggressive", "mixed", "unknown"]) assert.equal(moverByStance(() => stance)(enemy, w.me.cell).x, 7, stance)
+	const second = (stanceOf) => {
+		const w2 = world({ enemies: [[10, 5, 1000]] })
+		const run = planBeam(w2.me, w2.context, w2.profile, { deepen: true, depth: 2, stanceOf })
+		const step = run.result.best.steps[1]
+		return step.plan.state.enemies[0].cell.x - run.result.best.steps[0].finalCell.x
+	}
+	assert.ok(second(() => "defensive") > second(() => "aggressive"), "l'ennemi défensif est plus loin au tour 2")
+})

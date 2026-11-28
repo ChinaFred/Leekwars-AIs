@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 2
+// file version: 3
+import { EnemyAfterMyTurn, EnemyTurnRecord, MAX_TURN_LOG } from "./EnemyBehavior.js"
 import { EntityProfile } from "./EntityProfile.js"
 
 /** Nombre maximal de coups conservés par ennemi (mémoire bornée). */
@@ -53,6 +54,10 @@ export class EnemyProfile extends EntityProfile {
 	readonly observedWeapons = new Map<number, ObservedItem<Weapon>>()
 	readonly observedChips = new Map<number, ObservedItem<Chip>>()
 	readonly hits: EnemyHit[] = []
+	/** Historique de ses tours (déplacement, frappe, soin, armure), `MAX_TURN_LOG` au plus ; voir `EnemyBehavior`. */
+	readonly turnLog: EnemyTurnRecord[] = []
+	/** Photographie à la fin de mon dernier tour, consommée par la mise à jour suivante. */
+	afterMyTurn: EnemyAfterMyTurn | null = null
 	/** Plus grand `entity.tp` vu pendant mon tour (le TP de l'ennemi à son propre tour n'est pas lisible). */
 	maxTpSeen = 0
 	/** Dernier tour pour lequel les cooldowns ont été avancés. */
@@ -114,6 +119,13 @@ export class EnemyProfile extends EntityProfile {
 		this.hits.push(hit)
 		if (this.hits.length > MAX_HIT_LOG) {
 			this.hits.splice(0, this.hits.length - MAX_HIT_LOG)
+		}
+	}
+
+	addTurnRecord(record: EnemyTurnRecord): void {
+		this.turnLog.push(record)
+		if (this.turnLog.length > MAX_TURN_LOG) {
+			this.turnLog.splice(0, this.turnLog.length - MAX_TURN_LOG)
 		}
 	}
 

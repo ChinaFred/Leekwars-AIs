@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMemory.js"
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
@@ -129,6 +129,15 @@ function observeEnemies(me: Me, living: EntityList): void {
 			}
 			if (update.newItems.length > 0) {
 				log(() => `[EnemyMemory] ${enemy.name} observed: ${update.newItems.join(", ")}`, LOG_CONTEXT.MEMORY)
+			}
+			const stance = enemyMemory.stanceOf(enemy.id)
+			if (stance !== null && stance.turns > 0) {
+				log(
+					() => `[EnemyMemory] ${enemy.name} stance ${stance.stance} over ${stance.turns} turns ` +
+						`(attack ${stance.attacked}, approach ${stance.approached} / flee ${stance.fled}, ` +
+						`heal ${stance.healed}, shield ${stance.shielded})`,
+					LOG_CONTEXT.MEMORY
+				)
 			}
 			if (update.hit !== null && update.hit.item !== null) {
 				const hit = update.hit
@@ -298,6 +307,6 @@ export function mpBoostCandidate(me: Me): NonNullable<TacticalContext["mpBoost"]
 /** Mémorise mes PV de fin de tour (attribution des dégâts subis au tour suivant). */
 export function recordMyTurnEnd(me: Me): void {
 	guarded("recordMyTurnEnd", () => {
-		enemyMemory.endMyTurn(me, Fight.turn)
+		enemyMemory.endMyTurn(me, Fight.turn, aliveEnemies())
 	})
 }
