@@ -162,8 +162,6 @@ function arena({ mp = 5, k = 164, e = 255, turn = 4, obstacles = FIGHT_OBSTACLES
 	memory.updateReachable(me, [], [enemy], turn)
 	memory.updateThreatMap(me, [enemy], turn)
 	const profile = new LeekProfile()
-	profile.setRole("BALANCED"); profile.setAggression(50)
-	profile.setSupportOptions(true, true, true)
 	const context = { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() }
 	return { me, enemy, cells, stats, memory, context, profile, nativeOps: () => stats.weaponCells * NATIVE_PROVIDER_OPS +
 		stats.chipCells * NATIVE_PROVIDER_OPS + stats.lineOfSight * 31 + stats.cellFromXY * 5,
@@ -197,15 +195,18 @@ const done = () => { delete globalThis.System }
 // 4 PM : même décision (score -16,88 -> 37,57). Tour 5 à 5 PM, la DÉCISION CHANGE : avant, protein seul et repli en 74
 // (danger 59,76, score -8,46, aucun item utilisable de là au tour suivant) ; maintenant, comme à 4 PM, motivation + protein
 // + neutrino depuis 217 (danger 154,38, N = 0,75 x 72,6 : neutrino + rock, score 37,57).
+// Rejoué avec le comportement unique (`LeekBehavior`, poids du risque 0,5, approche 1,25 ; avant : profil BALANCED, poids 1) :
+// destinations et dangers inchangés, scores et N plus hauts ; aux tours 5 (4 et 5 PM) et 6 (5 PM) le plan lance rock + protein
+// au lieu de motivation + protein + neutrino (danger identique, 154,38 au tour 5).
 const EXPECTED = {
-	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.3, nextTurn: 0, tpUsed: 3, boost: ["protein"] },
-	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 54.3, nextTurn: 0, tpUsed: 3, boost: ["protein"] },
-	"4PM T4 164/255": { destination: 147, shotCell: 130, weapon: null, weaponShots: 0, chips: ["ice"], protection: [], danger: 0, score: 133.913, nextTurn: 46.613, tpUsed: 7, boost: ["protein"] },
-	"5PM T4 164/255": { destination: 147, shotCell: 148, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 0, score: 191.413, nextTurn: 63.113, tpUsed: 8, boost: ["protein"] },
-	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 154.38, score: 37.57, nextTurn: 54.45, tpUsed: 12, boost: ["motivation", "protein"] },
-	"5PM T5 164/218": { destination: 217, shotCell: 217, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 154.38, score: 37.57, nextTurn: 54.45, tpUsed: 12, boost: ["motivation", "protein"] },
-	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 99.79, nextTurn: 54.45, tpUsed: 12, boost: ["motivation", "protein"] },
-	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 99.79, nextTurn: 54.45, tpUsed: 12, boost: ["motivation", "protein"] }
+	"4PM T3 180/326": { destination: 146, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 53.8, nextTurn: 0, tpUsed: 3, boost: ["protein"] },
+	"4PM T4 164/255": { destination: 147, shotCell: 130, weapon: null, weaponShots: 0, chips: ["ice"], protection: [], danger: 0, score: 145.566, nextTurn: 58.266, tpUsed: 7, boost: ["protein"] },
+	"4PM T5 164/218": { destination: 217, shotCell: 217, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 154.38, score: 130.001, nextTurn: 78.891, tpUsed: 8, boost: ["protein"] },
+	"4PM T6 164/199": { destination: 127, shotCell: 164, weapon: "neutrino", weaponShots: 1, chips: [], protection: [], danger: 92.16, score: 159.483, nextTurn: 68.063, tpUsed: 12, boost: ["motivation", "protein"] },
+	"5PM T3 180/326": { destination: 164, shotCell: 180, weapon: null, weaponShots: 0, chips: [], protection: [], danger: 0, score: 55.05, nextTurn: 0, tpUsed: 3, boost: ["protein"] },
+	"5PM T4 164/255": { destination: 147, shotCell: 148, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 0, score: 207.191, nextTurn: 78.891, tpUsed: 8, boost: ["protein"] },
+	"5PM T5 164/218": { destination: 217, shotCell: 217, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 154.38, score: 130.001, nextTurn: 78.891, tpUsed: 8, boost: ["protein"] },
+	"5PM T6 164/199": { destination: 127, shotCell: 164, weapon: null, weaponShots: 0, chips: ["rock"], protection: [], danger: 92.16, score: 161.111, nextTurn: 78.891, tpUsed: 8, boost: ["protein"] }
 }
 
 test("combat 54942202 at 4 and 5 MP: the tactical decisions are exactly the recorded ones (boost in the plan)", () => {

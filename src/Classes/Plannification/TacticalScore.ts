@@ -1,8 +1,7 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
-import { LeekStrategy } from "../Strategy/LeekStrategy.js"
 import {
 	BoostOption, agilityBoostFutureDamage, pickAgilityBoost, pickBoost, pickTpBoost, strengthBoostFutureDamage,
 	tpBoostFutureDamage
@@ -113,7 +112,7 @@ export interface Protection {
 }
 
 /**
- * `healing` / `shielding` : le profil l'autorise ET le seuil du rôle (`Strategy/*.ts`) est atteint ; mêmes seuils
+ * `healing` / `shielding` : le profil l'autorise ET le seuil du comportement (`LeekBehavior.ts`) est atteint ; mêmes seuils
  * que le plan B.
  */
 export function protections(me: Me, healing: boolean, shielding: boolean, budget: Budget, tp: number = me.tp): Protection[] {
@@ -160,11 +159,10 @@ export function shieldCredit(protection: Protection, danger: number): number {
 export const RETREAT_RISK_FACTOR = 2
 
 /**
- * Posture du rôle configuré (`profile.strategyName`) : LE seul endroit où le rôle règle le plan conjoint, en plus des
- * seuils de `Strategy/*.ts`. `BALANCED` est la référence (comportement d'avant la posture). Valeurs heuristiques, NON
- * calibrées en combat.
- * - `risk` : facteur de rôle du poids du risque `w` (voir `riskWeight`, commun au plan B).
- * - `approach` : facteur de rôle du poids d'approche `a` (voir `posture`), appliqué à `G` et à `N` dans le score.
+ * Posture du comportement (`LeekBehavior.ts`) : LE seul endroit où il règle le plan conjoint, en plus de ses seuils.
+ * Valeurs heuristiques (reprises de l'ancienne posture AGGRESSIVE), NON calibrées en combat.
+ * - `risk` : facteur du poids du risque `w` (voir `riskWeight`, commun au plan B).
+ * - `approach` : facteur du poids d'approche `a` (voir `posture`), appliqué à `G` et à `N` dans le score.
  * - `passivityFloor` : plancher du facteur de passivité `p` (0 : le danger finit par ne plus peser).
  * - `retreat` : recul sans dégâts en tête d'une recherche complète. `free` : jamais filtré ; `damage` : cède à un plan
  *   à dégâts sous la marge ; `advance` : de plus, sans un tel plan, cède à une avance ou à une protection sur place.
@@ -178,25 +176,19 @@ export interface RolePosture {
 	retreat: "free" | "damage" | "advance"
 	routeWeapon: "first" | "damage" | "range"
 }
-const BALANCED_POSTURE: RolePosture = { risk: 1, approach: 1, passivityFloor: 0, retreat: "damage", routeWeapon: "first" }
-const AGGRESSIVE_POSTURE: RolePosture = { risk: 0.5, approach: 1.25, passivityFloor: 0, retreat: "advance", routeWeapon: "damage" }
-const DEFENSIVE_POSTURE: RolePosture = { risk: 1.5, approach: 0.75, passivityFloor: 0.5, retreat: "free", routeWeapon: "range" }
-function rolePosture(profile: LeekProfile): RolePosture {
-	return profile.strategyName === "AGGRESSIVE" ? AGGRESSIVE_POSTURE :
-		profile.strategyName === "DEFENSIVE" ? DEFENSIVE_POSTURE : BALANCED_POSTURE
-}
+const BASE_POSTURE: RolePosture = { risk: 0.5, approach: 1.25, passivityFloor: 0, retreat: "advance", routeWeapon: "damage" }
 
 /** Plancher du poids d'approche `a` : même très prudent, un profil garde la moitié du progrès. Non calibré. */
 export const APPROACH_WEIGHT_MIN = 0.5
 
 /**
- * Posture du profil pour le plan conjoint. `approach` y devient le poids d'approche `a` = facteur de rôle ×
+ * Posture du profil pour le plan conjoint. `approach` y devient le poids d'approche `a` = facteur de posture ×
  * (0,5 + agressivité / 100), borné à [`APPROACH_WEIGHT_MIN`, `approachMax`]. L'appelant passe
  * `approachMax` = 1 / `NEXT_TURN_WEIGHT` : le poids effectif de `N` ne dépasse jamais 1 (des dégâts remis au tour
- * suivant ne valent jamais plus que ceux de ce tour). `BALANCED` à agressivité 50 : `a` = 1.
+ * suivant ne valent jamais plus que ceux de ce tour). À agressivité 50 : `a` = 1,25.
  */
 export function posture(profile: LeekProfile, approachMax: number): RolePosture {
-	const role = rolePosture(profile)
+	const role = BASE_POSTURE
 	return {
 		...role,
 		approach: Math.max(APPROACH_WEIGHT_MIN, Math.min(approachMax, role.approach * (0.5 + profile.aggression / 100)))
@@ -204,13 +196,13 @@ export function posture(profile: LeekProfile, approachMax: number): RolePosture 
 }
 
 /**
- * Poids du risque, commun au plan conjoint et au plan B : facteur de rôle (`RolePosture.risk`) × (1,5 − agressivité /
- * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `strategy.shouldHide` le demande
+ * Poids du risque, commun au plan conjoint et au plan B : facteur de posture (`RolePosture.risk`) × (1,5 − agressivité /
+ * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `profile.behavior.shouldHide` le demande
  * (`distance` : Manhattan à l'ennemi vivant le plus proche ; « trop près » : `distance < MIN_SAFE_DISTANCE`).
  */
-export function riskWeight(profile: LeekProfile, strategy: LeekStrategy, lifeRatio: number, distance: number): number {
-	const weight = rolePosture(profile).risk * (1.5 - profile.aggression / 100)
-	return profile.allowHiding && strategy.shouldHide(lifeRatio, distance)
+export function riskWeight(profile: LeekProfile, lifeRatio: number, distance: number): number {
+	const weight = BASE_POSTURE.risk * (1.5 - profile.aggression / 100)
+	return profile.allowHiding && profile.behavior.shouldHide(lifeRatio, distance)
 		? weight * RETREAT_RISK_FACTOR : weight
 }
 

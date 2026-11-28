@@ -68,7 +68,7 @@ const TURNS = {
 	4: { k: 546, e: 567, enemyLife: 197, enemyStrength: 295, enemyWeapon: "pistol", strengthBoost: 0, proteinCooldown: 1 }
 }
 
-function arena(turn, { ops, role = "AGGRESSIVE" } = {}) {
+function arena(turn, { ops } = {}) {
 	const state = TURNS[turn]
 	delete globalThis.System
 	globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5,
@@ -154,9 +154,7 @@ function arena(turn, { ops, role = "AGGRESSIVE" } = {}) {
 	memory.updateReachable(me, [], [enemy], turn)
 	memory.updateThreatMap(me, [enemy], turn)
 	if (ops) globalThis.System = { get operations() { return clock }, maxOperations: 1000000 }
-	const profile = new LeekProfile()
-	profile.setRole(role); profile.setAggression(50)
-	profile.setSupportOptions(true, true, true)
+	const profile = new LeekProfile(50)
 	const context = { reachable: memory.getReachable(me.id), threat: memory.getThreatMap() }
 	const usableNextTurn = (cell, item) => {
 		const zone = computeReachableCells({ ...me, cell }, me.mp, turn)
@@ -210,16 +208,12 @@ test("combat 54965081, turns 3 and 4: the final cell is credited with next turn'
 	} finally { done() }
 })
 
-test("posture, combat 54965081 turn 4: AGGRESSIVE moves in to shoot the neutrino, BALANCED and DEFENSIVE keep the spark retreat", () => {
+test("posture, combat 54965081 turn 4: the profile moves in to shoot the neutrino", () => {
 	try {
-		const seen = (role) => {
-			const w = arena(4, { role })
-			const { plan } = w.evaluate()
-			return [plan.shotCell.id, plan.destination.id, plan.weapon?.name ?? null, Number(plan.danger.toFixed(2))]
-		}
-		assert.deepEqual(seen("AGGRESSIVE"), [564, 527, "neutrino", 252.8])
-		assert.deepEqual(seen("BALANCED"), [546, 526, null, 142.2])
-		assert.deepEqual(seen("DEFENSIVE"), [546, 526, null, 142.2])
+		const w = arena(4)
+		const { plan } = w.evaluate()
+		assert.deepEqual([plan.shotCell.id, plan.destination.id, plan.weapon?.name ?? null, Number(plan.danger.toFixed(2))],
+			[564, 527, "neutrino", 252.8])
 	} finally { done() }
 })
 
@@ -263,19 +257,20 @@ function duel({ danger, enemyLife = 100, damage = 60 }) {
 }
 
 test("two cells of equal danger: the one that allows the weapon shot next turn wins; danger is still traded, never survival", () => {
-	// Profil par défaut : w = 1. N = 0,75 x 60 = 45 en (1,0), 0 en (-1,0) ; score de (1,0) = G (-1) - danger + 45.
+	// Profil par défaut : w = 0,5, a = 1,25. N = 1,25 x 0,75 x 60 = 56,25 en (1,0), 0 en (-1,0) ; score de (1,0) = G - 0,5 x danger + 56,25.
+	// Le danger reste échangé contre N tant que le plan survit : à danger = mes PV (100), létal, jamais accepté.
 	for (const [useful, other, expected] of [
-		[0, 0, [1, 0, 45]], // même danger : la case utile gagne (sans N : aucun plan, rester sur place)
-		[43, 0, [1, 0, 45]], // -1 - 43 + 45 = 1 > 0 : le danger est accepté
-		[45, 0, null], // -1 - 45 + 45 = -1 < 0 : rester
+		[0, 0, [1, 0, 56.25]], // même danger : la case utile gagne (sans N : aucun plan, rester sur place)
+		[43, 0, [1, 0, 56.25]], // le danger est accepté
+		[99, 0, [1, 0, 56.25]], // encore vivant : accepté
 		[100, 0, null] // danger = mes PV : létal
 	]) {
 		const plan = duel({ danger: cell => cell.x === 1 ? useful : cell.x === -1 ? other : 0 })
 		assert.deepEqual(plan && [plan.destination.x, plan.destination.y, plan.nextTurn], expected, `danger ${useful}`)
 	}
-	// Létal même quand N dépasserait LETHAL_PENALTY (cible à 3 000 PV, 3 000 de dégâts : N = 2 250 à 99 de danger).
+	// Létal même quand N dépasserait LETHAL_PENALTY (cible à 3 000 PV, 3 000 de dégâts : N = 1,25 x 2 250 = 2 812,5 à 99 de danger).
 	const rich = { enemyLife: 3000, damage: 3000 }
 	assert.ok(0.75 * 3000 > LETHAL_PENALTY)
-	assert.equal(duel({ ...rich, danger: cell => cell.x === 1 ? 99 : 0 }).nextTurn, 2250)
+	assert.equal(duel({ ...rich, danger: cell => cell.x === 1 ? 99 : 0 }).nextTurn, 2812.5)
 	assert.equal(duel({ ...rich, danger: cell => cell.x === 1 ? 100 : 0 }), null)
 })

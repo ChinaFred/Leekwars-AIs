@@ -445,7 +445,6 @@ test("turn() computes the reachable cells of me, my ally and the enemy, logs one
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 20, ally: 21 })
 	debugLogs.length = 0
 
@@ -466,7 +465,6 @@ test("turn() still plays when the reachable-cells computation fails, and reports
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 30, ally: 31 })
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	debugLogs.length = 0
@@ -481,7 +479,6 @@ test("turn() still plays when the reachable-cells computation fails, and reports
 test("turn() logs the operations line after TURN END, and still works when System is undefined", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 
 	makeCombatWorld({ enemy: 50, ally: 51 })
 	assert.equal(typeof globalThis.System, "undefined")
@@ -507,7 +504,6 @@ test("turn() logs the operations line after TURN END, and still works when Syste
 test("turn() still fires when a ring of obstacles leaves me no reachable cell but my own", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions, grid } = makeCombatWorld({ enemy: 40, ally: 41 })
 	for (const [x, y] of [[4, 5], [6, 5], [5, 4], [5, 6]]) {
 		grid.cell(x, y).obstacle = true

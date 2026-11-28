@@ -198,9 +198,7 @@ function arena(name, dangerOverride = {}, change = {}) {
 	const threat = new ThreatMap(me.id, turn, new Map([...reachable.entries()].map(({ cell, cost }) =>
 		[cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: dangerOf.get(cell.id), breakdown: [] }])),
 	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: 1, pairsEvaluated: 0, lineOfSightCalls: 0 })
-	const profile = new LeekProfile()
-	profile.setRole(state.role ?? "AGGRESSIVE"); profile.setAggression(50)
-	profile.setSupportOptions(true, true, true)
+	const profile = new LeekProfile(50)
 	const logs = []
 	const print = console.log
 	console.log = text => logs.push(String(text))
@@ -303,20 +301,16 @@ for (const [name, refused, advanced, expected, label] of RETREAT_CASES) {
 	})
 }
 
-test("posture, retreat without a shot: same turn of a fight, the three roles differ (DEFENSIVE hides, BALANCED shoots or hides, AGGRESSIVE shoots or advances)", () => {
-	const seen = (name, role) => {
-		const w = arena(name, {}, { role })
+test("posture, retreat without a shot: the profile shoots or advances (never a free retreat)", () => {
+	const seen = (name) => {
+		const w = arena(name)
 		return [w.plan.destination, w.plan.chips.length, w.plan.danger,
 			w.logs.filter(line => REFUSED.test(line)).length, w.logs.filter(line => ADVANCED.test(line)).length]
 	}
-	// 54976625:4 (sparks possibles, 43,2 dégâts à danger 130) : DEFENSIVE recule en 277 sans tirer, jamais filtré.
-	assert.deepEqual(seen("54976625:4", "DEFENSIVE"), [277, 0, 0, 0, 0])
-	assert.deepEqual(seen("54976625:4", "BALANCED"), [169, 3, 130, 1, 0])
-	assert.deepEqual(seen("54976625:4", "AGGRESSIVE"), [169, 3, 130, 1, 0])
-	// 54969622:2 (aucun plan à dégâts : spark absorbé) : seul AGGRESSIVE avance (217, danger 184) ; les autres reculent en 161.
-	assert.deepEqual(seen("54969622:2", "DEFENSIVE"), [161, 0, 0, 0, 0])
-	assert.deepEqual(seen("54969622:2", "BALANCED"), [161, 0, 0, 0, 0])
-	assert.deepEqual(seen("54969622:2", "AGGRESSIVE"), [217, 0, 184, 0, 1])
+	// 54976625:4 (sparks possibles, 43,2 dégâts à danger 130) : tire en 169.
+	assert.deepEqual(seen("54976625:4"), [169, 3, 130, 1, 0])
+	// 54969622:2 (aucun plan à dégâts : spark absorbé) : avance en 217 (danger 184).
+	assert.deepEqual(seen("54969622:2"), [217, 0, 184, 0, 1])
 })
 
 test("retreat without damage: replaced only by a damaging plan under the danger margin; kept with a useful heal or when no such plan exists", () => {

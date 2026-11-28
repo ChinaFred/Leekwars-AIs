@@ -46,7 +46,7 @@ function world({ me: at = [6, 5], tp = 10, mp = 3, life = 300, strength = 0, chi
 	const threat = new ThreatMap(me.id, turn, new Map([...reachable.entries()].map(({ cell, cost }) =>
 		[cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: danger(cell), breakdown: [] }])),
 	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: foes.length, pairsEvaluated: 0, lineOfSightCalls: 0 })
-	const profile = new LeekProfile(); profile.setRole("AGGRESSIVE"); profile.setAggression(50); profile.setSupportOptions(true, true, true)
+	const profile = new LeekProfile(50)
 	return { me, foes, profile, context: { reachable, threat }, cells }
 }
 const names = (run, step) => step.combo.items.map((i) => run.catalog.book.items[i].ref.name)

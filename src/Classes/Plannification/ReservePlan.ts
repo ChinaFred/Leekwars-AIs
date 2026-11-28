@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 16
+// file version: 17
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
-import { LeekProfile, createStrategy } from "../LeekProfile.js"
+import { LeekProfile } from "../LeekProfile.js"
 import {
 	BoostOption, MIN_LIFE_RATIO_FOR_BOOST, boostNetDamage, boostReach, pickBoost, readyBoosts, readyTpBoosts,
 	tpBoostFutureDamage, tpBoostNetDamage
@@ -176,8 +176,8 @@ export function executeReservePlan(
 		const objective = enemies[0]!
 		const distanceToObjective = (cell: Cell): number =>
 			Math.abs(cell.x - objective.cell.x) + Math.abs(cell.y - objective.cell.y)
-		const strategy = createStrategy(profile)
-		const weight = riskWeight(profile, strategy, me.life / me.maxLife, allEnemies.reduce((nearest, enemy) =>
+		const behavior = profile.behavior
+		const weight = riskWeight(profile, me.life / me.maxLife, allEnemies.reduce((nearest, enemy) =>
 			Math.min(nearest, Math.abs(origin.x - enemy.cell.x) + Math.abs(origin.y - enemy.cell.y)), Infinity))
 		// Sélection partielle AVANT les validations/fournisseurs coûteux, uniquement avec
 		// les coûts de trajet déjà calculés. Aucun danger n'est crédité à ce stade.
@@ -398,8 +398,8 @@ export function executeReservePlan(
 			return (heal || shield) && chip.features.every((f) =>
 				f.type === Effect.HEAL || f.type === Effect.ABSOLUTE_SHIELD || f.type === Effect.RELATIVE_SHIELD) &&
 				(!heal || (profile.allowHealing &&
-				(strategy.shouldHeal(life, 1 - life) || strategy.shouldHealWithThreat(life, 1 - life, distance)))) &&
-				(!shield || (profile.allowShielding && strategy.shouldShield(life, distance,
+				(behavior.shouldHeal(life) || behavior.shouldHealWithThreat(life, distance)))) &&
+				(!shield || (profile.allowShielding && behavior.shouldShield(life, distance,
 					target.mp + (target.weapon?.maxRange ?? 1))))
 		}
 		const supportSteps: Array<{ chip: Chip; selected: boolean; tpBefore: number; tpAfter: number;

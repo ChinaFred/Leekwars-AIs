@@ -174,11 +174,10 @@ test("3% reached during danger validation: high validated danger never becomes s
 	} finally { delete globalThis.System }
 })
 
-for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
-	test(`${role}: progress on both sides of the 3% validation boundary with hard reserve available`, () => {
+{
+	test(`progress on both sides of the 3% validation boundary with hard reserve available`, () => {
 		for (const dangerReadCost of [1499.95, 1500.05]) {
 			const w = combat({ dangerReadCost, currentCheckCost: 0 })
-			w.profile.setRole(role)
 			try {
 				const t = w.turn({ reserve: true }), moves = t.trace.filter(e => e.kind === "action")
 				assert.equal(t.stats.dangerReads - t.dangerReadsAtFallback, 20)
@@ -186,7 +185,7 @@ for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
 				const preview = JSON.parse(entry.text.split("plan before execution ")[1])
 				assert.match(preview.dangerStatus, dangerReadCost < 1500 ? /modeled/ : /partial/)
 				assert.ok(t.relative < 50000 && t.ops < 700000)
-				assert.equal(moves.length, 1, `${role}, danger read cost ${dangerReadCost}`)
+				assert.equal(moves.length, 1, `danger read cost ${dangerReadCost}`)
 				assert.equal(moves[0].name, "move")
 				assert.ok(t.end.x > t.origin.x)
 				assert.ok(t.mp >= 0 && t.mp < 4)
@@ -219,7 +218,7 @@ test("expensive planning log crosses 5% but not the engine limit: validated move
 })
 
 test("movement crossing the old relative limit can be followed by support while budget remains", () => {
-	const w = combat({ nativeMoveCost: 30000 }); w.me.life = 200
+	const w = combat({ nativeMoveCost: 30000 }); w.me.life = 100
 	w.me.chips = [{ name: "bandage", cost: 2, minRange: 0, maxRange: 6, currentCooldown: 0,
 		features: [{ type: 2, minValue: 20, maxValue: 20 }] }]
 	try {
@@ -305,7 +304,7 @@ test("path blocked after caching: native obstacles/path-cost checks prevent a fi
 
 test("multiple enemies and support: aggregate danger preserved, no extra native search after margin", () => {
 	const w = combat({ enemyCount: 2 })
-	w.me.life = 200
+	w.me.life = 100
 	w.me.chips = [{ name: "bandage", cost: 2, minRange: 0, maxRange: 6, currentCooldown: 0,
 		features: [{ type: 2, minValue: 20, maxValue: 20 }] }]
 	try {
@@ -385,7 +384,7 @@ for (const [name, costs] of [
 ]) {
 	test(`partial danger validation: ${name} crossing old 5% limit permits safe remaining actions`, () => {
 		const w = combat({ dangerReadCost: 1600, ...costs })
-		w.me.life = 200
+		w.me.life = 100
 		w.me.chips = [{ name: "bandage", cost: 2, minRange: 0, maxRange: 6, currentCooldown: 0,
 			features: [{ type: 2, minValue: 20, maxValue: 20 }] }]
 		try {

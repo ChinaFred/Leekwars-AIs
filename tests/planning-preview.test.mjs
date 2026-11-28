@@ -197,7 +197,7 @@ test("reserve after operations reserve: full conditional sequence precedes appro
 })
 
 test("reserve support: projected before actions and checked against real PT after shots", () => {
-	const w = world(); w.me.chips = [w.heal]
+	const w = world(); w.me.chips = [w.heal]; w.me.life = 30 // 0,30 : sous le seuil de soin (0,325)
 	const trace = capture(w, () => executeReservePlan(w.me, w.profile, w.context))
 	const p = preview(trace, RESERVE)
 	assert.deepEqual(p.protection, [{ chip: "bandage", target: 1, tpCost: 2, tpBefore: 2, tpAfter: 0 }])

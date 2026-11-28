@@ -23,7 +23,7 @@ function world({ obstacles = [], los = () => true, danger = c => c.x === -2 ? 0 
 	const hit = (from, target, weapon) => distance(from, target.cell) >= weapon.minRange &&
 		distance(from, target.cell) <= weapon.maxRange && los(from, target.cell)
 	const events = []
-	const me = { id: 1, name: "me", cell: cell(0), life: 70, maxLife: 100, tp, mp,
+	const me = { id: 1, name: "me", cell: cell(0), life: 45, maxLife: 100, tp, mp,
 		strength: 0, wisdom: 0, weapon: gun, weapons: [gun], chips,
 		distance: target => distance(me.cell, target.cell),
 		canUseWeapon: (target, weapon = me.weapon) => target.life > 0 && !me.deny &&
@@ -283,27 +283,27 @@ test("allowHiding=false prevents cover-only movement when no shot is available",
 test("support uses real post-shot PT, respects shielding and refusal", () => {
 	const shield = { name: "shield", cost: 2, currentCooldown: 0,
 		features: [{ type: 3, minValue: 20, maxValue: 20 }] }
-	let w = world({ chips: [shield] }); w.run()
+	let w = world({ chips: [shield] }); w.me.life = 35; w.run()
 	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", "heal", ["move", -2, 0, 3]])
 	assert.equal(w.me.tp, 0)
-	w = world({ chips: [shield] }); w.profile.allowShielding = false; w.run()
+	w = world({ chips: [shield] }); w.me.life = 35; w.profile.allowShielding = false; w.run()
 	assert.ok(!w.events.includes("heal"))
-	w = world({ chips: [shield] }); w.me.denyChip = true; w.run()
+	w = world({ chips: [shield] }); w.me.life = 35; w.me.denyChip = true; w.run()
 	assert.ok(!w.events.includes("heal")); assert.equal(w.me.tp, 2)
 })
 
-for (const [role, threshold] of [["AGGRESSIVE", 50], ["BALANCED", 80], ["DEFENSIVE", 82.5]]) {
-	test(`${role}: minimal approach, attack then support across the healing threshold`, () => {
+for (const threshold of [50]) {
+	test(`minimal approach, attack then support across the healing threshold`, () => {
 		for (const [life, heal] of [[threshold - 0.1, true], [threshold + 0.1, false]]) {
 			const chip = { name: "bandage", cost: 2, currentCooldown: 0,
 				features: [{ type: 2, minValue: 20, maxValue: 20 }] }
 			const w = world({ tp: 6, chips: [chip] }); w.steady()
-			w.profile.setRole(role); w.me.life = life
+			w.me.life = life
 			planAct(w.me, w.profile)
 			assert.deepEqual(w.events, [
 				["move", 1, 0, 1], "shoot", ...(heal ? ["heal"] : []),
 				["unknown-retreat", 2, 3]
-			], `${role} at ${life}%`)
+			], `at ${life}%`)
 			assert.equal(w.me.tp, heal ? 0 : 2)
 		}
 	})
@@ -400,13 +400,12 @@ test("reserve validation stops searching at 3%, then may execute a validated sho
 	assert.equal(w.me.tp, 10)
 })
 
-for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
+{
 	for (const [start, after] of [
 		[750000, 799999], [750000, 800000], [750000, 800001],
 		[500000, 549999], [500000, 550000], [500000, 550001]
-	]) test(`${role}: reserve executes with operations ${after} after starting at ${start}`, () => {
+	]) test(`reserve executes with operations ${after} after starting at ${start}`, () => {
 		const w = world(); w.steady(); let ops = start
-		w.profile.setRole(role)
 		globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 		const native = Fight.weaponCells
 		Fight.weaponCells = (...args) => { ops = after; return native(...args) }
@@ -418,10 +417,10 @@ for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
 	})
 }
 
-for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) {
+{
 	for (const [after, mayAct] of [[969999, true], [970000, false], [970001, false]]) {
-		test(`${role}: reserve respects the real 3% execution tail at ${after}`, () => {
-			const w = world(); w.steady(); w.profile.setRole(role)
+		test(`reserve respects the real 3% execution tail at ${after}`, () => {
+			const w = world(); w.steady()
 			let ops = 660000
 			globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 			const native = Fight.weaponCells

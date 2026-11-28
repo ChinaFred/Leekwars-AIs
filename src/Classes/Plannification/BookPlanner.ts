@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { aliveChests, aliveEnemies } from "../Context/Targets.js"
-import { LeekProfile, createStrategy } from "../LeekProfile.js"
+import { LeekProfile } from "../LeekProfile.js"
 import {
 	BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, BeamTrace, DuelState, REFINE_KEEP, SimState, TurnStep, Zone, runBeam
 } from "./BookBeam.js"
@@ -68,8 +68,8 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 		!hasExecutionRoom()) return null
 
 	const objective = options.objective ?? DEFAULT_OBJECTIVE
-	// Duel : seulement AGGRESSIVE ; DEFENSIVE et BALANCED gardent le comportement sans duel.
-	const duel: DuelState | null = profile.strategyName === "AGGRESSIVE" && options.standoff?.active
+	// Duel : actif dès que le compteur de duel (`BookStandoff.ts`) le constate.
+	const duel: DuelState | null = options.standoff?.active
 		? { accept: options.standoff.accept, riskScale: options.standoff.riskScale, beyond: options.standoff.beyond } : null
 	const budget = options.budget ?? new BookBudget(options.workLimit, duel === null ? undefined : BOOK_DUEL_SEARCH_FRACTION)
 	const opsStart = budget.ops()
@@ -91,7 +91,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const zones = new Map<string, Zone>()
 	const sight = new Map<string, boolean>()
 	const futureDanger = futureDangerOf(known)
-	const strategy = createStrategy(profile)
+	const behavior = profile.behavior
 	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
 		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
@@ -123,9 +123,9 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 			}
 			return {
 				heal: profile.allowHealing && closest !== null &&
-					(strategy.shouldHeal(ratio, 1 - ratio) || strategy.shouldHealWithThreat(ratio, 1 - ratio, distance)),
+					(behavior.shouldHeal(ratio) || behavior.shouldHealWithThreat(ratio, distance)),
 				shield: profile.allowShielding && closest !== null &&
-					strategy.shouldShield(ratio, distance, closest.enemy.mp + (closest.enemy.weapon?.maxRange ?? 1))
+					behavior.shouldShield(ratio, distance, closest.enemy.mp + (closest.enemy.weapon?.maxRange ?? 1))
 			}
 		}
 	}

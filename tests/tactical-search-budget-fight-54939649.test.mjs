@@ -9,7 +9,7 @@ import { initLeekLogging, LogConfig } from "../dist/Toolbox/Logger.js"
 // Combat 54939649, tour 5 (déployé : 22612f3). Kassbi en 446 (4 PM, 10 PT, 339 PV), asdfgleek en 362 (pistolet :
 // portée 1-7, 3 PM, 3 tirs de ~49). Le journal de combat montre `fallback: operations reserve` aux tours 4 et 5 : la
 // recherche tactique, arrêtée à 150 000 des 1 000 000 d'ops, laissait au plan B une attaque à danger 147 alors que la
-// recherche complète choisit une case sûre (394 sans tirer ; 409 après ice depuis 463, voir SAFE_CELL). Carte, obstacles, ligne de vue et distances : règles du
+// recherche complète tire deux fois depuis 464 (danger 147 < 339 PV ; avant : retraite en 409, profil BALANCED). Carte, obstacles, ligne de vue et distances : règles du
 // générateur officiel (Map.java/Cell.java), reconstruites ici ; objets : API officielle (relevés le 2026-11-25).
 // Les coûts en opérations sont SYNTHÉTIQUES (aucune mesure moteur).
 
@@ -22,7 +22,7 @@ const OBSTACLES = {
 }
 // Case finale sûre du plan complet. 394 (sans tir) tant qu'une puce n'était créditée que depuis la case actuelle ; depuis
 // qu'elle l'est après déplacement : 1 PM vers 463, ice (hors de portée de 446), repli de 3 PM en 409, danger 0 aussi.
-const KASSBI_CELL = 446, ENEMY_CELL = 362, SAFE_CELL = 409, ICE_CELL = 463
+const KASSBI_CELL = 446, ENEMY_CELL = 362, SHOT_CELL = 464
 
 const rows = WIDTH * 2 - 1
 const cells = []
@@ -145,8 +145,6 @@ function turn5({ startOps = 100000, searchCost = 0, withSystem = true, stagnatio
 	memory.updateReachable(me, [], [enemy], 5)
 	memory.updateThreatMap(me, [enemy], 5)
 	const profile = new LeekProfile()
-	profile.setRole("BALANCED"); profile.setAggression(50)
-	profile.setSupportOptions(true, true, true)
 	if (withSystem) globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	try {
 		const result = evaluateTacticalPlans(me, profile, {
@@ -156,39 +154,40 @@ function turn5({ startOps = 100000, searchCost = 0, withSystem = true, stagnatio
 	} finally { delete globalThis.System }
 }
 
-test("turn 5 with the stagnation counter below its threshold: same safe retreat to 409 (the rule changes nothing)", () => {
+test("turn 5 with the stagnation counter below its threshold: same plan: two pistol shots from 464 (the rule changes nothing)", () => {
 	const tracker = new StagnationTracker()
 	tracker.observe(4, 199, distance(cells[463], cells[310])) // tour 4 réel : distance 9
 	tracker.observe(5, 199, distance(cells[KASSBI_CELL], cells[ENEMY_CELL])) // tour 5 : 7, nouveau record
 	assert.equal(tracker.turns, 0)
 	const result = turn5({ withSystem: false, stagnation: tracker })
 	assert.equal(result.reason, "complete search")
-	assert.equal(result.plan.destination.id, SAFE_CELL)
-	assert.equal(result.plan.weaponShots, 0)
+	assert.equal(result.plan.destination.id, SHOT_CELL)
+	assert.equal(result.plan.weaponShots, 2)
 	assert.equal(result.plan.progressModel, undefined, "normal Manhattan progress, not the stagnation route")
 	assert.equal(result.plan.stagnation, undefined)
 })
 
-test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search casts ice twice from 463 and retreats to 409", () => {
+test("turn 5 reconstructed: the threat map sees 8 safe cells and the complete search shoots twice from 464 and accepts the danger (147 < 339 life)", () => {
 	const { plan, memory, me } = turn5({ withSystem: false })
 	const threat = memory.getThreatMap()
 	assert.equal(threat.dangerAt(me.cell), 147, "three pistol shots on the current cell")
 	const safe = [...threat.entries()].filter(entry => entry.danger === 0).map(entry => entry.cell.id).sort((a, b) => a - b)
 	assert.deepEqual(safe, [374, 376, 392, 393, 394, 409, 479, 514])
 	assert.equal(threat.dangerAt(cells[464]), 147, "the shot cell of the real fight is fully exposed")
-	assert.equal(plan.destination.id, SAFE_CELL)
-	assert.deepEqual([plan.shotCell.id, plan.chips.map(chip => chip.name), plan.weaponShots], [ICE_CELL, ["ice", "ice"], 0])
-	assert.equal(plan.danger, 0)
+	// Comportement unique (w = 0,5) : le tir de deux pistolets à danger 147 bat la retraite sûre en 409 (avant : BALANCED, w = 1).
+	assert.equal(plan.destination.id, SHOT_CELL)
+	assert.deepEqual([plan.shotCell.id, plan.chips.map(chip => chip.name), plan.weaponShots], [SHOT_CELL, [], 2])
+	assert.equal(plan.danger, 147)
 	assert.ok(plan.score > 0)
 })
 
-test("a search finishing between 150 000 and 300 000 operations is no longer abandoned and keeps the retreat", () => {
+test("a search finishing between 150 000 and 300 000 operations is no longer abandoned and keeps its shots", () => {
 	for (const searchCost of [149000, 151000, 200000, 250000, 299000]) {
 		const result = turn5({ startOps: 100000, searchCost })
 		assert.equal(result.reason, "complete search", `search cost ${searchCost}`)
-		assert.equal(result.plan.destination.id, SAFE_CELL, `search cost ${searchCost}`)
-		assert.equal(result.plan.weaponShots, 0)
-		assert.equal(result.plan.danger, 0)
+		assert.equal(result.plan.destination.id, SHOT_CELL, `search cost ${searchCost}`)
+		assert.equal(result.plan.weaponShots, 2)
+		assert.equal(result.plan.danger, 147)
 		assert.ok(result.getOps() < 700000)
 	}
 })
@@ -206,7 +205,7 @@ test("the global ceiling is 80 %: a search crossing 700 000 is no longer abandon
 	for (const [startOps, searchCost] of [[500000, 250000], [540000, 250000]]) {
 		const result = turn5({ startOps, searchCost })
 		assert.equal(result.reason, "complete search", `start ${startOps}, cost ${searchCost}`)
-		assert.equal(result.plan.destination.id, SAFE_CELL)
+		assert.equal(result.plan.destination.id, SHOT_CELL)
 		assert.ok(result.getOps() > 700000 && result.getOps() < 800000)
 	}
 	for (const [startOps, searchCost] of [[550000, 250000], [600000, 260000]]) {

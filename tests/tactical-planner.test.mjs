@@ -4,7 +4,6 @@ import { TACTICAL_LIMITS } from "../dist/Classes/Plannification/TacticalTypes.js
 import { riskWeight, RETREAT_RISK_FACTOR } from "../dist/Classes/Plannification/TacticalScore.js"
 import { evaluateTacticalPlans, selfHitRadius } from "../dist/Classes/Plannification/TacticalPlanner.js"
 import { executeTacticalPlan } from "../dist/Classes/Plannification/TacticalExecution.js"
-import { createStrategy } from "../dist/Classes/LeekProfile.js"
 import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js"
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
@@ -24,15 +23,15 @@ const chip = (name, cost, damage, options = {}) =>
 const shield = (cost = 2, amount = 30) => chip("shield", cost, 0, {
 	minRange: 0, features: [{ type: Effect.ABSOLUTE_SHIELD, minValue: amount, maxValue: amount }]
 })
-// Le bouclier n'est candidat qu'au seuil du rôle (`shouldShield`) : blessé (100/120 PV = 0,83 ≤ 0,85 pour BALANCED)
+// Le bouclier n'est candidat qu'au seuil du rôle (`shouldShield`) : blessé (voir le seuil de `LeekBehavior.shouldShield`)
 // et à portée de menace de l'ennemi (ses PM + portée de son arme). Sans effet sur le poids du risque (pas de repli).
-const shieldable = { maxLife: 120, enemyWeapon: { maxRange: 5 } }
+const shieldable = { maxLife: 300, enemyWeapon: { maxRange: 5 } }
 const xyKey = (cell) => cell.x * 4096 + cell.y
 const distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 
 function world({ tp = 6, mp = 0, gun = item("gun", 2, 10), weapons, chips = [],
 	positions = [[3, 0]], danger = () => 0, obstacles = [], lineOfSight = () => true,
-	life = 100, maxLife = 100, enemyWeapon = null, cells: coordinates } = {}) {
+	life = 100, maxLife = 100, enemyWeapon = null, cells: coordinates, aggression = 50 } = {}) {
 	delete globalThis.System
 	const grid = new Map()
 	const coords = coordinates ?? Array.from({ length: 11 }, (_, i) =>
@@ -129,7 +128,7 @@ function world({ tp = 6, mp = 0, gun = item("gun", 2, 10), weapons, chips = [],
 			pairsEvaluated: 0, lineOfSightCalls: 0, enemyCount: enemies.length, ...options
 		}) }
 	}
-	const profile = new LeekProfile()
+	const profile = new LeekProfile(aggression)
 	const evaluate = (input = context()) => evaluateTacticalPlans(me, profile, input)
 	return { me, enemies, events, cell, grid, profile, context, evaluate }
 }
@@ -211,15 +210,15 @@ test("equipment costs are paid in the competing plans, not after weapon selectio
 })
 
 test("joint planning reserves PT for protection before exhausting the attack budget", () => {
-	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40, ...shieldable })
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable })
 	const plan = w.evaluate().plan
 	assert.equal(plan.weaponShots, 1)
 	assert.equal(plan.protection.length, 1)
 	assert.equal(plan.danger, 40, "raw danger is retained")
-	assert.equal(plan.score, 5 + 0.75 * 30) // + N : 2 tirs (30) possibles au tour suivant depuis cette case
+	assert.equal(plan.score, 15 + 1.25 * 0.75 * 30) // + N : 2 tirs (30) possibles au tour suivant depuis cette case
 	executeTacticalPlan(w.me, plan)
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
-	const forbidden = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40, ...shieldable })
+	const forbidden = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable })
 	forbidden.profile.allowShielding = false
 	assert.equal(forbidden.evaluate().plan.protection.length, 0)
 })
@@ -227,7 +226,7 @@ test("joint planning reserves PT for protection before exhausting the attack bud
 test("healing competes with damage and is capped at actual missing life", () => {
 	const heal = chip("heal", 2, 0, { minRange: 0,
 		features: [{ type: Effect.HEAL, minValue: 30, maxValue: 30 }] })
-	const w = world({ tp: 4, life: 60, gun: item("gun", 2, 10), chips: [heal], danger: () => 20 })
+	const w = world({ tp: 4, life: 45, gun: item("gun", 2, 10), chips: [heal], danger: () => 20 })
 	const plan = w.evaluate().plan
 	assert.equal(plan.protection[0], heal)
 	assert.equal(plan.weaponShots, 1)
@@ -346,7 +345,7 @@ test("fallback is logged and preserves legacy shots instead of interpreting unkn
 })
 
 test("planAct uses the tactical path when complete current maps are provided", () => {
-	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40, ...shieldable })
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable })
 	planAct(w.me, w.profile, w.context())
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
@@ -551,7 +550,7 @@ test("joint planner stops remaining weapon shots after a native refusal, preserv
 })
 
 test("joint planner reports refused protection and executes only the planned shot", () => {
-	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], danger: () => 40, ...shieldable })
+	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable })
 	const messages = [], original = console.log
 	let calls = 0
 	w.me.useChip = () => { calls++; return 0 }
@@ -624,45 +623,34 @@ test("dynamic native checks reject a chip entering cooldown and shots losing LOS
 	assert.deepEqual(approach.events, ["move:1,0:1"])
 })
 
-test("profile role/aggression weights explicitly trade immediate damage against potential danger", () => {
-	// Posture du rôle : facteur de `w` 0,5 / 1 / 1,5 (avant : 0,75 / 1 / 1,25) x (1,5 - agressivité/100) ; `N` porte le poids
-	// d'approche `a` = facteur 1,25 / 1 / 0,75 x (0,5 + agressivité/100), borné à [0,5 ; 1/0,75] (poids effectif de N <= 1).
-	for (const [role, aggression, weight, approach] of [
-		["AGGRESSIVE", 0, 0.75, 0.625], ["AGGRESSIVE", 50, 0.5, 1.25], ["AGGRESSIVE", 100, 0.25, 1 / 0.75],
-		["BALANCED", 0, 1.5, 0.5], ["BALANCED", 50, 1, 1], ["BALANCED", 100, 0.5, 1 / 0.75],
-		["DEFENSIVE", 0, 2.25, 0.5], ["DEFENSIVE", 50, 1.5, 0.75], ["DEFENSIVE", 100, 0.75, 1.125]
-	]) {
-		const w = world({ tp: 2, gun: item("gun", 2, 30), danger: () => 10 })
-		w.profile.setRole(role)
-		w.profile.setAggression(aggression)
+test("profile aggression weights explicitly trade immediate damage against potential danger", () => {
+	// Facteur de `w` 0,5 x (1,5 - agressivité/100) ; `N` porte le poids d'approche `a` = 1,25 x (0,5 + agressivité/100),
+	// borné à [0,5 ; 1/0,75] (poids effectif de N <= 1).
+	for (const [aggression, weight, approach] of [[0, 0.75, 0.625], [50, 0.5, 1.25], [100, 0.25, 1 / 0.75]]) {
+		const w = world({ tp: 2, gun: item("gun", 2, 30), danger: () => 10, aggression })
 		const { plan } = w.evaluate()
-		assert.equal(plan.nextTurn, approach * 0.75 * 30, `${role} ${aggression}: N`) // le même tir au tour suivant
+		assert.equal(plan.nextTurn, approach * 0.75 * 30, `${aggression}: N`) // le même tir au tour suivant
 		assert.ok(plan.nextTurn <= 30, "deferred damage never outweighs the same damage this turn")
-		assert.equal(plan.score, 30 - weight * 10 + approach * 0.75 * 30, `${role} ${aggression}`)
+		assert.equal(plan.score, 30 - weight * 10 + approach * 0.75 * 30, `${aggression}`)
 	}
 })
 
-// With aggression 50, a shot is worth 15 and the shield absorbs up to 40 danger (30 before the role posture: at the
-// AGGRESSIVE weight 0.5, a 30 shield is never worth more than the 15 shot it costs).
-for (const [role, crossover] of [
-	["AGGRESSIVE", 30], ["BALANCED", 15], ["DEFENSIVE", 10] // 15 / w, w = 0,5 / 1 / 1,5 (posture du rôle ; avant : 20 / 15 / 12)
-]) {
-	test(`${role} switches between two shots and protection at the score crossover`, () => {
-		for (const [danger, expected] of [
-			[crossover - 0.1, ["shoot:2", "shoot:2"]],
-			[crossover + 0.1, ["chip:shield:1", "shoot:2"]]
-		]) {
-			// AGGRESSIVE ne se protège que sous 0,375 de vie : 100/300 PV (au-dessus de son seuil de repli, 0,25).
-			const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => danger,
-				...shieldable, maxLife: role === "AGGRESSIVE" ? 300 : 120 })
-			w.profile.setRole(role)
-			planAct(w.me, w.profile, w.context())
-			assert.deepEqual(w.events, expected, `${role}, danger ${danger}`)
-		}
-	})
-}
+// With aggression 50, a shot is worth 15 and the shield absorbs up to 40 danger (at the weight 0.5, a 30 shield is never
+// worth more than the 15 shot it costs).
+test("the plan switches between two shots and protection at the score crossover", () => {
+	const crossover = 30 // 15 / w, w = 0,5
+	for (const [danger, expected] of [
+		[crossover - 0.1, ["shoot:2", "shoot:2"]],
+		[crossover + 0.1, ["chip:shield:1", "shoot:2"]]
+	]) {
+		// Le comportement ne se protège que sous 0,375 de vie : 100/300 PV (au-dessus de son seuil de repli, 0,25).
+		const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => danger, ...shieldable, maxLife: 300 })
+		planAct(w.me, w.profile, w.context())
+		assert.deepEqual(w.events, expected, `danger ${danger}`)
+	}
+})
 
-for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) test(`${role}: search boundaries retain a complete incumbent where permitted`, () => {
+test("search boundaries retain a complete incumbent where permitted", () => {
 	for (const [start, max, below, boundary] of [
 		[600, 1000, 849, 850], [1000, 10000, 3999, 4000]
 	]) {
@@ -670,7 +658,6 @@ for (const role of ["AGGRESSIVE", "BALANCED", "DEFENSIVE"]) test(`${role}: searc
 		if (max === 1000) cases.push([969, true], [970, false], [971, false])
 		for (const [after, shouldPlan] of cases) {
 			const w = world()
-			w.profile.setRole(role)
 			let operations = start
 			globalThis.System = { get operations() { return operations }, maxOperations: max }
 			const nativeWeaponCells = Fight.weaponCells
@@ -739,11 +726,9 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 		weapons: [], chips: [], effects: [], launchedEffects: []
 	})
 	initLeekLogging(new LogConfig().setAll(false))
-	// Le bouclier à 100/120 PV prouve que la carte de danger arrive au plan : seuil BALANCED à agressivité 50 (0,85), pas celui du profil de production.
-	const { role, aggression } = { role: leekProfile.strategyName, aggression: leekProfile.aggression }
-	leekProfile.setRole("BALANCED")
-	leekProfile.setAggression(50)
-	try { turn() } finally { leekProfile.setRole(role); leekProfile.setAggression(aggression) }
+	// Le bouclier à 36/120 PV prouve que la carte de danger arrive au plan (seuil de bouclier à agressivité 100 : 0,30).
+	w.me.life = 36
+	turn()
 	assert.deepEqual(w.events, ["chip:shield:1", "shoot:2"])
 })
 
@@ -866,16 +851,15 @@ test("N never defers a kill of the last enemy for a small heal", () => {
 	const w = world({ tp: 6, gun: item("gun", 2, 30), life: 100, maxLife: 300,
 		chips: [chip("cure", 2, 0, { minRange: 0, features: [{ type: Effect.HEAL, minValue: 10, maxValue: 10 }] })] })
 	w.enemies[0].life = 80
-	w.profile.setRole("AGGRESSIVE")
 	const { plan } = w.evaluate()
 	assert.deepEqual([plan.weaponShots, plan.protection.length], [3, 0])
 	assert.equal(plan.nextTurn, 0, "a kill is possible this turn: N is 0 for every plan")
 })
 
 test("N is the same for two plans ending on the same cell: a shield still costs the full shot it replaces", () => {
-	// 6 PT, 0 PM, danger 60, bouclier 15 pour 2 PT : 3 tirs (3d − 60) contre bouclier + 2 tirs (2d − 45), seuil d = 15
+	// 6 PT, 0 PM, danger 60 (w = 0,5), bouclier 15 pour 2 PT : 3 tirs (3d − 30) contre bouclier + 2 tirs (2d − 22,5), seuil d = 7,5
 	// comme sans N. Avec un N plafonné par les PV restants après CE plan, le bouclier gagnait jusqu'à d = 45.
-	for (const [damage, shots, protection] of [[14, 2, 1], [16, 3, 0]]) {
+	for (const [damage, shots, protection] of [[7, 2, 1], [8, 3, 0]]) {
 		const { plan } = world({ tp: 6, mp: 0, gun: item("gun", 2, damage), chips: [shield(2, 15)], danger: () => 60, ...shieldable }).evaluate()
 		assert.deepEqual([plan.weaponShots, plan.protection.length], [shots, protection], `damage ${damage}`)
 		assert.ok(plan.nextTurn > 0, "N is credited, identically for both plans")
@@ -890,137 +874,112 @@ test("N never makes a plan abstain from a shot that takes all the target's life:
 		const w = world({ tp: 2, mp: 1, gun: item("gun", 2, 40, { maxRange: 1 }), positions: [[2, 0]],
 			cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? danger : 0 })
 		w.enemies[0].life = 40
-		w.profile.setRole("AGGRESSIVE")
 		assert.equal(w.evaluate().plan?.weaponShots ?? 0, shots, `danger ${danger}`)
 	}
 })
 
 // --- le comportement configuré décide du soin, du bouclier et du repli dans le plan conjoint -----------------------
 
-test("healing is a candidate only at the role threshold: at 82 % life DEFENSIVE heals, BALANCED and AGGRESSIVE do not", () => {
+test("healing is a candidate only at the behavior threshold (aggression 50: life <= 0.325, or <= 0.50 under threat)", () => {
 	const heal = () => chip("heal", 2, 0, { minRange: 0, features: [{ type: Effect.HEAL, minValue: 30, maxValue: 30 }] })
-	const protection = (role, options = {}) => {
+	const protection = (options = {}) => {
 		const w = world({ tp: 4, life: 82, gun: item("gun", 2, 10), chips: [heal()], danger: () => 20, ...options })
-		w.profile.setRole(role)
 		if (options.forbid) w.profile.allowHealing = false
 		return w.evaluate().plan.protection.map((c) => c.name)
 	}
-	assert.deepEqual(protection("DEFENSIVE"), ["heal"]) // vie ≤ 0,90 − 0,15 × 0,5 = 0,825
-	assert.deepEqual(protection("BALANCED"), []) // perte 0,18 < 0,20 ; soin sous menace : vie ≤ 0,70
-	assert.deepEqual(protection("AGGRESSIVE"), []) // vie ≤ 0,325, ou ≤ 0,50 sous menace
-	assert.deepEqual(protection("DEFENSIVE", { forbid: true }), []) // le profil garde la main
-	assert.deepEqual(protection("BALANCED", { life: 70 }), ["heal"]) // ennemi à 3 cases (≤ 10), vie ≤ 0,70, perte ≥ 0,10
-	assert.deepEqual(protection("AGGRESSIVE", { life: 70 }), [])
-	assert.deepEqual(protection("AGGRESSIVE", { life: 50 }), ["heal"])
+	assert.deepEqual(protection(), []) // 0,82 : au-dessus de 0,325 comme de 0,50
+	assert.deepEqual(protection({ life: 70 }), [])
+	assert.deepEqual(protection({ life: 50 }), ["heal"]) // ennemi à 3 cases (≤ 10), vie ≤ 0,50
+	assert.deepEqual(protection({ life: 50, forbid: true }), []) // le profil garde la main
 })
 
-test("shielding is a candidate only at the role threshold and inside the enemy threat range", () => {
-	const protection = (role, options = {}) => {
-		// Bouclier de 40 (30 avant la posture du rôle : à w = 0,5 il ne valait plus que le tir de 15 qu'il coûte, à égalité).
-		const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable, ...options })
-		w.profile.setRole(role)
+test("shielding is a candidate only at the behavior threshold and inside the enemy threat range", () => {
+	const protection = (options = {}) => {
+		// Bouclier de 40 (30 avant la posture : à w = 0,5 il ne valait plus que le tir de 15 qu'il coûte, à égalité).
+		const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield(2, 40)], danger: () => 40, ...shieldable, maxLife: 120, ...options })
 		return w.evaluate().plan.protection.map((c) => c.name)
 	}
-	// 100/120 PV = 0,83 : sous le seuil BALANCED (0,85) et DEFENSIVE (0,93), au-dessus du seuil AGGRESSIVE (0,375).
-	assert.deepEqual(protection("BALANCED"), ["shield"])
-	assert.deepEqual(protection("DEFENSIVE"), ["shield"])
-	assert.deepEqual(protection("AGGRESSIVE"), [])
-	assert.deepEqual(protection("AGGRESSIVE", { maxLife: 300 }), ["shield"]) // 0,33 ≤ 0,375
-	assert.deepEqual(protection("BALANCED", { maxLife: 100 }), []) // pleine vie
+	// 100/120 PV = 0,83 : au-dessus du seuil (0,375 à agressivité 50).
+	assert.deepEqual(protection(), [])
+	assert.deepEqual(protection({ maxLife: 300 }), ["shield"]) // 0,33 ≤ 0,375
+	assert.deepEqual(protection({ maxLife: 100 }), []) // pleine vie
 	// Portée de menace = PM de l'ennemi (0) + portée de son arme : à 3 cases, une arme de portée 2 ne menace pas.
-	assert.deepEqual(protection("BALANCED", { enemyWeapon: { maxRange: 2 } }), [])
-	assert.deepEqual(protection("DEFENSIVE", { enemyWeapon: { maxRange: 2 } }), ["shield"]) // DEFENSIVE : portée + 1
-	assert.deepEqual(protection("BALANCED", { enemyWeapon: null }), []) // sans arme connue : portée 1
+	assert.deepEqual(protection({ maxLife: 300, enemyWeapon: { maxRange: 2 } }), [])
+	assert.deepEqual(protection({ maxLife: 300, enemyWeapon: null }), []) // sans arme connue : portée 1
 })
 
-test("riskWeight: role factor x (1.5 - aggression/100), doubled under the role's retreat threshold when hiding is allowed", () => {
+test("riskWeight: 0.5 x (1.5 - aggression/100), doubled under the retreat threshold when hiding is allowed", () => {
 	assert.equal(RETREAT_RISK_FACTOR, 2)
-	const weight = (role, life, range, change = () => {}) => {
+	const weight = (life, range, change = () => {}) => {
 		const profile = new LeekProfile()
-		profile.setRole(role)
 		change(profile)
-		return riskWeight(profile, createStrategy(profile), life, range)
+		return riskWeight(profile, life, range)
 	}
-	assert.equal(weight("BALANCED", 1, 5), 1)
-	assert.equal(weight("BALANCED", 0.41, 5), 1)
-	assert.equal(weight("BALANCED", 0.40, 5), 2) // repli préventif BALANCED : d ≤ 8 et vie ≤ 0,40
-	assert.equal(weight("BALANCED", 0.40, 9), 1)
-	assert.equal(weight("BALANCED", 0.40, 5, (profile) => { profile.allowHiding = false }), 1)
-	// Posture du rôle : facteur 1,5 pour DEFENSIVE (avant 1,25), 0,5 pour AGGRESSIVE (avant 0,75).
-	assert.equal(weight("DEFENSIVE", 0.50, 7), 1.5 * RETREAT_RISK_FACTOR)
-	assert.equal(weight("DEFENSIVE", 0.51, 7), 1.5)
-	assert.equal(weight("AGGRESSIVE", 0.40, 5), 0.5) // AGGRESSIVE ne se replie qu'à d ≤ 1 ou vie ≤ 0,25
-	assert.equal(weight("AGGRESSIVE", 0.25, 5), 0.5 * RETREAT_RISK_FACTOR)
-	// « Trop près » : d < MIN_SAFE_DISTANCE (2), blessé (vie ≤ 0,45 pour BALANCED).
-	assert.equal(weight("BALANCED", 0.43, 1), 2)
-	assert.equal(weight("BALANCED", 0.43, 2), 1)
+	assert.equal(weight(1, 5), 0.5)
+	assert.equal(weight(0.40, 5), 0.5) // ne se replie qu'à d ≤ 1 ou vie ≤ 0,25
+	assert.equal(weight(0.25, 5), 0.5 * RETREAT_RISK_FACTOR)
+	assert.equal(weight(0.25, 11), 0.5) // panique : d ≤ 10 seulement
+	assert.equal(weight(0.25, 5, (profile) => { profile.allowHiding = false }), 0.5)
+	// Au contact (d ≤ 1) : vie ≤ 0,50.
+	assert.equal(weight(0.50, 1), 0.5 * RETREAT_RISK_FACTOR)
+	assert.equal(weight(0.51, 1), 0.5)
+	// « Trop près » : d < MIN_SAFE_DISTANCE (2), blessé (vie ≤ 0,225 à agressivité 50).
+	assert.equal(weight(0.22, 2), 0.5 * RETREAT_RISK_FACTOR) // panique à d ≤ 10 aussi
+	assert.equal(weight(0.40, 2), 0.5)
 })
 
 test("under the retreat threshold the danger weighs twice: the same shot is taken when healthy, declined when wounded", () => {
-	// Tir possible seulement depuis x = 1 (1 PM, plus de PM pour repartir), où le danger vaut 25 ; ailleurs 0.
-	const setup = (life) => world({ tp: 2, mp: 1, life, gun: item("gun", 2, 30, { maxRange: 1 }), positions: [[2, 0]],
-		cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 25 : 0 })
+	// Tir possible seulement depuis x = 1 (1 PM, plus de PM pour repartir), où le danger vaut 45 ; ailleurs 0.
+	const setup = (maxLife) => world({ tp: 2, mp: 1, life: 100, maxLife, gun: item("gun", 2, 30, { maxRange: 1 }), positions: [[2, 0]],
+		cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 45 : 0 })
 	const healthy = setup(100).evaluate().plan
 	assert.equal(healthy.weaponShots, 1)
-	assert.equal(healthy.score, 30 - 25 + 0.75 * 30) // w = 1 ; + N : le même tir au tour suivant depuis x = 1
-	const wounded = setup(40).evaluate().plan // vie 0,40, ennemi à 2 cases : w = 2, 30 − 50 < 0
+	assert.equal(healthy.score, 30 - 0.5 * 45 + 1.25 * 0.75 * 30) // w = 0,5 ; + N : le même tir au tour suivant depuis x = 1
+	const wounded = setup(400).evaluate().plan // vie 0,25 (panique), ennemi à 2 cases : w = 1, 30 − 45 < 0
 	assert.equal(wounded?.weaponShots ?? 0, 0)
-	const forbidden = setup(40)
+	const forbidden = setup(400)
 	forbidden.profile.allowHiding = false // sans repli autorisé, le poids n'est pas doublé
 	assert.equal(forbidden.evaluate().plan.weaponShots, 1)
 })
 
 // --- posture du rôle : mêmes tactiques, pilotées par le profil (`posture`, TacticalScore.ts) -----------------------
 
-test("posture, approach weight: on the same corridor AGGRESSIVE advances 2 cells without a shot, BALANCED 1, DEFENSIVE none", () => {
+test("posture, approach weight: on the corridor the profile advances 2 cells without a shot", () => {
 	// Ennemi à 12 cases, arme de portée 1 (aucun tir, aucun N, pas de trajet futur à 8 pas), 2 PM ; danger 0,6 en x = 1 et
-	// 1,8 en x = 2. Score d'une avance de x : a x G - w x danger. AGGRESSIVE (a 1,25, w 0,5) : 0,95 puis 1,6 ; BALANCED
-	// (1, 1) : 0,4 puis 0,2 ; DEFENSIVE (0,75, 1,5) : -0,15 puis -1,2 (rester).
-	const advance = (role) => {
-		const w = world({ tp: 2, mp: 2, gun: item("gun", 2, 10, { maxRange: 1 }), positions: [[12, 0]],
-			cells: Array.from({ length: 16 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 0.6 : c.x === 2 ? 1.8 : 0 })
-		w.profile.setRole(role)
-		const { plan } = w.evaluate()
-		return plan && [plan.destination.x, plan.progress, plan.weaponShots, Number(plan.score.toFixed(4))]
-	}
-	assert.deepEqual(advance("AGGRESSIVE"), [2, 2, 0, 1.6]) // `progress` journalisé : distance brute, pas pondérée
-	assert.deepEqual(advance("BALANCED"), [1, 1, 0, 0.4])
-	assert.equal(advance("DEFENSIVE"), null)
+	// 1,8 en x = 2. Score d'une avance de x : a x G - w x danger, a = 1,25, w = 0,5 : 0,95 puis 1,6.
+	const w = world({ tp: 2, mp: 2, gun: item("gun", 2, 10, { maxRange: 1 }), positions: [[12, 0]],
+		cells: Array.from({ length: 16 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 0.6 : c.x === 2 ? 1.8 : 0 })
+	const { plan } = w.evaluate()
+	assert.deepEqual([plan.destination.x, plan.progress, plan.weaponShots, Number(plan.score.toFixed(4))], [2, 2, 0, 1.6]) // `progress` journalisé : distance brute, pas pondérée
 })
 
-test("posture, passivity floor: at the 4th passive turn the danger no longer weighs for AGGRESSIVE and BALANCED, still half for DEFENSIVE", () => {
+test("posture, passivity floor: at the 4th passive turn the danger no longer weighs", () => {
 	// Tir de 30 (tous les PV de la cible, sans la marge de coup fatal : N = 0) possible seulement depuis x = 1, danger 50
-	// (< 0,75 x 100 PV). Passivité p = 0 : AGGRESSIVE et BALANCED tirent (30 - 0) ; DEFENSIVE garde w x max(p, 0,5) =
-	// 1,5 x 0,5 : 30 - 37,5 < 0, pas de tir. À poids plein (aucun tour passif), BALANCED ne tire pas non plus (30 - 50).
-	const shots = (role, passive) => {
+	// (< 0,75 x 100 PV). Passivité p = 0 : le tir est pris (30 - 0). À poids plein (w = 0,5) : 30 - 25 > 0, déjà pris.
+	const shots = (passive) => {
 		const w = world({ tp: 2, mp: 1, gun: item("gun", 2, 30, { maxRange: 1 }), positions: [[2, 0]],
 			cells: Array.from({ length: 6 }, (_, i) => [i - 3, 0]), danger: (c) => c.x === 1 ? 50 : 0 })
 		w.enemies[0].life = 30
-		w.profile.setRole(role)
 		const stagnation = new StagnationTracker()
 		stagnation.passive = passive
 		return w.evaluate({ ...w.context(), stagnation }).plan?.weaponShots ?? 0
 	}
-	assert.deepEqual(["AGGRESSIVE", "BALANCED", "DEFENSIVE"].map((role) => shots(role, 4)), [1, 1, 0])
-	assert.deepEqual(["AGGRESSIVE", "BALANCED", "DEFENSIVE"].map((role) => shots(role, 0)), [1, 0, 0])
+	assert.equal(shots(4), 1)
+	assert.equal(shots(0), 1)
 })
 
-test("posture, future route weapon: AGGRESSIVE walks towards the weapon with the best damage over a turn, DEFENSIVE the longest range, BALANCED the first one", () => {
+test("posture, future route weapon: walks towards the weapon with the best damage over a turn", () => {
 	// Ennemi à 9 cases, 1 PM, aucune arme à portée ce tour. pistol (en main, portée 2, 10 / 2 PT), cannon (portée 4, 40 /
 	// 3 PT), rifle (portée 6, 12 / 2 PT). `futureRouteDistance` après 1 pas : 9 - portée - 1.
-	const route = (role, tp) => {
+	const route = (tp) => {
 		const weapons = [item("pistol", 2, 10, { maxRange: 2 }), item("cannon", 3, 40, { maxRange: 4 }), item("rifle", 2, 12, { maxRange: 6 })]
 		const w = world({ tp, mp: 1, gun: weapons[0], weapons, positions: [[9, 0]], cells: Array.from({ length: 13 }, (_, i) => [i - 2, 0]) })
-		w.profile.setRole(role)
 		const { plan } = w.evaluate()
 		return [plan.destination.x, plan.futureRouteDistance]
 	}
-	assert.deepEqual(route("BALANCED", 6), [1, 6]) // pistol : première arme (en main), comme avant la posture
-	assert.deepEqual(route("AGGRESSIVE", 6), [1, 4]) // cannon : 1 PT d'équipement, 1 tir de 40 > pistol 3 x 10 > rifle 2 x 12
-	assert.deepEqual(route("DEFENSIVE", 6), [1, 2]) // rifle : portée 6
+	assert.deepEqual(route(6), [1, 4]) // cannon : 1 PT d'équipement, 1 tir de 40 > pistol 3 x 10 > rifle 2 x 12
 	// 3 PT : cannon inabordable après l'équipement (0 tir), rifle 1 x 12 > pistol 1 x 10.
-	assert.deepEqual(route("AGGRESSIVE", 3), [1, 2])
-	assert.deepEqual(route("BALANCED", 3), [1, 6])
+	assert.deepEqual(route(3), [1, 2])
 })
 
 // --- boost : composante du plan conjoint --------------------------------------------------------------------------
@@ -1040,7 +999,7 @@ test("joint plan: the boost is a scored component, chosen when it brings more th
 	assert.equal(plan.weaponShots, 0)
 	assert.equal(plan.usefulDamage, 60)
 	// + N : bolt + 1 tir sans boost au tour suivant (40), plafonné par les PV restants après le meilleur tour (100 − 60).
-	assert.equal(plan.score, 75 + 0.75 * 40)
+	assert.equal(plan.score, 75 + 1.25 * 0.75 * 40)
 	assert.equal(plan.tpUsed, 6)
 	assert.deepEqual(w.events, [], "evaluation spends nothing")
 	executeTacticalPlan(w.me, plan)
@@ -1057,7 +1016,7 @@ test("joint plan: the boost is a scored component, chosen when it brings more th
 	assert.deepEqual([plan.weaponShots, plan.usefulDamage], [2, 20])
 	plan = fatal(100)
 	assert.deepEqual(plan.boost.chips.map((c) => c.name), ["protein"])
-	assert.deepEqual([plan.weaponShots, plan.usefulDamage, plan.score], [1, 15, 22.5 + 0.75 * 20]) // + N : 2 tirs de base
+	assert.deepEqual([plan.weaponShots, plan.usefulDamage, plan.score], [1, 15, 22.5 + 1.25 * 0.75 * 20]) // + N : 2 tirs de base
 	// Sous 50 % de PV, un plan qui tire ne booste pas (MIN_LIFE_RATIO_FOR_BOOST).
 	assert.equal(setup({ life: 49 }).evaluate().plan.boost, undefined)
 	assert.notEqual(setup({ life: 50 }).evaluate().plan.boost, undefined)
@@ -1078,7 +1037,7 @@ test("joint plan: a TP boost pays for an extra shot this turn; both boosts are o
 	assert.equal(plan.weaponShots, 2)
 	assert.equal(plan.tpUsed, 8) // 2 + 6 : PT dépensés, les 3 PT gagnés ne sont pas déduits
 	// 2 tours suivants à 9 PT (3 tirs) au lieu de 6 (2 tirs) ; + N : les 2 tirs de base du tour suivant (0,75 × 20).
-	assert.equal(plan.score, 20 + 0.75 * 2 * 10 + 0.75 * 20)
+	assert.equal(plan.score, 20 + 0.75 * 2 * 10 + 1.25 * 0.75 * 20)
 	// motivation : 1 PT, +4 PT -> 9 PT ce tour : un 3e tir tout de suite.
 	w = world({ tp: 6, gun: item("gun", 3, 10), chips: [boost("motivation", 1, 32, 4, 1)] })
 	plan = w.evaluate().plan

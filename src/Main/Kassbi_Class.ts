@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 32
+// file version: 33
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -21,18 +21,12 @@ export const leekLogConfig = new LogConfig()
 initLeekLogging(leekLogConfig)
 
 /**
- * Comportement de mon poireau : LE point de réglage, lu par `planAct` à chaque tour. Le rôle (`BALANCED`,
- * `AGGRESSIVE`, `DEFENSIVE`) et l'agressivité (0–100) fixent les seuils de soin, de bouclier et de repli, et la
- * posture du plan conjoint (`posture`, `TacticalScore.ts`) : poids du danger, poids de l'approche, plancher de
- * passivité, recul sans tir, arme visée par le trajet futur. `AGGRESSIVE` va à portée de sa meilleure arme et ne
- * recule qu'après avoir tiré ; `DEFENSIVE` reste à couvert ; `BALANCED` est entre les deux. Les trois
- * options autorisent soin, bouclier, repli. Effets détaillés :
- * `docs/strategies.md` (« Comportement configuré »).
+ * Comportement de mon poireau : LE point de réglage, lu par `planAct` à chaque tour. L'agressivité (0–100) est fixée à
+ * la construction ; `LeekBehavior.ts` en tire les seuils de soin, de bouclier et de repli, et la posture du plan
+ * conjoint (`posture`, `TacticalScore.ts`). Soin, bouclier et repli sont tous permis (`allow*`, à revoir). Effets
+ * détaillés : `docs/strategies.md`.
  */
-export const leekProfile = new LeekProfile()
-leekProfile.setRole("AGGRESSIVE")
-leekProfile.setAggression(100)
-leekProfile.setSupportOptions(true, true, true)
+export const leekProfile = new LeekProfile(100)
 
 let isFirstTurn = true
 

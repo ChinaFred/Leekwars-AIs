@@ -1169,7 +1169,6 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const unarmed = makeCombatWorld({ enemy: 120, ally: 121 }, { ...armedGun(), features: [] }, 10)
 	const unarmedLines = await runTurnCapturingLogs(turn)
 	const unarmedActions = [...unarmed.actions]
@@ -1198,7 +1197,6 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 test("turn() still plays and logs reachable cells when the threat map fails, and reports the error", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld({ enemy: 130, ally: 131 }, armedGun({ needsLos: true }), 12)
 	globalThis.Field.lineOfSight = () => { throw new Error("los down") }
 	debugLogs.length = 0
@@ -1215,7 +1213,6 @@ test("turn() still plays and logs reachable cells when the threat map fails, and
 test("turn() logs 'unavailable' when my reachable cells could not be computed", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	makeCombatWorld({ enemy: 140, ally: 141 }, armedGun(), 13)
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	const lines = await runTurnCapturingLogs(turn)

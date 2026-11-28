@@ -395,7 +395,6 @@ test("turn() identifies the enemy and the plan still fires", async () => {
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions } = makeCombatWorld(2)
 
 	turn()
@@ -412,7 +411,6 @@ test("turn() still plays when the enemy memory fails, and reports the error", as
 	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
 	const { actions, enemy } = makeCombatWorld(3)
 	Object.defineProperty(enemy, "launchedEffects", { get() { throw new Error("boom") } })
 	debugLogs.length = 0

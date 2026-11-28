@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { planAct } from "../Brain/PlanActScenario.js"
 import { enemyMemory, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
@@ -18,10 +18,8 @@ initLeekLogging(leekLogConfig)
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_test.ts", "turn", () => {
 		const me = Fight.me
-		const profile = new LeekProfile()
-		profile.setRole("AGGRESSIVE")
-		profile.setAggression(75)
-		profile.setSupportOptions(true, true, false)
+		const profile = new LeekProfile(75)
+		profile.allowHiding = false
 
 		observeTurn(me)
 		planAct(me, profile, {
