@@ -2,14 +2,38 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## db21aac — feat(book): arme du tour 1 choisie selon les tours 2-3 du meilleur plan
+Compte Kassbi, publié le 2026-11-28T11:53:37Z.
+Stratégie : l'arme équipée au tour 1 est celle que le meilleur enchaînement du livre utilise en premier aux tours simulés suivants (TacticalPlan.later). Sans arme prévue (pas de plan, profondeur 1, repli planAct) : dégâts moyens/PT × part des distances de tir plausibles du prochain contact, donc une arme à distance passe devant le corps à corps tant que le contact n'est pas plausible (Magnum au lieu de l'Épée large à 20-32 cases ; l'Épée large redevient éligible à 1-2 cases). Aucune constante nouvelle.
+Combats : 1 — 1 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 73 % (combat 55029308), médiane des pics 73 %.
+Ressources : 5 tours joués, 0 sans aucune action payante (0 %), 17 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 12 % inutilisés sur 49 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55029308 (0/5, victoire).
+
+## cb11183 — chore(merge): fusion de Master (ennemi défensif) dans la fuite sans tir
+Compte Kassbi, publié le 2026-11-28T11:36:24Z.
+Combats : 3 — 2 victoires, 1 défaites, 0 nuls (67 % de victoires), 0 sans logs.
+Ops : pic maximal 69 % (combat 55029213), médiane des pics 30 %.
+Ressources : 29 tours joués, 2 sans aucune action payante (7 %), 31 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 34 % inutilisés sur 295 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55028853 (2/13, défaite), 55028837 (0/10, victoire), 55029213 (0/6, victoire).
+
+Défaites :
+- 55028853 : 13 tours · vs Albertus · pic ops 30 %
+
 ## 4665531 — perf(book): marge de coût des nœuds ramenée de 2 à 1,2
 Compte Kassbi, publié le 2026-11-28T10:57:18Z.
 Stratégie : au niveau 2 du faisceau, le livre ouvre plus de nœuds quand le budget le permet : 5 sur 5 au lieu de 3 sur 5 aux tours 5 et 6 du combat 55027536 (tours finis à 44 % et 41 % des ops) ; marge NODE_COST_MARGIN 2 → 1,2, plafonds globaux inchangés (0,80 et 0,70).
-Combats : 3 — 3 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 65 % (combat 55028293), médiane des pics 51 %.
-Ressources : 28 tours joués, 2 sans aucune action payante (7 %), 38 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 34 % inutilisés sur 285 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55028293 (2/8, victoire), 55028410 (0/9, victoire), 55028419 (0/11, victoire).
+Combats : 6 — 4 victoires, 2 défaites, 0 nuls (67 % de victoires), 0 sans logs.
+Ops : pic maximal 65 % (combat 55028293), médiane des pics 44 %.
+Ressources : 50 tours joués, 5 sans aucune action payante (10 %), 40 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 37 % inutilisés sur 506 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55028804 (3/8, défaite), 55028293 (2/8, victoire), 55028410 (0/9, victoire), 55028419 (0/11, victoire), 55028463 (0/9, défaite).
+
+Défaites :
+- 55028463 : 9 tours · vs Poireaufesseur · pic ops 30 %
+- 55028804 : 9 tours · vs tungtung67 · pic ops 59 %
 
 ## e7ef19c — perf(ops): zones d'affichage coupées par défaut dans Kassbi_Book
 Compte Kassbi, publié le 2026-11-28T10:37:22Z.
@@ -35,35 +59,3 @@ Défaites :
 - 55025104 : 7 tours · vs tungtung67 · pic ops 73 %
 - 55025819 : 9 tours · vs leghapilu · pic ops 82 %
 - 55026416 : 8 tours · vs Billloute · pic ops 54 %
-
-## 8150386 — feat(book): crédit de boost sans tir et rejeu du compteur de duel
-Compte Kassbi, publié le 2026-11-27T21:41:15Z.
-Stratégie : Kassbi_Book seulement. Boost de force sans tir crédité de
-Combats : 16 — 15 victoires, 0 défaites, 1 nuls (94 % de victoires), 0 sans logs.
-Ops : pic maximal 74 % (combat 55007909), médiane des pics 42 %.
-Ressources : 189 tours joués, 47 sans aucune action payante (25 %), 56 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 51 % inutilisés sur 1940 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55009037 (35/64, nul), 55007928 (3/10, victoire), 55007909 (2/8, victoire), 55007925 (1/5, victoire), 55008923 (1/5, victoire).
-
-## 7092a85 — feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur
-Compte Kassbi, publié le 2026-11-27T21:00:53Z.
-Stratégie : Kassbi_Book seulement (non branché aux IA actives). Corrige le
-Combats : 20 — 19 victoires, 0 défaites, 1 nuls (95 % de victoires), 0 sans logs.
-Ops : pic maximal 52 % (combat 55006374), médiane des pics 38 %.
-Ressources : 208 tours joués, 56 sans aucune action payante (27 %), 41 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 52 % inutilisés sur 2134 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55006373 (33/64, nul), 55006498 (6/19, victoire), 55006497 (2/7, victoire), 55006376 (1/4, victoire), 55006380 (2/8, victoire).
-
-## 7e7313d — fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan
-Compte Kassbi, publié le 2026-11-27T19:54:53Z.
-Stratégie : aucun changement de comportement des IA actives. Kassbi_Book
-Combats : 34 — 29 victoires, 3 défaites, 2 nuls (85 % de victoires), 0 sans logs.
-Ops : pic maximal 82 % (combat 55005747), médiane des pics 60 %.
-Ressources : 415 tours joués, 64 sans aucune action payante (15 %), 50 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 35 % inutilisés sur 4186 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55005881 (2/4, défaite), 55005587 (22/51, victoire), 55005608 (5/13, victoire), 55005734 (2/7, victoire), 55005611 (2/8, victoire).
-
-Défaites :
-- 55005849 : 7 tours · vs Gorglucks, Destan, Hakuko, dilph, DEVaporator · pic ops 53 %
-- 55005881 : 5 tours · vs HatsuNekron · pic ops 48 %
-- 55005891 : 2 tours · vs LaZeraclure · pic ops 25 %
