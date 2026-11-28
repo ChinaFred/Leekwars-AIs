@@ -2,6 +2,8 @@
 // file version: 17
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
+import { isLaser, laserBalance } from "../Context/LaserLine.js"
+import { laserHitsFrom, laserKinds, laserRefusal } from "../Context/LaserShot.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { maxUsesOf, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
@@ -10,7 +12,7 @@ import {
 	tpBoostFutureDamage, tpBoostNetDamage
 } from "../../Brain/StrengthBoost.js"
 import { TacticalContext, TacticalPreparation } from "./TacticalTypes.js"
-import { riskWeight } from "./TacticalScore.js"
+import { netDamage, riskWeight } from "./TacticalScore.js"
 import { track } from "../Context/StagnationTracker.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
@@ -40,6 +42,8 @@ interface Shot {
 	cell: Cell
 	cost: number
 	damage: number
+	/** Arme laser : alliés que la ligne touche et que le tir accepte (revérifié avant chaque tir). */
+	laserAllies?: readonly number[]
 }
 
 interface ProgressOption { cell: Cell; cost: number; score: number }
@@ -257,6 +261,7 @@ export function executeReservePlan(
 			Math.abs(origin.x - target.cell.x) + Math.abs(origin.y - target.cell.y) <= range + initialMp
 		let goals: Cell[] | null = null
 		let best: Shot | null = null
+		const laserKind = laserKinds(me)
 		const consider = (shot: Shot): void => {
 			if (best === null || shot.cost < best.cost) { best = shot; return }
 			if (shot.cost !== best.cost) return
@@ -278,11 +283,23 @@ export function executeReservePlan(
 				if (potentiallyReachable) attackMayBeReachable = true
 				const damage = Math.min(target.life, candidate.damage *
 					Math.min(candidate.uses, Math.floor((me.tp - equip) / candidate.cost)))
+				// Laser : un coffre sur la ligne écarte le tir ; les dégâts comptent les autres ennemis et retirent ceux des alliés.
+				// Un tir qui touche les alliés plus qu'il ne rapporte est écarté (plan B : pas d'optimisation de la visée).
+				const considerWeapon = (cell: Cell, cost: number): void => {
+					if (!isLaser(weapon)) { consider({ target, weapon, chip: null, casts: 0, cell, cost, damage }); return }
+					const hits = laserHitsFrom(me, cell, target.cell, weapon, laserKind)
+					if (hits.chests.length > 0) return
+					const shots = Math.min(candidate.uses, Math.floor((me.tp - equip) / candidate.cost))
+					const total = damage + laserBalance(hits, shots, (entity) => netDamage(candidate, entity), target)
+					if (total <= 0) return
+					consider({ target, weapon, chip: null, casts: 0, cell, cost, damage: total,
+						laserAllies: hits.allies.map((ally) => ally.id) })
+				}
 				const cachedCells = reusable?.weaponCells.get(target)?.get(weapon)
 				const currentPermission = reusable?.currentWeapons.get(target)?.get(weapon)
 				if (currentPermission === true ||
 					(!cachedCells && currentPermission === undefined && searchBudget() && me.canUseWeapon(target, weapon))) {
-					consider({ target, weapon, chip: null, casts: 0, cell: me.cell, cost: 0, damage })
+					considerWeapon(me.cell, 0)
 				}
 				// À 0 PM, le contrôle natif courant suffit ; aucun fournisseur hypothétique nécessaire.
 				if (!reachable || me.mp <= 0 || !potentiallyReachable || (!cachedCells && !searchBudget())) continue
@@ -294,7 +311,7 @@ export function executeReservePlan(
 					for (let i = 0; i < Math.min(cells.length, RESERVE_LIMITS.lateCells) && budget(); i++) {
 						const cell = cells[i]!
 						const cost = reachable.costTo(cell)
-						if (cost !== null) consider({ target, weapon, chip: null, casts: 0, cell, cost, damage })
+						if (cost !== null) considerWeapon(cell, cost)
 					}
 					continue
 				}
@@ -306,7 +323,7 @@ export function executeReservePlan(
 				for (const cell of cells) {
 					if (++scanned % 64 === 0 && !searchBudget()) break
 					const cost = reachable.costTo(cell)
-					if (cost !== null) consider({ target, weapon, chip: null, casts: 0, cell, cost, damage })
+					if (cost !== null) considerWeapon(cell, cost)
 				}
 			}
 			for (const chip of chips) {
@@ -625,6 +642,8 @@ export function executeReservePlan(
 					if (!budget()) { message("weapon shot: hard operations reserve; stop"); return true }
 					if (me.life <= 0 || shot.target.life <= 0 || me.weapon !== weapon ||
 						me.tp < weapon.cost || !me.canUseWeapon(shot.target)) break
+					const refusal = isLaser(weapon) ? laserRefusal(me, shot.target, weapon, shot.laserAllies) : null
+					if (refusal !== null) { message(() => `${refusal}; weapon shot cancelled`); break }
 					phase(me, "weapon shot", () => ({
 						weapon: weapon.name, target: shot.target.id, shot: i + 1, atMost: count, tpCost: weapon.cost
 					}))

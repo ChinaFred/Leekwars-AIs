@@ -9,12 +9,11 @@ globalThis.Fight = { turn: 2 }
 // Les décisions de boost (lancer ou non) sont prises par les plans : voir tests/strength-boost-turn.test.mjs.
 // Ici : le modèle (puces prêtes, gain net à une arme, part des tours suivants, portée utile).
 const {
-	boostNetDamage, boostReach, hasActiveStrengthBoost, hasActiveTpBoost, logChipInventory, pickBoost, pickTpBoost,
+	boostNetDamage, boostReach, hasActiveStrengthBoost, hasActiveTpBoost, pickBoost, pickTpBoost,
 	readyTpBoosts, strengthBoostFutureDamage, tpBoostFutureDamage, tpBoostNetDamage, FUTURE_TURN_WEIGHT,
 	MIN_LIFE_RATIO_FOR_BOOST
 } = await import("../dist/Brain/StrengthBoost.js")
 const { strengthBoostTurns } = await import("../dist/Classes/Context/ShotPlan.js")
-const { initLeekLogging, LogConfig } = await import("../dist/Toolbox/Logger.js")
 
 const machineGun = { id: 38, name: "machine_gun", cost: 4, minRange: 1, maxRange: 6, needsLos: false, features: [{ type: 1, minValue: 20, maxValue: 25 }] }
 const protein = (extra = {}) => ({
@@ -192,17 +191,4 @@ test("tpBoostFutureDamage: weapon only by default; idle mode takes the best of t
 	assert.ok(Math.abs(future(kit, shotgun, undefined, 20) - 21.6) < 1e-9)
 	assert.equal(firing(kit, shotgun, undefined, 20), 0)
 	assert.equal(future(kit.slice(0, 1), shotgun, undefined, 20), 0) // sans spark : rock une fois, 2 tirs de shotgun
-})
-
-test("the chip inventory is logged once, with identifiers, costs, cooldowns and effect types", () => {
-	const lines = []
-	const config = new LogConfig()
-	initLeekLogging(config)
-	globalThis.Debug = { log: (message) => lines.push(String(message)), pause() {} }
-	globalThis.console = { ...console, log: (message) => lines.push(String(message)) }
-	logChipInventory(makeMe().me)
-	const line = lines.find((text) => text.includes("[Chips]"))
-	assert.ok(line, "inventory line")
-	assert.match(line, /protein#8\(3TP,cd3,38:80-100x2\)/)
-	assert.match(line, /STR 10/)
 })

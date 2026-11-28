@@ -363,7 +363,7 @@ test("bounded search and low operation reserve fall back before any action", () 
 test("provider interruption retains only a complete incumbent when the execution budget permits", () => {
 	for (const { start, max, after, retained } of [
 		{ start: 600, max: 1000, after: 851, retained: true },
-		{ start: 1000, max: 10000, after: 4000, retained: true },
+		{ start: 1000, max: 10000, after: 7000, retained: true },
 		{ start: 600, max: 1000, after: 969, retained: true },
 		{ start: 600, max: 1000, after: 970, retained: false },
 		{ start: 600, max: 1000, after: 971, retained: false }
@@ -652,7 +652,7 @@ test("the plan switches between two shots and protection at the score crossover"
 
 test("search boundaries retain a complete incumbent where permitted", () => {
 	for (const [start, max, below, boundary] of [
-		[600, 1000, 849, 850], [1000, 10000, 3999, 4000]
+		[600, 1000, 849, 850], [1000, 10000, 6999, 7000]
 	]) {
 		const cases = [[below, true], [boundary, true], [boundary + 1, true]]
 		if (max === 1000) cases.push([969, true], [970, false], [971, false])
@@ -719,7 +719,7 @@ test("shared search handles the formerly bounded combination without spending PT
 
 test("active turn passes real EnemyMemory maps into the joint planner", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()], maxLife: 120 })
 	Object.assign(w.enemies[0], {
 		tp: 4, strength: 0, weapon: item("enemy gun", 2, 20, { maxRange: 8 }),
@@ -734,7 +734,7 @@ test("active turn passes real EnemyMemory maps into the joint planner", async ()
 
 test("active turn feeds the stagnation counter: observed once at the start of the turn and handed to the planner", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("./helpers/joint-turn.mjs")
 	const { stagnation } = await import("../dist/Brain/TurnObservation.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
 	Object.assign(w.enemies[0], {
@@ -763,7 +763,7 @@ test("active turn feeds the stagnation counter: observed once at the start of th
 
 test("active turn hands the enemy positions to the stagnation counter just before observing (a moving enemy keeps the rule out of play)", async () => {
 	globalThis.Color = { rgb: () => 0 }
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("./helpers/joint-turn.mjs")
 	const { stagnation } = await import("../dist/Brain/TurnObservation.js")
 	const w = world({ tp: 4, gun: item("gun", 2, 15), chips: [shield()] })
 	Object.assign(w.enemies[0], {

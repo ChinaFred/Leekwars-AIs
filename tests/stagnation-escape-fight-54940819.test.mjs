@@ -688,7 +688,7 @@ test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns
 // LIMITE ACCEPTÉE D1 (caractérisation ; la production n'est pas modifiée). La garde « case visitée » ne vit que dans le
 // planificateur tactique. Quand il retient (plan nul), `planAct` bascule sur le plan de réserve (plan B), qui n'a pas la
 // mémoire : il ramène Kassbi en 187 (« cached progress »). Les tests d'épisode ci-dessus appellent `evaluate()` seul et ne
-// voient pas ce chemin, qui est pourtant celui de `Kassbi_Class.turn()`. Le même type de va-et-vient existe avec la règle
+// voient pas ce chemin, qui est pourtant celui du repli de `Kassbi_Book.turn()`. Le même type de va-et-vient existe avec la règle
 // désactivée : ce n'est pas une régression de la règle (même va-et-vient 187 <-> case de frontière), mais l'anti-oscillation
 // « sur tout l'épisode » n'est pas effective via `planAct` sur une frontière de danger. Mesure (planAct complet, ennemi
 // immobile en 17, tours 11 à 40) : frontière de danger 5 : 13 retours en 187 ; frontière 6 : 4 ; frontière 7 : 15 ; règle

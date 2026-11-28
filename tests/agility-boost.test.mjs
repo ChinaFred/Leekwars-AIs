@@ -8,7 +8,7 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4
 globalThis.Fight = { turn: 1 }
 
 // Boost d'agilité : variante de boost du plan conjoint, gain de critique mesuré dans le score ; refusé si des PT servent mieux.
-const { turn } = await import("../dist/Main/Kassbi_Class.js")
+const { turn } = await import("./helpers/joint-turn.mjs")
 const { hasActiveAgilityBoost, pickAgilityBoost } = await import("../dist/Brain/StrengthBoost.js")
 const { executeReservePlan } = await import("../dist/Classes/Plannification/ReservePlan.js")
 const { LeekProfile } = await import("../dist/Classes/LeekProfile.js")

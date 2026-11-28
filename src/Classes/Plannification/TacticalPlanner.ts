@@ -1,6 +1,8 @@
 // @version:5.8
 // file version: 42
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
+import { LaserHits, isLaser, laserBalance } from "../Context/LaserLine.js"
+import { laserHitsFrom, laserKinds } from "../Context/LaserShot.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
@@ -24,7 +26,7 @@ import { stagnationEscape } from "./TacticalStagnation.js"
 
 /**
  * Zone d'effet d'une puce offensive : distance de Manhattan à la cible jusqu'à laquelle le lanceur peut se trouver
- * dans la zone (le plan ne simule pas les zones). Clés : types `area` du moteur officiel (leek-wars-generator,
+ * dans la zone (zones de puce non simulées ; le laser d'ARME l'est : voir `laserHitsFrom`). Clés : types `area` du moteur officiel (leek-wars-generator,
  * `Area.java`) : cercles 1-3 (3, 4, 5), plus 2-3 (6, 7), X 1-3 (8, 9, 10), carrés 1-2 (11, 12). Case seule, laser,
  * premier en ligne, `area` absent ou inconnu : 0. Renvoie 0 si chaque effet exclut le lanceur (`targets` sans le
  * bit 4, `TARGET_CASTER` du moteur ; Éclair : 27). HYPOTHÈSE non vérifiée en combat : `chip.area` et
@@ -413,8 +415,16 @@ function evaluate(
 		}
 		return best
 	}
+	// Laser d'arme : entités de la ligne tirée depuis `cell` vers `target` ; null hors laser. Seule la ligne compte, pas la
+	// destination. Un coffre sur la ligne écarte le tir (`chests` non vide, voir `offenseAt` et `retainWeapon`).
+	const laserKind = laserKinds(me)
+	const laserOf = (cell: Cell, target: Entity, weapon: Weapon): LaserHits | null =>
+		isLaser(weapon) ? laserHitsFrom(me, cell, target.cell, weapon, laserKind) : null
+	const allyIds = (hits: LaserHits | null): readonly number[] | undefined => hits?.allies.map((ally) => ally.id)
 	const retainWeapon = (target: Entity, weapon: Weapon, item: ShotCandidate, shot: { cell: Cell; cost: number }): void => {
 		const equip = weapon === me.weapon ? 0 : 1
+		const laser = laserOf(shot.cell, target, weapon)
+		if (laser !== null && laser.chests.length > 0) return
 		// Appelé avant le calcul de `N` : une seule fin, la case de moindre danger ; `N` est ajouté ensuite à l'option gardée.
 		const ending = endingsFor(shot, 0)[0]!
 		const danger = ending.danger
@@ -427,13 +437,14 @@ function evaluate(
 			const { attack, cost } = choice
 			const usefulDamage = Math.min(target.life, attack.damage)
 			const tpUsed = cost + equip + protection.cost
-			const score = usefulDamage -
+			const collateral = laser === null ? 0 : laserBalance(laser, attack.weaponShots, (entity) => netDamage(item, entity), target)
+			const score = usefulDamage + collateral -
 				riskCost(me, risk, protection, danger, killsLastEnemy(attack.damage, target, enemies.length), lifeFraction) +
 				weight * protection.heal
 			if (!beats(budget.incumbent, doomed, usefulDamage, score, danger, tpUsed, target, undefined, undefined, shot.cost + ending.cost)) continue
 			budget.incumbent = {
 				target, shotCell: shot.cell, destination: ending.cell, beforeMp: shot.cost, afterMp: ending.cost,
-				weapon, weaponShots: attack.weaponShots, chips: [], protection: protection.chips,
+				weapon, weaponShots: attack.weaponShots, laserAllies: allyIds(laser), chips: [], protection: protection.chips,
 				tpUsed, usefulDamage, danger, score
 			}
 		}
@@ -623,7 +634,11 @@ function evaluate(
 	// Une table exacte par cible/arme/masque de puces utilisables, pas par case : `tables[0]` à ma force actuelle,
 	// `tables[1]` à la force boostée (seulement si une variante de force existe) ; `future` : crédit par variante.
 	interface Offense { tables: Array<Array<AttackChoice | undefined>>; future: number[] }
-	interface OffenseOption { target: Entity; weapon: Weapon | null; equipCost: number; tables: Offense }
+	/** `laser` : touches de la ligne depuis la case de tir, avec le candidat à ma force et à la force boostée (`tables[1]`). */
+	interface OffenseOption {
+		target: Entity; weapon: Weapon | null; equipCost: number; tables: Offense
+		laser?: { hits: LaserHits; candidates: Array<ShotCandidate | null> }
+	}
 	const attackCache = new Map<string, Offense>()
 	const offenses: Array<OffenseOption[] | undefined> = []
 	/** Options d'attaque depuis la case de tir `entries[s]` (mémoïsées : préparées une fois, lues par le classement). */
@@ -646,6 +661,9 @@ function evaluate(
 				if (option !== null && (option.candidate === null || !option.cells.has(key(shot.cell)))) continue
 				const equipCost = option !== null && option.weapon !== me.weapon ? 1 : 0
 				if (equipCost > tp) continue
+				// Laser : un coffre sur la ligne écarte l'option (le blesser le réveille) ; alliés et autres ennemis comptent au score.
+				const hits = option === null ? null : laserOf(shot.cell, enemy.target, option.weapon)
+				if (hits !== null && hits.chests.length > 0) continue
 				const cacheKey = `${enemyIndex}:${optionIndex}:${mask}`
 				let tables = attackCache.get(cacheKey)
 				if (!tables) {
@@ -664,7 +682,11 @@ function evaluate(
 					}
 					attackCache.set(cacheKey, tables)
 				}
-				offense.push({ target: enemy.target, weapon: option?.weapon ?? null, equipCost, tables })
+				offense.push({
+					target: enemy.target, weapon: option?.weapon ?? null, equipCost, tables,
+					laser: hits === null ? undefined : { hits, candidates: [option!.candidate,
+						strengthGain > 0 ? toCandidate(option!.weapon, false, me.strength + strengthGain) : null] }
+				})
 			}
 		}
 		offenses[s] = offense
@@ -876,6 +898,10 @@ function evaluate(
 				const nextTurn = nextValue(ending.index, protection, state)
 				if (attack.damage > 0 || protection.heal > 0 || shieldCredit(protection, finalDanger) > 0) actionable = true
 				const usefulDamage = Math.min(option.target.life, attack.damage)
+				// Touches collatérales du laser (ennemis en plus, alliés en moins) ; avec la force boostée, ses dégâts.
+				const shooter = option.laser?.candidates[variant.strength ? 1 : 0] ?? null
+				const collateral = option.laser && shooter && attack.weaponShots > 0
+					? laserBalance(option.laser.hits, attack.weaponShots, (entity) => netDamage(shooter, entity), option.target) : 0
 				const tpUsed = cost + protection.cost + option.equipCost + variant.cost
 				const kills = killsLastEnemy(attack.damage, option.target, enemies.length)
 				// Sans dégâts (aucun tir, ou tir entièrement absorbé), ce plan n'est qu'un déplacement : même filtre que le
@@ -890,7 +916,7 @@ function evaluate(
 				// Critiques de ce tour (agilité) : sans objet si le tir tue la cible.
 				const critNow = variant.agility && attack.damage > 0 && attack.damage < option.target.life
 					? usefulDamage * agilityCritGain(me, variant.agility) : 0
-				const score = usefulDamage + critNow - riskCost(me, risk, protection, finalDanger, kills, lifeFraction) +
+				const score = usefulDamage + collateral + critNow - riskCost(me, risk, protection, finalDanger, kills, lifeFraction) +
 					weight * protection.heal + future + nextTurn
 				const firingDistanceAtEnd = firingDistance(option.target, ending.cell)
 				// Même départage que le plan de progression (trajet futur, seulement sans tir d'arme à portée).
@@ -899,7 +925,7 @@ function evaluate(
 					futureRouteAtEnd, shot.cost + ending.cost)
 				// Meilleur plan à dégâts sous la marge de danger, suivi à part tant qu'il n'est pas lui-même en tête (alors
 				// aucun candidat battu par la tête ne peut le battre) : c'est lui qui remplacera un recul sans dégâts.
-				const damaging = retreatPossible && (leads || substitute !== best) && attack.damage > 0 &&
+				const damaging = retreatPossible && (leads || substitute !== best) && attack.damage > 0 && usefulDamage + collateral > 0 &&
 					(kills || !lethal(me, protection, finalDanger, PASSIVE_DANGER_LIFE_FRACTION))
 				if (!leads && !(damaging && beats(substitute, doomed, usefulDamage, score, finalDanger, tpUsed, option.target,
 					firingDistanceAtEnd, futureRouteAtEnd, shot.cost + ending.cost))) continue
@@ -907,7 +933,8 @@ function evaluate(
 					target: option.target, shotCell: shot.cell, destination: ending.cell,
 					beforeMp: shot.cost, afterMp: ending.cost,
 					weapon: attack.weaponShots > 0 ? option.weapon : null,
-					weaponShots: attack.weaponShots, chips: attack.chips, protection: protection.chips,
+					weaponShots: attack.weaponShots, laserAllies: attack.weaponShots > 0 ? allyIds(option.laser?.hits ?? null) : undefined,
+					chips: attack.chips, protection: protection.chips,
 					boost: boostOf(variant), tpUsed, usefulDamage, danger: finalDanger,
 					firingDistance: firingDistanceAtEnd, futureRouteDistance: futureRouteAtEnd,
 					score, nextTurn

@@ -457,7 +457,7 @@ function makeCombatWorld(runId, { allyNameFailsAfterReachable = false } = {}) {
 let runCounter = 1
 
 async function playTurn(config, { debug, worldOptions } = {}) {
-	const { turn } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("./helpers/joint-turn.mjs")
 	const { actions, counts } = makeCombatWorld(runCounter++, worldOptions)
 	const originalLog = console.log
 	const originalRandom = Math.random

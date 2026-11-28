@@ -9,7 +9,7 @@ globalThis.Fight = { turn: 1 }
 
 // Le boost est une composante du plan : décidé par `planAct` (plan conjoint ou plan B) avant la première action,
 // jamais lancé par `turn()` en dehors du plan. Ces tests passent par `turn()` avec le planificateur réel.
-const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 const { boostNetDamage, hasActiveStrengthBoost, pickBoost, FUTURE_TURN_WEIGHT } = await import("../dist/Brain/StrengthBoost.js")
 const { executeReservePlan } = await import("../dist/Classes/Plannification/ReservePlan.js")
 const { LeekProfile } = await import("../dist/Classes/LeekProfile.js")
@@ -181,11 +181,6 @@ test("turn(): nothing is cast before the plan is shown; in contact the plan itse
 	assert.ok(shown >= 0 && shown < firstAction, "the whole plan, boost included, is displayed before the first action")
 	assert.equal(lines.some((text) => text.includes("stale/inconsistent") || text.includes("fallback")), false)
 	assert.equal(w.me.tp, 3)
-	// Inventaire des puces : une ligne, au premier tour joué seulement.
-	assert.equal(lines.filter((text) => text.includes("[Chips]")).length, 1)
-	assert.ok(lines.some((text) => text.includes("protein#8(3TP,cd3,38:90-90x2)")))
-	makeWorld({ turnNumber: 40 })
-	assert.equal(captureTurn(null).some((text) => text.includes("[Chips]")), false)
 })
 
 test("the plan refuses the boost that would cost the fatal blow, and takes it against a sturdy enemy", () => {

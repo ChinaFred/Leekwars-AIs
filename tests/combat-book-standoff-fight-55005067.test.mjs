@@ -277,12 +277,12 @@ test("step 3: in a duel the beam reaches depth 2 within a fixed work limit on at
 	assert.ok(ok / states.length >= 0.8, `${ok} / ${states.length}`)
 })
 
-test("step 3: a duel in AGGRESSIVE raises the operations share of the beam to 30 %", async () => {
+test("step 3: a duel in AGGRESSIVE gives the beam 70 % of the operations, duel or not", async () => {
 	const { BookBudget, BOOK_SEARCH_FRACTION, BOOK_DUEL_SEARCH_FRACTION } = await import("../dist/Classes/Plannification/BookBudget.js")
-	assert.equal(BOOK_SEARCH_FRACTION, 0.25)
-	assert.equal(BOOK_DUEL_SEARCH_FRACTION, 0.30)
-	assert.equal(new BookBudget().fraction, 0.25)
-	assert.equal(new BookBudget(undefined, BOOK_DUEL_SEARCH_FRACTION).fraction, 0.30)
+	assert.equal(BOOK_SEARCH_FRACTION, 0.70)
+	assert.equal(BOOK_DUEL_SEARCH_FRACTION, 0.70)
+	assert.equal(new BookBudget().fraction, 0.70)
+	assert.equal(new BookBudget(undefined, BOOK_DUEL_SEARCH_FRACTION).fraction, 0.70)
 	// Branchement : la fraction du budget suit le duel (observable par le plafond d'opérations simulé).
 	globalThis.System = { operations: 0, maxOperations: 1000 }
 	const aggressive = replay(5)
@@ -377,11 +377,11 @@ test("step 2 guard: under 50 % of max life a duel changes nothing, at 50 % or mo
 	assert.match(names(planBeam(...(() => { const w = replay(5, { hiding: false, life: 200, danger }); return [w.me, w.context, w.profile, { depth: 1, standoff: duel(8) }] })()), high), /rock/)
 })
 
-test("step 3 wiring: the beam gets 30 % of the operations in a duel, 25 % otherwise", () => {
+test("step 3 wiring: the beam gets 70 % of the operations, in a duel or not", () => {
 	const fraction = (standoff) => { const w = replay(5); return planBeam(w.me, w.context, w.profile, { depth: 1, standoff }).budgetFraction }
-	assert.equal(fraction(duel(6)), 0.30)
-	assert.equal(fraction(undefined), 0.25)
-	assert.equal(fraction(new StandoffTracker()), 0.25, "no duel noticed yet")
+	assert.equal(fraction(duel(6)), 0.70)
+	assert.equal(fraction(undefined), 0.70)
+	assert.equal(fraction(new StandoffTracker()), 0.70, "no duel noticed yet")
 })
 
 test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9, then most turns; 55005897 (won in 14 turns) never", async () => {
@@ -413,4 +413,24 @@ test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9,
 	const won = replayDuel(55005897)
 	assert.equal(won.win, true)
 	assert.deepEqual(won.activeTurns, [], "no duel in a fight won without one")
+})
+
+test("book budget: 25-30 % of the operations no longer cuts the beam; the cut names its cause", async () => {
+	const { BookBudget, BookCut, BOOK_DUEL_SEARCH_FRACTION } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const cause = (budget) => { try { budget.guard() } catch (error) { assert.ok(error instanceof BookCut); return error.message } return null }
+	for (const fraction of [undefined, BOOK_DUEL_SEARCH_FRACTION]) {
+		globalThis.System = { operations: 0, maxOperations: 1000 }
+		const budget = new BookBudget(undefined, fraction)
+		System.operations = 500
+		assert.equal(cause(budget), null, "50 % spent: cut under 0.25 / 0.30, not under 0.70")
+		System.operations = 700
+		assert.equal(cause(budget), "operations reserve (book fraction)")
+		System.operations = 800
+		assert.equal(cause(budget), "operations reserve (global cap)")
+	}
+	globalThis.System = { operations: 300, maxOperations: 1000 }
+	const late = new BookBudget()
+	System.operations = 800
+	assert.equal(cause(late), "operations reserve (global cap)", "global cap binds when the beam starts late")
+	delete globalThis.System
 })

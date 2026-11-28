@@ -392,7 +392,7 @@ function makeCombatWorld(enemyId) {
 const shots = (actions) => actions.filter((action) => action === "shoot").length
 
 test("turn() identifies the enemy and the plan still fires", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	const { actions } = makeCombatWorld(2)
@@ -408,7 +408,7 @@ test("turn() identifies the enemy and the plan still fires", async () => {
 })
 
 test("turn() still plays when the enemy memory fails, and reports the error", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	const { actions, enemy } = makeCombatWorld(3)

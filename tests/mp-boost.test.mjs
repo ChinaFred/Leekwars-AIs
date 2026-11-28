@@ -9,7 +9,7 @@ globalThis.Fight = { turn: 1 }
 
 // Le boost de PM est une composante du plan : décidé par une seconde recherche sur la zone boostée, comparé au plan sans boost
 // par le même score, affiché avec le plan, lancé en PREMIÈRE action de l'exécution.
-const { turn } = await import("../dist/Main/Kassbi_Class.js")
+const { turn } = await import("./helpers/joint-turn.mjs")
 const { decideMpBoost, pickMpBoost } = await import("../dist/Brain/StrengthBoost.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { TACTICAL_LIMITS } = await import("../dist/Classes/Plannification/TacticalTypes.js")

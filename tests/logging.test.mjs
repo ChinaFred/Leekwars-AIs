@@ -61,10 +61,10 @@ test("default: every context is enabled without any init, and log prints the exa
 		assert.equal(pristine.isLogEnabled(context), true, context)
 	}
 	const calls = captureConsole(() => {
-		pristine.log("=== KASSBI TURN END ===\n", pristine.LOG_CONTEXT.SYSTEM)
+		pristine.log("=== KASSBI BOOK TURN END ===\n", pristine.LOG_CONTEXT.SYSTEM)
 		pristine.log("[Reachable] me:5 (3 MP)", pristine.LOG_CONTEXT.REACHABLE)
 	})
-	assert.deepEqual(calls, [["=== KASSBI TURN END ===\n"], ["[Reachable] me:5 (3 MP)"]])
+	assert.deepEqual(calls, [["=== KASSBI BOOK TURN END ===\n"], ["[Reachable] me:5 (3 MP)"]])
 	assert.deepEqual(new LogConfig().enabledContexts(), [...LOG_CONTEXTS])
 })
 
@@ -334,8 +334,7 @@ let runCounter = 1
 
 /** Joue un tour dans un monde neuf (ids et tour distincts : `enemyMemory` est partagé) et renvoie ses lignes normalisées. */
 async function playTurn(config, options) {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	const { turn } = await import("../dist/Main/Kassbi_Book.js")
 	const { actions } = makeCombatWorld(runCounter++, options)
 	const originalLog = console.log
 	const lines = []
@@ -343,7 +342,10 @@ async function playTurn(config, options) {
 	console.log = (...args) => lines.push(args.join(" ").replace(/#\d+/g, "#N").replace(/\be\d+\b/g, "eN")
 		.replace(/^\[Speech\] Leek life: ".*"$/, "[Speech] Leek life: N")
 		.replace(/"(target|id|awayFrom)":\d+/g, '"$1":N')
-		.replace(/^\[History\] T\d+ (.*) passive \d+ \|/, "[History] TN $1 passive N |"))
+		.replace(/^\[History\] T\d+ (.*) passive \d+ \|/, "[History] TN $1 passive N |")
+		// Le compteur de duel du livre (`BookStandoff`) vit entre les tours : le détail de la recherche change d'un tour à l'autre.
+		.replace(/^\[Book\] (profile|beam|unchosen|chosen)\b.*/, "[Book] $1")
+		.replace(/"searchStatus":"book beam depth \d"/, '"searchStatus":"book beam depth N"'))
 	try {
 		initLeekLogging(config)
 		turn()
@@ -355,7 +357,7 @@ async function playTurn(config, options) {
 }
 
 const CONTEXT_LINES = {
-	[LOG_CONTEXT.SYSTEM]: (line) => line.includes("=== KASSBI TURN START ===") || line.includes("=== KASSBI TURN END ==="),
+	[LOG_CONTEXT.SYSTEM]: (line) => line.includes("=== KASSBI BOOK TURN START ===") || line.includes("=== KASSBI BOOK TURN END ==="),
 	[LOG_CONTEXT.COMBAT]: (line) => /^(My HP:|Enemy:|Enemy HP:|\[History\] )/.test(line),
 	[LOG_CONTEXT.SPEECH]: (line) => line.startsWith("[Speech]"),
 	[LOG_CONTEXT.MEMORY]: (line) => line.startsWith("[EnemyMemory]"),
@@ -364,10 +366,10 @@ const CONTEXT_LINES = {
 	[LOG_CONTEXT.ACCESSIBLE_ZONE]: (line) => line.startsWith("Accessible zone:"),
 	[LOG_CONTEXT.DANGER_ZONE]: (line) => line.startsWith("Danger zone:"),
 	[LOG_CONTEXT.TARGET_ZONE]: (line) => line.startsWith("Target zone:"),
-	[LOG_CONTEXT.OPERATIONS]: (line) => line.startsWith("Operations: "),
+	[LOG_CONTEXT.OPERATIONS]: (line) => line.startsWith("Operations: ") || line.startsWith("[Book] planning ops"),
 	[LOG_CONTEXT.WEAPON]: (line) => line.startsWith("[Weapon] "),
 	[LOG_CONTEXT.CHIP]: (line) => line.startsWith("[Boost] "),
-	[LOG_CONTEXT.PLANNING]: (line) => /^\[(Tactical|Reserve|Plannification)\] /.test(line)
+	[LOG_CONTEXT.PLANNING]: (line) => /^\[(Tactical|Reserve|Plannification)\] |^\[Book\] (?!planning ops)/.test(line)
 }
 // Ni arme à équiper au tour 1 (une seule arme, déjà en main) ni boost dans ce scénario.
 const SCENARIO_DEPENDENT = new Set([LOG_CONTEXT.WEAPON, LOG_CONTEXT.CHIP])
@@ -376,23 +378,23 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 	const originalRandom = Math.random
 	Math.random = () => 0
 	try {
-		// Premier tour du module : salutation (SPEECH) ; ensuite `isFirstTurn` est faux.
+		// Premier tour du module : salutation (SPEECH), une seule fois.
 		const first = await playTurn(new LogConfig(), { enemyLife: 10 })
 		assert.equal(first.lines.filter((line) => line.startsWith("[Speech] Greeting:")).length, 1)
-		assert.equal(first.lines.filter((line) => line.startsWith("[Speech] Taunt")).length, 1)
 
 		const { lines, actions } = await playTurn(new LogConfig(), { enemyLife: 10 })
 		assert.deepEqual(actions, ["shoot"]) // 10 PV : le premier tir (22) tue, le second est annulé
-		assert.equal(lines[0], "\n=== KASSBI TURN START ===")
+		assert.equal(lines[0], "\n=== KASSBI BOOK TURN START ===")
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
-		assert.equal(lines.at(-2), "=== KASSBI TURN END ===\n")
+		assert.equal(lines.at(-2), "=== KASSBI BOOK TURN END ===\n")
+		// Sans provocation, les 2 `say` du tour sont des lignes du récit du poireau.
 		assert.equal(lines.at(-3), "[Speech] Leek life: N")
-		assert.equal(lines.at(-4), "[History] TN TP 4/10 MP 0/3 dealt 22 taken 0 passive N | machine_gun:1:22")
+		assert.equal(lines.at(-4), "[Speech] Leek life: N")
+		assert.equal(lines.at(-5), "[History] TN TP 4/10 MP 0/3 dealt 22 taken 0 passive N | machine_gun:1:22")
 		assert.ok(lines.some((line) => line.startsWith("[Tactical] plan before execution")))
 		assert.ok(lines.some((line) => line.startsWith("[Reachable] me:")))
 		assert.ok(lines.some((line) => line.startsWith("[Threat] ")))
 		assert.ok(lines.some((line) => line.startsWith("[EnemyMemory] Identified")))
-		assert.ok(lines.some((line) => line.startsWith("[Speech] Taunt")))
 		// chaque ligne est attribuée à (au moins) un contexte : plus aucune ligne « orpheline »
 		const unclaimed = lines.filter((line) => !Object.values(CONTEXT_LINES).some((matches) => matches(line)))
 		assert.deepEqual(unclaimed, [])
@@ -432,9 +434,8 @@ test("turn() with setAll(false): no log line at all, same actions; the config is
 	assert.deepEqual(getLogConfig().enabledContexts(), [...LOG_CONTEXTS])
 })
 
-test("importing Kassbi_Class installs its own all-enabled config (leekLogConfig) that can be tuned per context", async () => {
-	const { leekLogConfig, turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+test("importing Kassbi_Book installs its own all-enabled config (leekLogConfig) that can be tuned per context", async () => {
+	const { leekLogConfig, turn } = await import("../dist/Main/Kassbi_Book.js")
 	assert.deepEqual(leekLogConfig.enabledContexts(), [...LOG_CONTEXTS])
 	initLeekLogging(leekLogConfig)
 	try {
@@ -449,18 +450,9 @@ test("importing Kassbi_Class installs its own all-enabled config (leekLogConfig)
 			console.log = original
 		}
 		assert.equal(lines.some((line) => line.startsWith("Operations: ")), false)
-		assert.equal(lines.at(-1), "=== KASSBI TURN END ===\n")
+		assert.equal(lines.at(-1), "=== KASSBI BOOK TURN END ===\n")
 	} finally {
 		leekLogConfig.setAll(true)
-		resetLeekLogging()
-	}
-})
-
-test("Kassbi_test entry point also creates an all-enabled config", async () => {
-	const entry = await import("../dist/Main/Kassbi_test.js")
-	try {
-		assert.deepEqual(entry.leekLogConfig.enabledContexts(), [...LOG_CONTEXTS])
-	} finally {
 		resetLeekLogging()
 	}
 })

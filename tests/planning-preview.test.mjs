@@ -171,10 +171,10 @@ test("complete refused shot: phase is an attempt, refusal is explicit and not re
 
 test("reserve after operations reserve: full conditional sequence precedes approach, attack and retreat", () => {
 	const w = world()
-	let ops = 200000
+	let ops = 100000
 	globalThis.System = { get operations() { return ops }, maxOperations: 1000000 }
 	const native = Fight.weaponCells
-	Fight.weaponCells = (...args) => { ops = 510000; return native(...args) }
+	Fight.weaponCells = (...args) => { ops = 710000; return native(...args) }
 	try {
 		const trace = capture(w, () => planAct(w.me, w.profile, w.context))
 		assert.ok(trace.some(e => e.text?.includes("fallback: operations reserve")))

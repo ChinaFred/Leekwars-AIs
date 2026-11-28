@@ -1166,9 +1166,8 @@ async function runTurnCapturingLogs(turn) {
 
 test("turn() builds the threat map, logs one short [Threat] line before TURN END, and fires as with an unarmed enemy", async () => {
 	// tours distincts : le module garde `enemyMemory` (et mes cases atteignables) d'un test à l'autre
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn } = await import("../dist/Main/Kassbi_Book.js")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	const unarmed = makeCombatWorld({ enemy: 120, ally: 121 }, { ...armedGun(), features: [] }, 10)
 	const unarmedLines = await runTurnCapturingLogs(turn)
 	const unarmedActions = [...unarmed.actions]
@@ -1183,7 +1182,7 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 	const threatLines = lines.filter((line) => line.startsWith("[Threat]"))
 	assert.equal(threatLines.length, 1)
 	assert.match(threatLines[0], /^\[Threat\] 23\/23 cells, danger max 15\.0 min \d+\.0, safest \(\d+,\d+\), 1 armed enemies, \d+ pairs, 0 LoS$/)
-	assert.ok(lines.indexOf(threatLines[0]) < lines.findIndex((line) => line.includes("=== KASSBI TURN END ===")))
+	assert.ok(lines.indexOf(threatLines[0]) < lines.findIndex((line) => line.includes("=== KASSBI BOOK TURN END ===")))
 	assert.equal(lines.filter((line) => line.startsWith("[Reachable]")).length, 1)
 	assert.match(unarmedLines.find((line) => line.startsWith("[Threat]")), /danger max 0\.0 min 0\.0, safest \(5,5\), 0 armed enemies/)
 	const map = enemyMemory.getThreatMap()
@@ -1195,8 +1194,7 @@ test("turn() builds the threat map, logs one short [Threat] line before TURN END
 })
 
 test("turn() still plays and logs reachable cells when the threat map fails, and reports the error", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	const { turn } = await import("../dist/Main/Kassbi_Book.js")
 	const { actions } = makeCombatWorld({ enemy: 130, ally: 131 }, armedGun({ needsLos: true }), 12)
 	globalThis.Field.lineOfSight = () => { throw new Error("los down") }
 	debugLogs.length = 0
@@ -1207,17 +1205,16 @@ test("turn() still plays and logs reachable cells when the threat map fails, and
 	assert.equal(lines.filter((line) => line.startsWith("[Reachable]")).length, 1)
 	assert.equal(lines.some((line) => line.startsWith("[Threat]")), false)
 	assert.equal(debugLogs.some((entry) => entry.includes("observeThreatMap") && entry.includes("los down")), true)
-	assert.ok(lines.some((line) => line.includes("=== KASSBI TURN END ===")))
+	assert.ok(lines.some((line) => line.includes("=== KASSBI BOOK TURN END ===")))
 })
 
 test("turn() logs 'unavailable' when my reachable cells could not be computed", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
+	const { turn } = await import("../dist/Main/Kassbi_Book.js")
 	makeCombatWorld({ enemy: 140, ally: 141 }, armedGun(), 13)
 	globalThis.Field = { cellFromXY() { throw new Error("grid down") } }
 	const lines = await runTurnCapturingLogs(turn)
 	assert.equal(lines.filter((line) => line === "[Threat] unavailable").length, 1)
-	assert.ok(lines.some((line) => line.includes("=== KASSBI TURN END ===")), "the turn still ends normally")
+	assert.ok(lines.some((line) => line.includes("=== KASSBI BOOK TURN END ===")), "the turn still ends normally")
 })
 
 // --- zone visée (buildTargetZone) -------------------------------------------------------------------

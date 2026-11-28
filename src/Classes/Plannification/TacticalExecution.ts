@@ -1,6 +1,8 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { computeReachableCells } from "../Context/ReachableCells.js"
+import { isLaser } from "../Context/LaserLine.js"
+import { laserRefusal } from "../Context/LaserShot.js"
 import { chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY } from "./ExecutionBudget.js"
@@ -136,6 +138,9 @@ function execute(me: Me, plan: TacticalPlan): void {
 			interrupted("weapon/target unavailable")
 			break
 		}
+		// Laser : la ligne réelle (entités à jour) ne doit toucher que les alliés prévus, jamais un coffre.
+		const refusal = isLaser(plan.weapon) ? laserRefusal(me, plan.target, plan.weapon, plan.laserAllies) : null
+		if (refusal !== null) { interrupted(`${refusal}; weapon shot cancelled`); break }
 		phase(me, "weapon shot", () => ({
 			weapon: plan.weapon!.name, target: plan.target.id, shot: shot + 1,
 			atMost: plan.weaponShots, tpCost: plan.weapon!.cost

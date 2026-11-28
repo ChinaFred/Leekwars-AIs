@@ -1,27 +1,13 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 export const SPEECH = {
-	TAUNTS: 0,
-	GREETINGS: 1,
-	BEGIN: 2,
-	DAMAGES: 3,
-	NOT_SHOOT: 4,
-	RIP: 5
+	GREETINGS: 0,
+	BEGIN: 1,
+	DAMAGES: 2,
+	NOT_SHOOT: 3,
+	RIP: 4
 } as const
 
-export const SPEECH_TAUNTS = [
-	"Je vais te dégorger",
-	"Hahaha, tu ne me fais pas peur",
-	"Tremble devant ma puissance",
-	"Tu ne fais pas le poids",
-	"Je te mangerai par les radicelles",
-	"Je vais te hacher menu",
-	"Je vais t'étuver",
-	"Tu aimes le beurre? Car tu baigneras bientôt dedans",
-	"Je vais te manger tout cru",
-	"Un de nous deux est de trop dans ce potager",
-	"T'as des vapeurs? T'es tout ramolli"
-]
 export const SPEECH_LEEK_LIFE = [
   "Je suis né dans la terre, prêt à en découdre.",
   "J'ai poussé à la dure, sous la pluie et le vent.",
@@ -99,7 +85,6 @@ export const SPEECH_DESIGNATE_TARGET = ["Sus à ", "On défonce ", "Tous sur "]
 export const SPEECH_HELP = ["Help!", "S.O.S.", "Oufti, ça fait mal.", "Arg, je meurs."]
 
 const speechGroups = [
-	SPEECH_TAUNTS,
 	SPEECH_GREETINGS,
 	SPEECH_BEGIN,
 	SPEECH_DAMAGES,
