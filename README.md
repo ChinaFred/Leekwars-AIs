@@ -9,12 +9,13 @@ Python qui déploie les sources et archive les combats.
 
 ## Fonctionnement d'un tour
 
-Point d'entrée : `turn()` dans [`src/Main/Kassbi_Class.ts`](src/Main/Kassbi_Class.ts).
+Point d'entrée : `turn()` dans [`src/Main/Kassbi_Book.ts`](src/Main/Kassbi_Book.ts) (stratégie principale : livre de combos).
 
 1. **Contexte** (`observeTurn`, `src/Brain/TurnObservation.ts`) : mémoire de l'adversaire, cases atteignables de
    chaque poireau, carte de danger de mes cases, compteur de stagnation.
-2. **Planification** (`planAct`, comportement réglé par `leekProfile`) : un plan conjoint attaque / boost /
-   protection / déplacement choisi par un score dégâts − risque ; à défaut un plan B séquentiel borné en opérations.
+2. **Planification** : `planWithBook` choisit le tour par faisceau sur la table de combos (`CombatBook.ts`). Repli
+   gelé, sans évolution : `planAct`, un plan conjoint attaque / boost / protection / déplacement choisi par un
+   score dégâts − risque, à défaut un plan B séquentiel borné en opérations.
 3. **Exécution** : le plan est affiché en entier avant la première action, puis chaque action est revérifiée
    (PT, portée, cooldown) ; un échec arrête la séquence, sans second plan.
 4. **Après le plan** : arme équipée au tour 1, puis ligne `Operations:` de fin de tour.
@@ -25,10 +26,10 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 
 | Dossier | Rôle |
 |---|---|
-| `src/Main/` | Points d'entrée déployés : `Kassbi_Class.ts` (IA de combat), `Kassbi_test.ts` (variante de test) |
+| `src/Main/` | Points d'entrée déployés : `Kassbi_Book.ts` (IA de combat) |
 | `src/Brain/` | Observation du tour (`TurnObservation.ts`), scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
 | `src/Classes/Context/` | Ce que l'IA sait du combat : mémoire de l'adversaire, cases atteignables, carte de danger, stagnation, cibles |
-| `src/Classes/Plannification/` | Plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations |
+| `src/Classes/Plannification/` | Livre de combos (`Book*`, `CombatBook`), repli gelé : plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations |
 | `src/Classes/Strategy/` | Seuils par rôle (`Aggressive`, `Balanced`, `Defensive`) |
 | `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, rapports d'erreur et mesure d'opérations, paroles |
 | `tests/` | Tests Node (`*.test.mjs`) sur des mondes simulés ; ils importent `dist/` |

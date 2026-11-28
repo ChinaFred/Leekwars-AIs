@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
@@ -54,7 +54,7 @@ export const MAX_TARGET_ZONE_PAIRS = 16000
 /**
  * Plafond d'opérations de `buildTargetZone`, en part de `System.maxOperations` (seuil ABSOLU du tour, comme
  * `SEARCH_GLOBAL_FRACTION`, pas un budget relatif) : la zone est calculée AVANT le plan et s'arrête là pour lui laisser
- * sa fenêtre de recherche entière (30 % depuis son départ, sous le plafond global de 80 % : 50 % + 30 % = 80 %).
+ * sa fenêtre de recherche (60 % depuis son départ, mais coupée par le plafond global de 80 % : 50 % + 60 % > 80 %, il ne reste que 30 %).
  * 0,20 → 0,50 : à 20 %, une carte de danger déjà coûteuse ne laissait à la zone que les cases reprises de cette carte.
  * Valeur déduite de la fenêtre du plan, non mesurée en combat (le log `Target zone:` donne le coût réel en opérations).
  * Contrôlé une fois par anneau du parcours en largeur et une fois par case évaluée ; les marques ne sont pas comptées.

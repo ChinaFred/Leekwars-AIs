@@ -8,7 +8,7 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, ABSOLUTE_SHIELD: 3, RELATIVE_SHIELD: 4
 globalThis.Fight = { turn: 1 }
 
 // Boost d'agilité « de remplissage » : ajouté au plan conjoint retenu, payé par les seuls PT que ce plan n'emploie pas.
-const { turn } = await import("../dist/Main/Kassbi_Class.js")
+const { turn } = await import("./helpers/joint-turn.mjs")
 const { woundedRiskFactor, WOUNDED_RISK_FACTOR } = await import("../dist/Classes/Plannification/TacticalScore.js")
 
 const machineGun = {

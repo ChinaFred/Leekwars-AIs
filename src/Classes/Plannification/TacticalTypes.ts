@@ -92,9 +92,10 @@ export const TACTICAL_LIMITS = {
 } as const
 
 /**
- * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (alors 300 000 sur 1 000 000 ; 600 000 sur 2 000 000 aujourd'hui) :
- * combat 54939649, tours 4 et 5, la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147
- * alors que le planificateur complet choisissait une case sûre. Aucun coût réel mesuré : politique, pas borne moteur.
+ * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (combat 54939649, tours 4 et 5 :
+ * la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147 alors que le planificateur complet
+ * choisissait une case sûre), puis à 60 % (1 200 000 sur 2 000 000), sur demande : 30 % bridait la recherche du plan conjoint.
+ * Aucun coût réel mesuré : politique, pas borne moteur.
  */
 const SEARCH_FRACTION = OPS_BUDGET.TACTICAL_SEARCH
 

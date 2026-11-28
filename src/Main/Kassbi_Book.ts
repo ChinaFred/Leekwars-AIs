@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -15,7 +15,7 @@ import { executeTacticalPlan } from "../Classes/Plannification/TacticalExecution
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
-/** Configuration de journalisation de ce poireau d'essai : tous les contextes actifs. */
+/** Configuration de journalisation de mon poireau : tous les contextes actifs. */
 export const leekLogConfig = new LogConfig()
 initLeekLogging(leekLogConfig)
 
@@ -48,12 +48,12 @@ function operations(): number {
 }
 
 /**
- * Variante de `Kassbi_Class.turn()` dont le plan du tour est décidé par LECTURE de la table de combos
- * (`CombatBook.ts`, `BookPlanner.ts`) : cases de tir par index, boost de force par facteur, puis exécution par
- * `executeTacticalPlan`. Observation, carte de danger, piège du coffre et arme du tour 1 sont ceux de
- * `Kassbi_Class`, avec ses paroles (salutation au tour 1, récit du poireau avec les PT restants). Le plan est un faisceau de 5 enchaînements sur 2 à 3 tours (`BookBeam.ts`), seul le tour 1
- * du meilleur est exécuté. Sans plan par table (données absentes, budget coupé, aucune action utile), le plan conjoint
- * existant (`planAct`) joue : un tour n'est jamais perdu. Les opérations de chaque phase sont journalisées (`[Book]`).
+ * Tour de l'IA principale : le plan du tour est décidé par LECTURE de la table de combos (`CombatBook.ts`,
+ * `BookPlanner.ts`) : cases de tir par index, boost de force par facteur, puis exécution par `executeTacticalPlan`.
+ * Paroles : salutation au tour 1, récit du poireau avec les PT restants. Le plan est un faisceau de 5 enchaînements sur
+ * 2 à 3 tours (`BookBeam.ts`), seul le tour 1 du meilleur est exécuté. Sans plan par table (données absentes, budget
+ * coupé, aucune action utile), le plan conjoint gelé (`planAct`) joue : un tour n'est jamais perdu. Les opérations de
+ * chaque phase sont journalisées (`[Book]`).
  */
 export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Book.ts", "turn", () => {

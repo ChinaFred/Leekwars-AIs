@@ -58,7 +58,7 @@ export interface BeamRun {
 	readonly work: number
 	readonly trace: BeamTrace
 	readonly ops: { readonly prepare: number; readonly beam: number }
-	/** Part du total d'opérations accordée au faisceau (0,25, ou 0,30 en duel AGGRESSIVE). */
+	/** Part du total d'opérations accordée au faisceau (0,70, duel AGGRESSIVE compris). */
 	readonly budgetFraction: number
 }
 

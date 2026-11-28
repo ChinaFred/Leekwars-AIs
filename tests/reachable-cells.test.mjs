@@ -442,7 +442,7 @@ async function runTurnCapturingLogs(turn) {
 }
 
 test("turn() computes the reachable cells of me, my ally and the enemy, logs one short line, and the plan fires", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
@@ -463,7 +463,7 @@ test("turn() computes the reachable cells of me, my ally and the enemy, logs one
 })
 
 test("turn() still plays when the reachable-cells computation fails, and reports the error", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	const { enemyMemory } = await import("../dist/Brain/TurnObservation.js")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
@@ -479,9 +479,7 @@ test("turn() still plays when the reachable-cells computation fails, and reports
 })
 
 test("turn() logs the operations line after TURN END, and still works when System is undefined", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
-	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
-	leekProfile.setRole("BALANCED")
+	const { turn } = await import("../dist/Main/Kassbi_Book.js")
 
 	makeCombatWorld({ enemy: 50, ally: 51 })
 	assert.equal(typeof globalThis.System, "undefined")
@@ -492,7 +490,7 @@ test("turn() logs the operations line after TURN END, and still works when Syste
 	try {
 		const { actions } = makeCombatWorld({ enemy: 52, ally: 53 })
 		const lines = await runTurnCapturingLogs(turn)
-		const endIndex = lines.findIndex((line) => line.includes("=== KASSBI TURN END ==="))
+		const endIndex = lines.findIndex((line) => line.includes("=== KASSBI BOOK TURN END ==="))
 		const operationsIndex = lines.findIndex((line) => line.startsWith("Operations:"))
 		assert.notEqual(endIndex, -1)
 		assert.equal(operationsIndex, endIndex + 1)
@@ -505,7 +503,7 @@ test("turn() logs the operations line after TURN END, and still works when Syste
 })
 
 test("turn() still fires when a ring of obstacles leaves me no reachable cell but my own", async () => {
-	const { turn, leekProfile } = await import("../dist/Main/Kassbi_Class.js")
+	const { turn, leekProfile } = await import("./helpers/joint-turn.mjs")
 	// Scénario écrit pour les seuils BALANCED (soin, bouclier) ; le rôle par défaut réel est vérifié dans strength-boost-turn.test.mjs.
 	leekProfile.setRole("BALANCED")
 	const { actions, grid } = makeCombatWorld({ enemy: 40, ally: 41 })

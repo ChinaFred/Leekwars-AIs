@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -24,7 +24,6 @@ import { CRITICAL_FACTOR } from "../Classes/Context/EnemyMemory.js"
 import { WEAPON_SWAP_TP } from "../Classes/Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Classes/Plannification/ExecutionBudget.js"
 import { TacticalPreparation } from "../Classes/Plannification/TacticalTypes.js"
-import { log, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
 /** Part créditée des tours futurs couverts par le boost (le contact avec l'ennemi n'est pas garanti). */
 export const FUTURE_TURN_WEIGHT = 0.75
@@ -501,19 +500,4 @@ export function boostNetDamage(
 	const boosted = Math.min(life, shots(tp - option.chip.cost) * base * (1 + (strength + option.gain) / 100))
 	const future = Math.min(Math.max(0, life - boosted), strengthBoostFutureDamage(weapon, option, tp))
 	return boosted - without + future
-}
-
-/**
- * Inventaire des puces (une ligne, tour 1) : identifiant, coût, délai et features, pour vérifier les boosts.
- * Ce module n'importe pas `Debug.ts` (les planificateurs l'importent) : l'appelant protège l'appel.
- */
-export function logChipInventory(me: Me): void {
-	const chips = me.chips ?? []
-	if (chips.length === 0) {
-		return
-	}
-	log(() => `[Chips] ${chips.map((chip) =>
-		`${chip.name}#${chip.id}(${chip.cost}TP,cd${chip.cooldown},${(chip.features ?? []).map((feature) =>
-			`${feature.type}:${feature.minValue}-${feature.maxValue}x${feature.turns}`).join("/")})`).join("; ")} | STR ${me.strength}, SCI ${me.science}`,
-		LOG_CONTEXT.CHIP)
 }

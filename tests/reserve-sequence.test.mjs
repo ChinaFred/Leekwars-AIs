@@ -10,7 +10,7 @@ import { getLogConfig, initLeekLogging, LogConfig, LOG_CONTEXT } from "../dist/T
 const PREFIX = "[Reserve] plan before execution "
 
 // Grille/BFS, dépenses et compteurs dynamiques. Frais synthétiques, PAS mesures moteur.
-function arena({ distance = 7, life = 70, initialOps = 200000, providerJump = 310000,
+function arena({ distance = 7, life = 70, initialOps = 100000, providerJump = 610000,
 	danger = c => c.x === -2 ? 0 : 100, extras = [] } = {}) {
 	const grid = new Map(), trace = [], stats = { providers: 0, danger: 0 }
 	let ops = initialOps
@@ -84,7 +84,7 @@ function arena({ distance = 7, life = 70, initialOps = 200000, providerJump = 31
 		getAliveEnemies: () => enemies.filter(e => e.life > 0),
 		weaponCells(target, weapon) {
 			stats.providers++
-			ops += providerJump // Par défaut > plafond relatif 30 % : force l'interruption de la recherche principale, avant dépense.
+			ops += providerJump // Par défaut > plafond relatif 60 % : force l'interruption de la recherche principale, avant dépense.
 			return [...grid.values()].filter(c => hit(c, target, weapon))
 		}
 	}

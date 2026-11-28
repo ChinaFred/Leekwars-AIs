@@ -4,6 +4,7 @@ import { evaluateTacticalPlans } from "../dist/Classes/Plannification/TacticalPl
 import { EnemyMemory } from "../dist/Classes/Context/EnemyMemory.js"
 import { StagnationTracker } from "../dist/Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"
+import { OPS_BUDGET } from "../dist/Toolbox/Budgets.js"
 import { initLeekLogging, LogConfig } from "../dist/Toolbox/Logger.js"
 
 // Combat 54939649, tour 5 (déployé : 22612f3). Kassbi en 446 (4 PM, 10 PT, 339 PV), asdfgleek en 362 (pistolet :
@@ -193,11 +194,20 @@ test("a search finishing between 150 000 and 300 000 operations is no longer aba
 	}
 })
 
-test("the relative ceiling is 30 % of the total: 300 000 abandons, with the plan B fallback reason", () => {
-	for (const searchCost of [300000, 310000]) {
+test("the relative ceiling is 60 % of the total: 600 000 abandons, with the plan B fallback reason", () => {
+	for (const searchCost of [600000, 610000]) {
 		const result = turn5({ startOps: 100000, searchCost })
 		assert.equal(result.reason, "operations reserve", `search cost ${searchCost}`)
 		assert.equal(result.plan, null, "the safe progress plan is not retained once weapon cells are loaded")
+	}
+})
+
+test("regression: with 60 % (not 30 %), a search costing 300 000 to 590 000 is no longer abandoned", () => {
+	assert.equal(OPS_BUDGET.TACTICAL_SEARCH, 0.60)
+	for (const searchCost of [300000, 450000, 590000]) {
+		const result = turn5({ startOps: 100000, searchCost })
+		assert.equal(result.reason, "complete search", `search cost ${searchCost}`)
+		assert.equal(result.plan.destination.id, SAFE_CELL, `search cost ${searchCost}`)
 	}
 })
 
