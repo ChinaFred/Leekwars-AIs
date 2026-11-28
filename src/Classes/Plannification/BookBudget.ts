@@ -1,12 +1,12 @@
 // @version:5.8
-// file version: 2
+// file version: 3
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
 
 /** Part du total d'opérations que le faisceau peut consommer depuis sa création. Politique, non mesurée. */
-export const BOOK_SEARCH_FRACTION = 0.25
+export const BOOK_SEARCH_FRACTION = 0.70
 
 /** Même part pendant un duel (AGGRESSIVE, voir `BookStandoff.ts`) : le tour 2 est alors utile. Politique, non mesurée. */
-export const BOOK_DUEL_SEARCH_FRACTION = 0.30
+export const BOOK_DUEL_SEARCH_FRACTION = 0.70
 
 /** Au-delà de cette part déjà consommée, la profondeur facultative (3e tour) n'est pas tentée. Politique, non mesurée. */
 export const BOOK_DEEPEN_FRACTION = 0.08
@@ -37,10 +37,11 @@ export class BookBudget {
 		if (this.work - this.checked >= 64) { this.checked = this.work; this.guard() }
 	}
 
+	/** Coupe par le plafond global d'abord (il borne le tour), sinon par la part du livre ; la cause est dans le message. */
 	guard(): void {
-		if (typeof System !== "undefined" && Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
-			(System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION ||
-				System.operations - this.start >= System.maxOperations * this.fraction)) throw new BookCut("operations reserve")
+		if (typeof System === "undefined" || !Number.isFinite(System.maxOperations) || !(System.maxOperations > 0)) return
+		if (System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION) throw new BookCut("operations reserve (global cap)")
+		if (System.operations - this.start >= System.maxOperations * this.fraction) throw new BookCut("operations reserve (book fraction)")
 	}
 
 	/** `System.operations` (0 hors jeu) : pour mesurer une phase par différence. */
