@@ -115,13 +115,13 @@ Fichiers : `StagnationTracker.ts`, `TacticalStagnation.ts`. Évite de rester blo
 | Borne | Valeur | Fichier |
 |---|---|---|
 | `TACTICAL_LIMITS` | 113 cases, 4 ennemis, 4 armes, 8 puces offensives, 3 protections, 30 PT, 100 000 unités de travail | `TacticalTypes.ts` |
-| Arrêt de la recherche (relatif) | 30 % des opérations du tour depuis son entrée (`SEARCH_FRACTION`) | `TacticalTypes.ts` |
+| Arrêt de la recherche (relatif) | 60 % des opérations du tour depuis son entrée (`OPS_BUDGET.TACTICAL_SEARCH`, avant : 30 %) | `TacticalTypes.ts` |
 | Arrêt de la recherche (global) | 80 % du total, partagé avec le plan B et la carte de danger (`SEARCH_GLOBAL_FRACTION`) | `ExecutionBudget.ts` |
 | Garde d'exécution | continuer si `max − ops > 3 % × max + 2 × plus gros segment observé` (`TAIL_FRACTION`) | `ExecutionBudget.ts` |
 
 Au-delà d'une borne (par exemple plus de 113 cases atteignables, soit dès 8 PM en terrain ouvert) : repli explicite sur le plan B. Une recherche interrompue garde le meilleur candidat **complet** connu, jamais une moitié de plan.
 Les 80 % ne limitent pas l'exécution : un plan retenu s'exécute tant que le garde d'exécution le permet.
-La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 30 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
+La seconde recherche du boost de PM a son propre `Budget` (mêmes bornes, 60 % depuis son entrée, 80 % global, 113 cases) et n'est lancée que sur un candidat. Coût mesuré en ticks de recherche (pas en opérations moteur) sur les mondes de test : 123 → 624 ticks (25 → 61 cases) et 275 → 1 047 (61 → 113 cases), soit 4 à 5 × la recherche sans boost ; opérations réelles non mesurées (le journal `[Boost] MP:` donne ticks et opérations en combat).
 
 Code parallèle, NON branché sur le plan conjoint : `Main/Kassbi_Book.ts` joue le tour par faisceau (5 enchaînements, jusqu'à 3 tours) sur une table de combos (`CombatBook.ts`, `BookBeam.ts`, `BookPlanner.ts`) ; repli sur `planAct`. Repli après tir cherché par groupe d'actions classé sur son potentiel (danger final nul), pas sur son score « sur place ». Niveau 2 seulement en duel (AGGRESSIVE, `BookStandoff.ts` : ≥ 6 tours, mes PV stables, dégâts infligés ≥ 15 % des PV max adverses mais baisse nette < 15 %) ou si un plan non létal inflige plus ; en duel limite létale × (1 + 0,25 par tour au-delà de la fenêtre, 2,0 au plus), jamais à 2 × mes PV ni sous 50 % de PV, poids du danger réduit, budget 0,30 au lieu de 0,25. Aucun seuil ci-dessus n'en dépend. Boost de force posé sans tir (cible lointaine) : crédit `IDLE_BOOST_SHOT_WEIGHT` = 0,75 × (durée − tour du premier tir) × gain de dégâts du boost, seulement si aucun tour suivant n'est simulé ; durées relevées dans fight.json : protein 2 tours, motivation 3 (le tour du lancer compte pour 1, effet retiré au début de mon tour suivant).
 

@@ -178,7 +178,7 @@ export function run(M, s, interruptAfter = null, act = false) {
 	}
 	let reads = 0
 	if (interruptAfter !== null) {
-		const step = 300000 / interruptAfter
+		const step = 600000 / interruptAfter
 		globalThis.System = { maxOperations: 1000000, get operations() { return Math.min(700000, Math.floor(reads++ * step)) } }
 	}
 	globalThis.__work = {}
