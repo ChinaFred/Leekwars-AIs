@@ -5,7 +5,7 @@ import { LaserHits, isLaser, laserBalance } from "../Context/LaserLine.js"
 import { laserHitsFrom, laserKinds } from "../Context/LaserShot.js"
 import { aliveEnemies } from "../Context/Targets.js"
 import { ShotCandidate, toCandidate } from "../Context/ShotPlan.js"
-import { LeekProfile, createStrategy } from "../LeekProfile.js"
+import { LeekProfile } from "../LeekProfile.js"
 import {
 	BoostOption, FUTURE_TURN_WEIGHT, MIN_LIFE_RATIO_FOR_BOOST, agilityCritGain, boostReach
 } from "../../Brain/StrengthBoost.js"
@@ -194,7 +194,7 @@ function evaluate(
 	if (enemies.length > TACTICAL_LIMITS.enemies || weapons.length > TACTICAL_LIMITS.weapons ||
 		attackChips.length > TACTICAL_LIMITS.attackChips) throw new Unavailable("items/targets bound")
 	// Le comportement configuré décide du soin, du bouclier et du poids du risque (seuils du rôle, comme le plan B).
-	const strategy = createStrategy(profile)
+	const behavior = profile.behavior
 	const lifeRatio = me.life / me.maxLife
 	let closest: Entity | null = null
 	let closestDistance = Infinity
@@ -203,12 +203,12 @@ function evaluate(
 		if (range < closestDistance) { closest = enemy; closestDistance = range }
 	}
 	const support = protections(me,
-		profile.allowHealing && (strategy.shouldHeal(lifeRatio, 1 - lifeRatio) ||
-			strategy.shouldHealWithThreat(lifeRatio, 1 - lifeRatio, closestDistance)),
-		profile.allowShielding && closest !== null && strategy.shouldShield(lifeRatio, closestDistance,
+		profile.allowHealing && (behavior.shouldHeal(lifeRatio) ||
+			behavior.shouldHealWithThreat(lifeRatio, closestDistance)),
+		profile.allowShielding && closest !== null && behavior.shouldShield(lifeRatio, closestDistance,
 			closest.mp + (closest.weapon?.maxRange ?? 1)),
 		budget, tp)
-	const weight = riskWeight(profile, strategy, lifeRatio, closestDistance)
+	const weight = riskWeight(profile, lifeRatio, closestDistance)
 	// Passivité (voir `StagnationTracker.riskFactor`) : le danger pèse de moins en moins tant qu'aucun dégât n'est
 	// infligé, jusqu'à 0. `LETHAL_PENALTY` et le crédit de soin (`weight`) ne sont pas réduits ; dès que le poids est
 	// réduit, le seuil de `LETHAL_PENALTY` descend à `PASSIVE_DANGER_LIFE_FRACTION` × mes PV (marge sous le modèle).
@@ -260,7 +260,7 @@ function evaluate(
 	// le remplacent ; sans un tel plan, ou s'il vise une case déjà visitée par une sortie de stagnation (refusée ensuite :
 	// plan nul), le recul est gardé. Vaut aussi quand aucune attaque n'est possible ce tour (phase d'approche).
 	const freeRetreat = stance.retreat === "free" || doomed || enemies.length !== 1 ||
-		(profile.allowHiding && strategy.shouldHide(lifeRatio, closestDistance))
+		(profile.allowHiding && behavior.shouldHide(lifeRatio, closestDistance))
 	const originDanger = dangers.get(key(me.cell))!
 	let leaderRetreat = false
 	let substitute: TacticalPlan | null = null

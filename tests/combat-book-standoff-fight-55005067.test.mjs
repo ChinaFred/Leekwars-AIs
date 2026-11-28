@@ -60,8 +60,8 @@ const feature = (type, min, max, turns = 0) => ({ type, minValue: min, maxValue:
 const chip = (id, name, cost, cooldown, minRange, maxRange, features, extra = {}) => ({ id, name, cost, cooldown, currentCooldown: 0, minRange, maxRange,
 	launchType: 7, maxUses: -1, needsLos: true, area: 1, features, ...extra })
 
-/** `enemyAt` : [x, y] de l'ennemi (cas synthétique : même carte, ennemi plus proche). `hiding` : repli après tir permis (profil `setSupportOptions(…, hiding)`). `role` : posture du profil. */
-function replay(turn, { role = "AGGRESSIVE", hiding = true, life, danger, enemyAt, extraChips = [], maxLife = 387 } = {}) {
+/** `enemyAt` : [x, y] de l'ennemi (cas synthétique : même carte, ennemi plus proche). `hiding` : repli après tir permis (`allowHiding` du profil). */
+function replay(turn, { hiding = true, life, danger, enemyAt, extraChips = [], maxLife = 387 } = {}) {
 	const spec = TURNS[turn]
 	delete globalThis.System
 	resetBookCache()
@@ -101,7 +101,7 @@ function replay(turn, { role = "AGGRESSIVE", hiding = true, life, danger, enemyA
 	const threat = new ThreatMap(me.id, turn, new Map([...reachable.entries()].map(({ cell, cost }) =>
 		[cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: dangerOf.get(cell.id), breakdown: [] }])),
 	{ candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: 1, pairsEvaluated: 0, lineOfSightCalls: 0 })
-	const profile = new LeekProfile(); profile.setRole(role); profile.setAggression(50); profile.setSupportOptions(true, true, hiding)
+	const profile = new LeekProfile(50); profile.allowHiding = hiding
 	return { me, enemy, profile, context: { reachable, threat }, zone: [...reachable.entries()].map(({ cell }) => cell.id).sort((a, b) => a - b), dangerOf }
 }
 
@@ -171,11 +171,11 @@ test("step 1: T5 and T36 - rock + spark then back to 444 is NOT feasible: the on
 const CLOSER = [25, 8]
 
 test("step 1: generation bug fixed - a lethal shot cell whose group can retreat is refined (same map, enemy closer)", () => {
-	for (const role of ["AGGRESSIVE", "DEFENSIVE"]) {
-		const w = replay(5, { role, enemyAt: CLOSER })
+	{
+		const w = replay(5, { enemyAt: CLOSER })
 		const run = planBeam(w.me, w.context, w.profile, { depth: 1 })
 		const step = first(run)
-		assert.match(names(run, step), /rock/, role)
+		assert.match(names(run, step), /rock/)
 		assert.equal(step.danger, 0, "final cell is safe (hit and run)")
 		assert.ok(step.beforeMp > 0 && step.afterMp > 0 && step.beforeMp + step.afterMp <= w.me.mp)
 		assert.ok(step.outcome.damage > 70, "rock + spark, more than spark x 3")
@@ -211,9 +211,7 @@ test("step 2: AGGRESSIVE in a duel accepts rock + spark from the dangerous shot 
 				assert.ok(first(run).danger > 400, "accepted danger: the shot cell is not safe (risk accepted)")
 				assert.ok(first(run).danger < 2 * aggressive.me.life, "never 2 x my life or more")
 			}
-			// DEFENSIVE : le duel est ignoré, le plan est celui sans compteur.
-			const key = (standoff) => { const d = replay(turn, { role: "DEFENSIVE", hiding }); return planBeam(d.me, d.context, d.profile, { depth: 1, standoff }).result.best.steps[0].key }
-			assert.equal(key(duel(8)), key(undefined), `${turn}: DEFENSIVE unchanged`)
+			const key = (standoff) => { const d = replay(turn, { hiding }); return planBeam(d.me, d.context, d.profile, { depth: 1, standoff }).result.best.steps[0].key }
 			assert.equal(key(new StandoffTracker()), key(undefined), "duel not yet noticed: unchanged")
 		}
 	}
@@ -258,9 +256,6 @@ test("step 3: level 2 only when the duel is active or a non-lethal plan promises
 	assert.equal(dueled.result.cut, null)
 	const forced = planBeam(w.me, w.context, w.profile, { depth: 2, deepen: true })
 	assert.equal(forced.result.depth, 2)
-	// DEFENSIVE : le duel n'ouvre pas le niveau 2.
-	const d = replay(5, { role: "DEFENSIVE" })
-	assert.equal(planBeam(d.me, d.context, d.profile, { depth: 2, standoff: duel(6) }).result.depth, 1)
 })
 
 test("step 3: in a duel the beam reaches depth 2 within a fixed work limit on at least 80 % of the replayed turns", (t) => {
@@ -382,12 +377,11 @@ test("step 2 guard: under 50 % of max life a duel changes nothing, at 50 % or mo
 	assert.match(names(planBeam(...(() => { const w = replay(5, { hiding: false, life: 200, danger }); return [w.me, w.context, w.profile, { depth: 1, standoff: duel(8) }] })()), high), /rock/)
 })
 
-test("step 3 wiring: the beam gets 70 % of the operations, in an AGGRESSIVE duel or not", () => {
-	const fraction = (role, standoff) => { const w = replay(5, { role }); return planBeam(w.me, w.context, w.profile, { depth: 1, standoff }).budgetFraction }
-	assert.equal(fraction("AGGRESSIVE", duel(6)), 0.70)
-	assert.equal(fraction("AGGRESSIVE", undefined), 0.70)
-	assert.equal(fraction("AGGRESSIVE", new StandoffTracker()), 0.70, "no duel noticed yet")
-	assert.equal(fraction("DEFENSIVE", duel(6)), 0.70, "DEFENSIVE ignores the duel")
+test("step 3 wiring: the beam gets 70 % of the operations, in a duel or not", () => {
+	const fraction = (standoff) => { const w = replay(5); return planBeam(w.me, w.context, w.profile, { depth: 1, standoff }).budgetFraction }
+	assert.equal(fraction(duel(6)), 0.70)
+	assert.equal(fraction(undefined), 0.70)
+	assert.equal(fraction(new StandoffTracker()), 0.70, "no duel noticed yet")
 })
 
 test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9, then most turns; 55005897 (won in 14 turns) never", async () => {

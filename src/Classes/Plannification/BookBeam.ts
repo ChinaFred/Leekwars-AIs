@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
 import { BoostItem, Buff, Catalog, SupportItem } from "./BookCatalog.js"
@@ -83,11 +83,11 @@ export interface BeamEnv {
 	/** Danger de la case au tour simulé `k` : carte du jeu au tour 0, hypothèse de `BookEnemyModel` ensuite. */
 	dangerAt(cell: Cell, k: number): number
 	lineOfSight(from: Cell, to: Cell): boolean
-	/** Soin et bouclier permis par les seuils du profil (`LeekStrategy`) à cet état. */
+	/** Soin et bouclier permis par les seuils du profil (`LeekBehavior`) à cet état. */
 	supportAllowed(state: SimState): { heal: boolean; shield: boolean }
 	/** Retraite après tir permise (`allowHiding`). */
 	readonly allowRetreat: boolean
-	/** Duel constaté et posture AGGRESSIVE ; null sinon (comportement inchangé). */
+	/** Duel constaté ; null sinon (comportement inchangé). */
 	readonly duel: DuelState | null
 	/** Impose (true) ou interdit (false) le niveau 2 ; indéfini : règle de `worthDeepening`. */
 	readonly deepen?: boolean
