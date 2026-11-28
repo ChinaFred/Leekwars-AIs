@@ -1,24 +1,5 @@
 [
  {
-  "id": "3cdee5d",
-  "account": "Kassbi",
-  "published_at": 1795787723,
-  "published_at_iso": "2026-11-27T13:55:23Z",
-  "commit": "3cdee5ddfec66768b387efa1a391bbeee412b275",
-  "committed_at": 1795787663,
-  "subject": "chore(merge): fusion de Master (posture par rôle) dans la zone visée",
-  "message": "chore(merge): fusion de Master (posture par rôle) dans la zone visée\n\nConflit du ChangeLog résolu (les deux lignes gardées) ; Kassbi_Class.ts passe en file version 24.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6btnRxGPsLDbdHk8TB",
-  "has_strategy_section": false,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 5,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "d81e6a6",
   "account": "Kassbi",
   "published_at": 1795789032,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 1,
    "updated": 5,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "b046e07",
+  "account": "Kassbi",
+  "published_at": 1795856745,
+  "published_at_iso": "2026-11-28T09:05:45Z",
+  "commit": "b046e07a2b3444b2edee2e3ef0eb7e7a6c43e208",
+  "committed_at": 1795856388,
+  "subject": "feat(book): salutation et récit du poireau dans Kassbi_Book",
+  "message": "feat(book): salutation et récit du poireau dans Kassbi_Book\n\nStratégie: aucun changement de plan ; Kassbi_Book salue au tour 1 et raconte la vie du poireau avec les PT restants (2 say max par tour), comme Kassbi_Class.\nTests: tests/turn-speech.test.mjs ; npm run typecheck et npm test passent.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6czQJ6LyGAWDmNzo7T",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 2,
    "deleted_files": 0,
    "deleted_folders": 0
   }
