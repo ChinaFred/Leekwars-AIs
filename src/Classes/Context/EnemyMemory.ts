@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { ChestView, chestDangerOf } from "./ChestDanger.js"
+import { assessStance, describeEnemyTurn, EnemyStanceReport } from "./EnemyBehavior.js"
 import { EnemyHit, EnemyProfile } from "./EnemyProfile.js"
 import { EntityProfile } from "./EntityProfile.js"
 import { computeReachableCells, ReachableCells } from "./ReachableCells.js"
@@ -122,6 +123,8 @@ export class EnemyMemory {
 		const uses = this.collectUses(profile, entity, me, turn)
 		result.hit = this.attributeDamage(profile, entity, me, turn, aliveEnemies)
 
+		this.recordEnemyTurn(profile, entity, uses, result.hit, turn, aliveEnemies)
+
 		for (const item of uses) {
 			if (isChipItem(item)) {
 				if (profile.observeChip(item, turn)) {
@@ -135,10 +138,30 @@ export class EnemyMemory {
 		return result
 	}
 
-	/** À appeler à la fin de MON tour : référence de PV pour mesurer ce que l'ennemi m'inflige ensuite. */
-	endMyTurn(me: Me, turn: number): void {
+	/**
+	 * À appeler à la fin de MON tour : référence de PV pour mesurer ce que l'ennemi m'inflige ensuite, et photographie
+	 * (case, PV) des ennemis vivants donnés pour mesurer ce qu'ils font à leur tour (`recordEnemyTurn`).
+	 */
+	endMyTurn(me: Me, turn: number, enemies: readonly Entity[] = []): void {
 		this.lastLife = me.life
 		this.lastLifeTurn = turn
+		for (const enemy of enemies) {
+			const profile = this.profiles.get(enemy.id)
+			if (profile !== undefined) {
+				profile.afterMyTurn = {
+					turn,
+					cell: { x: enemy.cell.x, y: enemy.cell.y },
+					life: enemy.life,
+					myCell: { x: me.cell.x, y: me.cell.y }
+				}
+			}
+		}
+	}
+
+	/** Posture de l'ennemi sur ses derniers tours (null si inconnu) : voir `assessStance`. */
+	stanceOf(enemyId: number): EnemyStanceReport | null {
+		const profile = this.profiles.get(enemyId)
+		return profile === undefined ? null : assessStance(profile.turnLog)
 	}
 
 	/** PV perdus depuis la fin de mon tour précédent (`endMyTurn`), nets des soins reçus ; 0 au premier tour. */
@@ -383,6 +406,30 @@ export class EnemyMemory {
 
 	isChipReady(enemyId: number, chip: Chip): boolean {
 		return this.getCooldown(enemyId, chip) === 0
+	}
+
+	/**
+	 * Historise ce que l'ennemi a fait depuis la fin de mon tour précédent (photographie de `endMyTurn`, consommée).
+	 * Les dégâts ne comptent que s'ils sont attribuables : lus sur un effet ou inférés, ou sans autre ennemi vivant ;
+	 * ceux d'un effet sur la durée en cours (`source` « effect ») ne sont pas un nouveau coup.
+	 */
+	private recordEnemyTurn(
+		profile: EnemyProfile,
+		entity: Entity,
+		uses: readonly Item[],
+		hit: EnemyHit | null,
+		turn: number,
+		aliveEnemies: number
+	): void {
+		const before = profile.afterMyTurn
+		if (before === null || before.turn >= turn) {
+			return
+		}
+		profile.afterMyTurn = null
+		const attributable = hit !== null && (hit.source === "inferred" || (hit.source === "ambiguous" && aliveEnemies <= 1))
+		profile.addTurnRecord(describeEnemyTurn(
+			turn, before, { cell: entity.cell, life: entity.life }, uses, attributable ? hit.amount : 0
+		))
 	}
 
 	private collectUses(profile: EnemyProfile, entity: Entity, me: Me, turn: number): Item[] {
