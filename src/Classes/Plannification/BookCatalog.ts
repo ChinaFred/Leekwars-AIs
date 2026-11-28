@@ -1,19 +1,19 @@
 // @version:5.8
-// file version: 1
+// file version: 2
 import {
-	agilityBoostOf, agilityBoostTurns, isAgilityBoostType, isStrengthBoostType, isTpBoostType, strengthBoostOf,
-	strengthBoostTurns, tpBoostOf, tpBoostTurns
+	agilityBoostOf, agilityBoostTurns, isAgilityBoostType, isMpBoostType, isStrengthBoostType, isTpBoostType, mpBoostOf, mpBoostTurns,
+	strengthBoostOf, strengthBoostTurns, tpBoostOf, tpBoostTurns
 } from "../Context/ShotPlan.js"
 import { CombatBook, bookItemOf } from "./CombatBook.js"
 import { validCost } from "./TacticalTypes.js"
 
 /** Boost actif sur moi : `turns` = tours restants, le tour courant compte (1 = dernier tour). */
-export interface Buff { readonly stat: "strength" | "tp" | "agility"; readonly value: number; readonly turns: number }
+export interface Buff { readonly stat: "strength" | "tp" | "agility" | "mp"; readonly value: number; readonly turns: number }
 
 export interface BoostItem {
 	readonly chip: Chip
 	readonly stat: Buff["stat"]
-	/** Force, PT (par tour d'effet, entier) ou agilité ajoutés. */
+	/** Force, PT ou PM (par tour d'effet, entiers) ou agilité ajoutés. */
 	readonly gain: number
 	/** Durée de l'effet en tours, le tour du lancer compris : PARAMÈTRE non vérifié en combat (`docs/strategies.md`, « Limites connues »). */
 	readonly turns: number
@@ -39,7 +39,7 @@ export interface Catalog {
 	readonly boosts: readonly BoostItem[]
 	readonly supports: readonly SupportItem[]
 	/** Statistiques SANS les boosts actifs, et les boosts actifs à part (ils expirent). */
-	readonly base: { readonly strength: number; readonly magic: number; readonly agility: number; readonly tp: number }
+	readonly base: { readonly strength: number; readonly magic: number; readonly agility: number; readonly tp: number; readonly mp: number }
 	readonly buffs: readonly Buff[]
 }
 
@@ -90,6 +90,8 @@ export function catalogFor(me: Me): Catalog {
 			boosts.push({ chip, stat: "tp", gain: Math.floor(tp), turns: Math.max(1, tpBoostTurns(chip)), cost: chip.cost })
 			bestTp = Math.max(bestTp, Math.floor(tp))
 		}
+		const mp = Math.floor(mpBoostOf(chip, science))
+		if (mp >= 1) boosts.push({ chip, stat: "mp", gain: mp, turns: Math.max(1, mpBoostTurns(chip)), cost: chip.cost })
 		if (agility > 0) boosts.push({ chip, stat: "agility", gain: agility, turns: Math.max(1, agilityBoostTurns(chip)), cost: chip.cost })
 		const heal = featureMean(chip, Effect.HEAL)
 		const absolute = featureMean(chip, Effect.ABSOLUTE_SHIELD)
@@ -104,11 +106,11 @@ export function catalogFor(me: Me): Catalog {
 		}
 	}
 	const buffs: Buff[] = []
-	const removed = { strength: 0, tp: 0, agility: 0 }
+	const removed = { strength: 0, tp: 0, agility: 0, mp: 0 }
 	for (const effect of me.effects ?? []) {
 		if (!(effect.turns > 0)) continue
 		const stat = isStrengthBoostType(effect.type) ? "strength" : isTpBoostType(effect.type) ? "tp" :
-			isAgilityBoostType(effect.type) ? "agility" : null
+			isAgilityBoostType(effect.type) ? "agility" : isMpBoostType(effect.type) ? "mp" : null
 		if (stat === null) continue
 		buffs.push({ stat, value: effect.value, turns: effect.turns })
 		removed[stat] += effect.value
@@ -117,7 +119,8 @@ export function catalogFor(me: Me): Catalog {
 		book: bookFor(me, bestTp), chips, chipIndex: new Map(chips.map((chip, i) => [chip, i])), boosts, supports,
 		base: {
 			strength: Math.max(0, me.strength - removed.strength), magic: me.magic || 0,
-			agility: Math.max(0, (me.agility || 0) - removed.agility), tp: Math.max(0, me.tp - removed.tp)
+			agility: Math.max(0, (me.agility || 0) - removed.agility), tp: Math.max(0, me.tp - removed.tp),
+			mp: Math.max(0, me.mp - removed.mp)
 		},
 		buffs
 	}

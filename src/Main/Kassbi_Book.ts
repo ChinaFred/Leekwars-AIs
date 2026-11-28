@@ -1,10 +1,10 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
 import { greetOnce, startTurnSpeech, tellLeekLife } from "../Brain/TurnSpeech.js"
-import { enemyMemory, mpBoostCandidate, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
+import { enemyMemory, mpBoostCandidate, mpZoneFor, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
 import { planWithBook } from "../Classes/Plannification/BookPlanner.js"
@@ -65,7 +65,7 @@ export function turn(): void {
 		if (!springChestTrap(me)) {
 			const context = {
 				reachable: enemyMemory.getReachable(me.id), threat: enemyMemory.getThreatMap(), stagnation,
-				mpBoost: mpBoostCandidate(me)
+				mpBoost: mpBoostCandidate(me), mpZone: mpZoneFor(me)
 			}
 			try {
 				standoff.observe(Fight.turn, me.life, aliveEnemies(), dealtLastTurn)

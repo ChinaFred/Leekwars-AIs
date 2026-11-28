@@ -4,6 +4,7 @@ Une ligne par version, la plus récente en haut. Le détail est dans `git log` :
 
 ## 2026-11
 
+- 2026-11-28 — Livre : boost de PM (bottes) et de PT lancés sans tir quand le meilleur scénario sur 3 tours les retient ; profondeur 3 ouverte si le meilleur plan n'inflige rien.
 - 2026-11-27 — Ennemi sous 30 % de PV : poids du risque à 0 pour le poursuivre (garde létal à 75 % des PV).
 - 2026-11-27 — Boost de PM dans le plan : seconde recherche sur la zone boostée (danger des cases débloquées compté, fuite possible), lancé en première action ; plus rien lancé avant le plan.
 - 2026-11-27 — Boost d'agilité dans le plan : variante comparée par le score (critiques du tour et des suivants), plus de remplissage après la recherche.

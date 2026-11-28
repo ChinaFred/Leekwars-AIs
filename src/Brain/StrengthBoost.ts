@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { cutOperations, logSearchCut } from "../Toolbox/Logger.js"
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
@@ -224,7 +224,7 @@ function boostedZone(me: Me, option: BoostOption, cellLimit: number): ReachableC
 }
 
 /** Même garde que les recherches (plan conjoint, plan B, carte de danger) : rien ne démarre passé 80 % des opérations. */
-function hasSearchRoom(): boolean {
+export function hasSearchRoom(): boolean {
 	return typeof System === "undefined" || !Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
 		System.operations < System.maxOperations * SEARCH_GLOBAL_FRACTION
 }

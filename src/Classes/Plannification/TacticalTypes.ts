@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
@@ -19,6 +19,11 @@ export interface TacticalContext {
 	 * Null : pas de candidat. Absent : aucun boost de PM n'est comparé.
 	 */
 	readonly mpBoost?: (kind: "unlock" | "flee", preparation: TacticalPreparation) => MpBoostCandidate | null
+	/**
+	 * Livre : zone atteignable et carte de danger à mes PM + `gain` (boost de PM prêt), calculées À LA DEMANDE, lecture seule ;
+	 * null = indisponible (zone tronquée, carte de danger tronquée, plafond d'opérations). Absent : le livre ne lance pas de boost de PM.
+	 */
+	readonly mpZone?: (gain: number) => { readonly reachable: ReachableCells; readonly threat: ThreatMap } | null
 }
 
 /** Zone atteignable et carte de danger à PM + gain d'un boost de PM, pour la seconde recherche du planificateur. */
