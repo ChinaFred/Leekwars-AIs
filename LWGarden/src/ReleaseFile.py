@@ -1,10 +1,11 @@
 """The `DEPLOYED.ts` file Garden writes at the root of the Leek Wars AI tree.
 
-It is generated at each PUSH (never stored in Git) and holds only comments: the
+It is generated at each PUSH (never stored in Git) and holds comments and one constant, `DEPLOYED_VERSION`, read by the AI to log its version: the
 version (last commit that changed the AI sources), when and from which branch or
 tag it was deployed, and its `Stratégie:` line, so that the game site itself tells
 which version is live.
 """
+import json
 import os
 import re
 import time
@@ -81,7 +82,7 @@ def build_content(head, source_state, branch, tag, account, now=None):
     strategy = STRATEGY_LINE.search(source_state.get("message") or "")
     origin = (branch or "branche inconnue") + (", tag {0}".format(tag) if tag else "")
     lines = [
-        "Généré par LWGarden à chaque PUSH : ne pas modifier, ne pas inclure.",
+        "Généré par LWGarden à chaque PUSH : ne pas modifier. Seule la constante DEPLOYED_VERSION est lue par l'IA.",
         "",
         "Version : {0}".format("{0} — {1}".format(commit[:7], source_state.get("subject", ""))
                                if commit else "inconnue (git indisponible)"),
@@ -93,7 +94,10 @@ def build_content(head, source_state, branch, tag, account, now=None):
         lines.append("ATTENTION : sources modifiées localement, différentes de ce commit : "
                      + (", ".join(source_state.get("dirty_files") or []) or "?"))
     body = "\n".join(("// " + " ".join(line.split())).rstrip() for line in lines)
-    return "// @version:5.8\n" + body + "\n"
+    version = ("{0} — {1}".format(commit[:7], source_state.get("subject", "")).strip(" —")
+               if commit else "inconnue")
+    constant = "export const DEPLOYED_VERSION = {0}".format(json.dumps(" ".join(version.split()), ensure_ascii=False))
+    return "// @version:5.8\n" + body + "\n" + constant + "\n"
 
 
 def publish(api, source_folder, account, environ=None, now=None):

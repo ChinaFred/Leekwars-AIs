@@ -31,11 +31,12 @@ class ContentTests(unittest.TestCase):
         content = ReleaseFile.build_content(HEAD, state, "master", "leek-1", "me", now=0)
         self.assertEqual(content.splitlines(), [
             "// @version:5.8",
-            "// Généré par LWGarden à chaque PUSH : ne pas modifier, ne pas inclure.",
+            "// Généré par LWGarden à chaque PUSH : ne pas modifier. Seule la constante DEPLOYED_VERSION est lue par l'IA.",
             "//",
             "// Version : aaaaaaa — feat: x",
             "// Déployée le : 1970-01-01 00:00 UTC depuis master, tag leek-1",
             "// Stratégie : seuil 30 %",
+            'export const DEPLOYED_VERSION = "aaaaaaa — feat: x"',
         ])
 
     def test_content_flags_unknown_git_state_and_local_changes(self):
@@ -45,6 +46,7 @@ class ContentTests(unittest.TestCase):
         self.assertIn("// Version : inconnue (git indisponible)", content)
         self.assertIn("depuis branche inconnue\n", content)
         self.assertIn("// Stratégie : non renseignée", content)
+        self.assertIn('export const DEPLOYED_VERSION = "inconnue"', content)
         self.assertIn("// ATTENTION : sources modifiées localement, différentes de ce commit : Main/a.ts",
                       content)
 
