@@ -1,24 +1,5 @@
 [
  {
-  "id": "f01d6d4",
-  "account": "Kassbi",
-  "published_at": 1795805871,
-  "published_at_iso": "2026-11-27T18:57:51Z",
-  "commit": "f01d6d405760a86fe43bbc918a34d802d26155a8",
-  "committed_at": 1795805811,
-  "subject": "fix(stagnation): recherche de route à plafond progressif et repli",
-  "message": "fix(stagnation): recherche de route à plafond progressif et repli\n\nStratégie: la sortie de stagnation n'abandonnait plus la route à chaque tour sur un plafond fixe de 2 % des opérations (combat 54994953 : 63 tours à 0 PM). Plafond avant/après : 2 % fixes -> 4 % x (tours bloqués - 1 + 1), borné à 30 % et à 80 % du budget du tour ; si la recherche s'arrête, avance vers la case atteignable la plus proche (mêmes règles de danger). Fractions d'opérations regroupées dans src/Toolbox/Budgets.ts (OPS_BUDGET), sans changement de valeur hors stagnation.\nTests: npm test, npm run typecheck (tests/stagnation-route-allowance.test.mjs : échoue sans le correctif).\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cr7yHgS5mcTRkpiXU",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 1,
-   "updated": 7,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "7e7313d",
   "account": "Kassbi",
   "published_at": 1795809293,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 1,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "7582f14",
+  "account": "Kassbi",
+  "published_at": 1795865702,
+  "published_at_iso": "2026-11-28T11:35:02Z",
+  "commit": "7582f1426eb8620f3e2929e72f4789f1c322b9ea",
+  "committed_at": 1795865526,
+  "subject": "feat(livre): ennemi défensif simulé en recul aux tours 2 et 3 du beam",
+  "message": "feat(livre): ennemi défensif simulé en recul aux tours 2 et 3 du beam\n\nStratégie: aux tours simulés 2 et 3, un ennemi de posture `defensive` recule de ses PM au lieu d'avancer vers moi ; aggressive, mixed et unknown gardent l'avance (comportement inchangé).\nTests: tests/combat-book-beam.test.mjs (recul, bord, choix par posture, case ennemie au tour 2) ; npm run typecheck et npm test passent.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6dSqGiXZexXx1DcPeW",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 7,
    "deleted_files": 0,
    "deleted_folders": 0
   }
