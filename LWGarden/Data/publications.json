@@ -1,24 +1,5 @@
 [
  {
-  "id": "7e7313d",
-  "account": "Kassbi",
-  "published_at": 1795809293,
-  "published_at_iso": "2026-11-27T19:54:53Z",
-  "commit": "7e7313db07377509830101c4455060aa34162681",
-  "committed_at": 1795809223,
-  "subject": "fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan",
-  "message": "fix(book): Kassbi_Book suit les boosts de PM décidés dans le plan\n\nPourquoi : la PR 29 a retiré castMpBoost et refreshMaps ; Kassbi_Book les\nimportait encore, le typecheck cassait sur Master et bloquait le déploiement.\nStratégie: aucun changement de comportement des IA actives. Kassbi_Book\n(non branché) passe mpBoost au plan via mpBoostCandidate, comme Kassbi_Class ;\nle faisceau ne lance plus de boost de PM séparé.\nTests: npm run typecheck OK ; npm test exit 0 ; unittest LWGarden 129 OK.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6fCuBuhoey8NDFqq4G",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 8,
-   "updated": 10,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "7092a85",
   "account": "Kassbi",
   "published_at": 1795813253,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 1,
    "updated": 7,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "cb11183",
+  "account": "Kassbi",
+  "published_at": 1795865784,
+  "published_at_iso": "2026-11-28T11:36:24Z",
+  "commit": "cb11183099ab369a8499d5a8adee0305b3d54a7d",
+  "committed_at": 1795865735,
+  "subject": "chore(merge): fusion de Master (ennemi défensif) dans la fuite sans tir",
+  "message": "chore(merge): fusion de Master (ennemi défensif) dans la fuite sans tir\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bV2w4rsULrKgscc8U",
+  "has_strategy_section": false,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 3,
    "deleted_files": 0,
    "deleted_folders": 0
   }
