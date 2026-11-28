@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
 
 /** Part du total d'opérations que le faisceau peut consommer depuis sa création. Politique, non mesurée. */
@@ -8,8 +8,15 @@ export const BOOK_SEARCH_FRACTION = 0.70
 /** Même part pendant un duel (AGGRESSIVE, voir `BookStandoff.ts`) : le tour 2 est alors utile. Politique, non mesurée. */
 export const BOOK_DUEL_SEARCH_FRACTION = 0.70
 
-/** Au-delà de cette part déjà consommée, la profondeur facultative (3e tour) n'est pas tentée. Politique, non mesurée. */
-export const BOOK_DEEPEN_FRACTION = 0.08
+/**
+ * Au-delà de cette part déjà consommée, la profondeur facultative (3e tour) n'est pas tentée. Mesure : à 0,08 (160 000 ops)
+ * le niveau 3 ne s'ouvrait jamais, car le niveau 2 seul coûte 400-540 k ops (combat 55028419 tour 8 : 837 646/2 000 000,
+ * 540 651 ops de planification) ; `profile aggression 50: depth 3` est absent des 77 combats archivés. À 0,30 il s'ouvre
+ * sous 600 000 ops consommées. Risque (hypothèse non mesurée) : un niveau 3 coûte près d'un niveau 2, d'où des pics d'ops
+ * vers 60-70 % sur les gros tours ; coupé en cours, il est abandonné (le niveau 2 complet reste). Protections : nœuds
+ * ouverts limités par `reste / (coût mesuré d'un nœud × NODE_COST_MARGIN)`, BOOK_SEARCH_FRACTION (0,70), SEARCH_GLOBAL (0,80).
+ */
+export const BOOK_DEEPEN_FRACTION = 0.30
 
 export class BookCut extends Error {}
 
