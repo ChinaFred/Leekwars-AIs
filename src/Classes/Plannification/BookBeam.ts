@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -26,8 +26,14 @@ export const TURN_WEIGHTS: readonly number[] = [1, 0.6, 0.4]
 export const REFINE_KEEP = 12
 /** Part des dégâts modélisés (danger de la case finale) retranchée de mes PV au tour simulé suivant. Heuristique. */
 export const DAMAGE_TAKEN_FRACTION = 0.5
-/** Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus : le tour 2 calcule aussi ses cases atteignables. */
-export const NODE_COST_MARGIN = 2
+/**
+ * Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus. Le coût est mesuré sur le niveau 1 (une seule
+ * racine, qui calcule aussi ses cases atteignables) ; combat 55027536 (e7ef19c) : les nœuds du niveau 2 coûtent environ la
+ * moitié (≤ 87k contre 120-155k estimés). À 2, 3 nœuds sur 5 étaient ouverts aux tours 5 et 6 alors que le tour finissait à
+ * 44 % / 41 % des ops. Risque à 1,2 : un niveau coupé en cours est abandonné (travail perdu, le niveau précédent reste). Jamais
+ * au-delà du plafond global : `SEARCH_GLOBAL_FRACTION` (0,80) et `BOOK_SEARCH_FRACTION` (0,70) bornent toujours la recherche.
+ */
+export const NODE_COST_MARGIN = 1.2
 /**
  * Crédit d'un boost de force posé SANS tir (voir `idleBoostCredit`) : part des dégâts supplémentaires du boost sur les tours
  * où il sert, à 0,75 comme les autres crédits de tours futurs (`FUTURE_TURN_WEIGHT`). Durées relevées dans fight.json : protein 2
