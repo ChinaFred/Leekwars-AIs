@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -14,8 +14,16 @@ import { executeTacticalPlan } from "../Classes/Plannification/TacticalExecution
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
-/** Configuration de journalisation de mon poireau : tous les contextes actifs. */
-export const leekLogConfig = new LogConfig()
+/**
+ * Configuration de journalisation de mon poireau : tous les contextes actifs sauf les trois zones affichées
+ * (`ACCESSIBLE_ZONE`, `DANGER_ZONE`, `TARGET_ZONE`) : la zone visée coûte 290k à 690k ops par tour. Les réactiver
+ * pour une mise au point.
+ */
+export const leekLogConfig = new LogConfig({
+	[LOG_CONTEXT.ACCESSIBLE_ZONE]: false,
+	[LOG_CONTEXT.DANGER_ZONE]: false,
+	[LOG_CONTEXT.TARGET_ZONE]: false
+})
 initLeekLogging(leekLogConfig)
 
 /** Profil : l'agressivité fixée ici choisit l'objectif du faisceau (`objectiveFor`) et les seuils du repli gelé. */

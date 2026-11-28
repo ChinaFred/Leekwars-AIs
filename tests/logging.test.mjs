@@ -434,9 +434,15 @@ test("turn() with setAll(false): no log line at all, same actions; the config is
 	assert.deepEqual(getLogConfig().enabledContexts(), [...LOG_CONTEXTS])
 })
 
-test("importing Kassbi_Book installs its own all-enabled config (leekLogConfig) that can be tuned per context", async () => {
+test("Kassbi_Book's leekLogConfig disables the three zone contexts and keeps every other one enabled", async () => {
+	const { leekLogConfig } = await import("../dist/Main/Kassbi_Book.js")
+	const zones = [LOG_CONTEXT.ACCESSIBLE_ZONE, LOG_CONTEXT.DANGER_ZONE, LOG_CONTEXT.TARGET_ZONE]
+	assert.deepEqual(leekLogConfig.enabledContexts(), LOG_CONTEXTS.filter((context) => !zones.includes(context)))
+	for (const zone of zones) assert.equal(leekLogConfig.isEnabled(zone), false)
+})
+
+test("importing Kassbi_Book installs its own config (leekLogConfig) that can be tuned per context", async () => {
 	const { leekLogConfig, turn } = await import("../dist/Main/Kassbi_Book.js")
-	assert.deepEqual(leekLogConfig.enabledContexts(), [...LOG_CONTEXTS])
 	initLeekLogging(leekLogConfig)
 	try {
 		leekLogConfig.setEnabled(LOG_CONTEXT.OPERATIONS, false)
@@ -452,7 +458,7 @@ test("importing Kassbi_Book installs its own all-enabled config (leekLogConfig) 
 		assert.equal(lines.some((line) => line.startsWith("Operations: ")), false)
 		assert.equal(lines.at(-1), "=== KASSBI BOOK TURN END ===\n")
 	} finally {
-		leekLogConfig.setAll(true)
+		leekLogConfig.setEnabled(LOG_CONTEXT.OPERATIONS, true)
 		resetLeekLogging()
 	}
 })

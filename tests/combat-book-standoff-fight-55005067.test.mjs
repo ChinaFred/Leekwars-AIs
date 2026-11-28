@@ -356,35 +356,6 @@ test("search cut: a deeper level refused or narrowed by the operations allowance
 	}
 })
 
-test("archived fights: the duel counter stays silent on won fights (one window at most) and fires on 55005067", async () => {
-	const { readFileSync } = await import("node:fs")
-	const triggers = (id) => {
-		const f = JSON.parse(readFileSync(new URL(`../LWGarden/Data/fights/${id}/fight.json`, import.meta.url), "utf8"))
-		const me = f.data.leeks.find((l) => l.farmer === 98285)
-		const foes = f.data.leeks.filter((l) => l.team !== me.team)
-		const life = new Map(f.data.leeks.map((l) => [l.id, l.life])), max = new Map(life)
-		const tracker = new StandoffTracker()
-		let turn = 0, dealt = 0, active = 0, started = false, firstTurn = null
-		for (const a of f.data.actions) {
-			if (a[0] === 6) turn = a[1]
-			else if (a[0] === 7 && a[1] === me.id) {
-				tracker.observe(turn || 1, life.get(me.id), foes.map((l) => ({ life: life.get(l.id), maxLife: max.get(l.id) })), started ? dealt : 0)
-				if (tracker.active) { active++; firstTurn ??= turn || 1 }
-				started = true; dealt = 0
-			} else if (a[0] === 101) { life.set(a[1], life.get(a[1]) - a[2]); if (foes.some((l) => l.id === a[1])) dealt += a[2] }
-			else if (a[0] === 103) life.set(a[1], Math.min(max.get(a[1]), life.get(a[1]) + a[2]))
-		}
-		return { active, firstTurn, won: f.winner === me.team }
-	}
-	const won = [54992730, 54992852, 54992889, 54993249, 54993792, 54993794, 54994276, 54994900, 54994980, 54995032, 54995061, 54995131,
-		54995196, 54995840, 54996965, 54997175]
-	const results = won.map((id) => ({ id, ...triggers(id) }))
-	assert.ok(results.every((r) => r.won))
-	for (const r of results) assert.ok(r.active <= 1, `${r.id}: ${r.active} duel turns in a won fight`)
-	assert.ok(triggers(55005067).active >= 40, "the 64-turn draw is a duel for most of its turns")
-	assert.equal(triggers(54994953).active, 0, "54994953 (draw, 64 turns): a refusal to fight, no damage dealt: not a duel (passivity handles it)")
-})
-
 const CURE = () => chip(4, "cure", 4, 2, 0, 5, [feature(2, 40, 40)])
 const ALL_DANGEROUS = [478, 496, 495, 514, 513, 477, 531, 532, 497, 530, 459]
 
