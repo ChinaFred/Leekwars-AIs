@@ -1,24 +1,5 @@
 [
  {
-  "id": "d81e6a6",
-  "account": "Kassbi",
-  "published_at": 1795789032,
-  "published_at_iso": "2026-11-27T14:17:12Z",
-  "commit": "d81e6a6c33cb13a48c887f57bfcf37c66fbbd589",
-  "committed_at": 1795788988,
-  "subject": "chore(merge): fusion de Master (zone visée, posture par rôle)",
-  "message": "chore(merge): fusion de Master (zone visée, posture par rôle)\n\nPourquoi : Master a reçu la zone visée et la posture par rôle pendant le\ndéplacement de l'observation ; displayTargetZone rejoint Brain/TurnObservation.ts.\nStratégie: aucun changement de comportement (zone visée affichée au même moment).\nTests: npm run typecheck, npm test (suite complète) sur l'état fusionné.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6ePc62UD35gKG15kVw",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 1,
-   "updated": 5,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "21a7ecc",
   "account": "Kassbi",
   "published_at": 1795790004,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 1,
    "updated": 2,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "b32d851",
+  "account": "Kassbi",
+  "published_at": 1795859383,
+  "published_at_iso": "2026-11-28T09:49:43Z",
+  "commit": "b32d85155d9a50b629a138b925d303917392252e",
+  "committed_at": 1795859330,
+  "subject": "chore(merge): intègre Master dans la branche du profil",
+  "message": "chore(merge): intègre Master dans la branche du profil\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6f4Y9JTMtZsVfkxELT",
+  "has_strategy_section": false,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 8,
    "deleted_files": 0,
    "deleted_folders": 0
   }
