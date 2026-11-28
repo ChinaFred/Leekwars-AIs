@@ -10,7 +10,7 @@ import { getLogConfig, initLeekLogging, LogConfig, LOG_CONTEXT } from "../dist/T
 const PREFIX = "[Reserve] plan before execution "
 
 // Grille/BFS, dépenses et compteurs dynamiques. Frais synthétiques, PAS mesures moteur.
-function arena({ distance = 7, life = 70, initialOps = 100000, providerJump = 610000,
+function arena({ distance = 7, life = 45, initialOps = 100000, providerJump = 610000,
 	danger = c => c.x === -2 ? 0 : 100, extras = [] } = {}) {
 	const grid = new Map(), trace = [], stats = { providers: 0, danger: 0 }
 	let ops = initialOps
@@ -177,7 +177,7 @@ test("equipment and its PT are explicit; failed equipment activates only planned
 })
 
 test("refused attack enables a support alternative explicitly listed before action, no extra shots", () => {
-	const w = arena(); w.me.chips = [w.shield]; w.me.refuse = true
+	const w = arena({ life: 30 }); w.me.chips = [w.shield]; w.me.refuse = true
 	const r = w.run()
 	assertPlanBeforeActions(r)
 	assert.equal(r.plan.protection.length, 0)
@@ -196,7 +196,7 @@ test("refused attack: the first heal changes life and cancels the later listed s
 	assert.deepEqual(r.plan.support.alternatives.map(s => s.chip), ["backup"])
 	assert.deepEqual(r.actions.map(e => e.name), ["move", "shoot", "support", "move"])
 	assert.equal(r.actions.find(e => e.name === "support").chip, "bandage")
-	assert.equal(w.me.life, 100)
+	assert.equal(w.me.life, 75)
 	assert.equal(w.me.tp, 8)
 })
 
@@ -224,17 +224,17 @@ test("healing and shielding opt-outs are explicit in the plan and never execute"
 	assert.equal(w.me.tp, 2)
 })
 
-for (const [role, minimumRange] of [["AGGRESSIVE", 6], ["BALANCED", 6], ["DEFENSIVE", 5]]) {
-	test(`${role}: shield forecast uses distance from the planned shot cell across threat range`, () => {
+for (const minimumRange of [6]) {
+	test(`shield forecast uses distance from the planned shot cell across threat range`, () => {
 		for (const [range, expected] of [[minimumRange - 1, false], [minimumRange, true], [minimumRange + 1, true]]) {
 			const w = arena({ life: 30 })
-			w.profile.setRole(role); w.shield.cost = 2; w.me.chips = [w.shield]
+			w.shield.cost = 2; w.me.chips = [w.shield]
 			w.enemies[0].mp = 0
 			w.enemies[0].weapon = { ...w.enemies[0].weapon, maxRange: range }
 			const r = w.run()
 			assertPlanBeforeActions(r)
 			assert.deepEqual(r.plan.approach.to, { x: 1, y: 0 })
-			assert.equal(r.plan.protection.some(s => s.chip === "shield"), expected, `${role}, range=${range}`)
+			assert.equal(r.plan.protection.some(s => s.chip === "shield"), expected, `range=${range}`)
 			assert.equal(r.actions.some(e => e.name === "support" && e.chip === "shield"), expected)
 			assert.equal(w.me.tp, expected ? 0 : 2)
 		}
@@ -242,7 +242,7 @@ for (const [role, minimumRange] of [["AGGRESSIVE", 6], ["BALANCED", 6], ["DEFENS
 }
 
 test("successive reserve turns replan from real positions and current cooldowns", () => {
-	const w = arena({ distance: 15, danger: () => 0 })
+	const w = arena({ distance: 15, life: 30, danger: () => 0 })
 	const origins = [], destinations = [], turns = []
 	for (let i = 0; i < 3; i++) {
 		if (i > 0) { Fight.turn++; w.me.tp = 10; w.me.mp = 4 }
@@ -287,7 +287,7 @@ for (const invalid of ["absent", "truncated", "stale"]) test(`${invalid} map: pl
 })
 
 test("no shot: progression, support and absence of post-attack retreat are all explicit", () => {
-	const w = arena({ distance: 15, danger: () => 0 })
+	const w = arena({ distance: 15, life: 30, danger: () => 0 })
 	const r = w.run({ direct: true })
 	assertPlanBeforeActions(r)
 	assert.equal(r.plan.attack, null)

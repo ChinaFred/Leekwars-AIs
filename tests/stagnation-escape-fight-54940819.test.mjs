@@ -625,12 +625,13 @@ test("visited-cell guard exceptions: a cell that beats the proximity record is a
 	const record = quiet(() => world({ turn: 5, k: 133, stagnation: episode(), dangerOverride: (cell) => closer(cell) ? 100 : null }).evaluate())
 	assert.equal(record.plan?.destination.id, KASSBI_STUCK, "visited but a new record: not refused")
 	// Protection sur place (afterMp = 0) depuis une case visitée, danger modéré : jamais assimilée à un déplacement refusé.
-	// Le bouclier n'est candidat qu'au seuil du rôle : blessé (280/339 = 0,83 ≤ 0,85) et à portée de menace (7 PM + 6 ≥ 13).
-	const protectedHere = (stagnation) => quiet(() => world({ turn: 5, k: 133, stagnation, life: 280, enemyMp: 7,
+	// Le bouclier n'est candidat qu'au seuil du comportement : blessé (100/339 = 0,29 ≤ 0,375) et à portée de menace (7 PM + 6 ≥ 13).
+	const protectedHere = (stagnation) => quiet(() => world({ turn: 5, k: 133, stagnation, life: 100, enemyMp: 7,
 		dangerOverride: (cell) => cell.id === 133 ? 30 : 100 }).evaluate()).plan
 	const off = protectedHere(undefined), on = protectedHere(episode())
-	assert.deepEqual(off?.protection.map((chip) => chip.name), ["helmet"], "reference: the rule off casts the helmet in place")
-	assert.deepEqual([on?.destination.id, on?.afterMp, on?.protection.map((chip) => chip.name)], [133, 0, ["helmet"]])
+	// À 100/339 PV le soin (≤ 0,325) est aussi candidat : bandage puis helmet.
+	assert.deepEqual(off?.protection.map((chip) => chip.name), ["bandage", "helmet"], "reference: the rule off casts the helmet in place")
+	assert.deepEqual([on?.destination.id, on?.afterMp, on?.protection.map((chip) => chip.name)], [133, 0, ["bandage", "helmet"]])
 })
 
 test("the escape never re-targets a cell it already visited, even when it is the closest by walking (133 -> 81)", () => {
@@ -662,7 +663,7 @@ test("the escape never re-targets a cell it already visited, even when it is the
 // que la référence sans la règle tire plus tôt : 4 scénarios par alternance (ennemis 262 / départ 119 et 310 / départ 504)
 // reculaient sans tirer au tour 1 et tirent maintenant au tour 1, règle activée ou non. Sur les 704 scénarios des banques
 // de ce fichier (480 alternance, 160 fuite, 64 statiques), aucun premier tir plus tardif qu'avant ; 80 / 262 inchangé.
-const ALTERNATION_BANK = { 1: { slower: 0, faster: 46 }, 2: { slower: 0, faster: 68 }, 3: { slower: 0, faster: 62 } }
+const ALTERNATION_BANK = { 1: { slower: 0, faster: 50 }, 2: { slower: 0, faster: 60 }, 3: { slower: 2, faster: 56 } }
 test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns and a flee move can make the rule slower", () => {
 	const starts = cells.filter((cell) => !cell.obstacle).map((cell) => cell.id).filter((_, i) => i % 30 === 0)
 	for (const [still, expected] of Object.entries(ALTERNATION_BANK)) {
@@ -681,7 +682,7 @@ test("ACCEPTED LIMITATION (characterization): an enemy alternating N still turns
 	}
 	const alternating = () => { let calls = 0; return (k, e) => ++calls % 3 === 0 ? fleeStep(k, e) : e }
 	assert.equal(turnsToFirstShotVsFleeing(80, 262, false, alternating(), false), 11, "reference: rule off shoots at turn 11")
-	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 8, "rule on: first shot at turn 8")
+	assert.equal(turnsToFirstShotVsFleeing(80, 262, true, alternating(), false), 6, "rule on: first shot at turn 6")
 })
 
 // LIMITE ACCEPTÉE D1 (caractérisation ; la production n'est pas modifiée). La garde « case visitée » ne vit que dans le
@@ -745,12 +746,12 @@ test("the visited-cell guard lets a move + protection plan through (187, 3 MP, h
 	const danger = (cell) => cell.id === 133 ? 30 : cell.id === KASSBI_STUCK ? 30 : 100 // danger final 30 = danger courant 30
 	const episode = visitedEpisode187to133 // record 10 (observé en 187), 187 visité et ne bat pas le record
 	const shape = (stagnation) => {
-		// Bouclier candidat au seuil du rôle : blessé (280/339 = 0,83 ≤ 0,85) et à portée de menace (7 PM + 6 ≥ 13).
-		const plan = quiet(() => world({ turn: 6, k: 133, stagnation, life: 280, enemyMp: 7, dangerOverride: danger }).evaluate()).plan
+		// Bouclier candidat au seuil du comportement : blessé (100/339 = 0,29 ≤ 0,375) et à portée de menace (7 PM + 6 ≥ 13).
+		const plan = quiet(() => world({ turn: 6, k: 133, stagnation, life: 100, enemyMp: 7, dangerOverride: danger }).evaluate()).plan
 		return [plan?.destination.id, plan?.afterMp, plan?.danger, plan?.protection.map((chip) => chip.name)]
 	}
-	assert.deepEqual(shape(undefined), [KASSBI_STUCK, 3, 30, ["helmet"]], "reference: the rule off moves to 187 and casts the helmet")
-	assert.deepEqual(shape(episode()), [KASSBI_STUCK, 3, 30, ["helmet"]], "the rule on does not refuse it")
+	assert.deepEqual(shape(undefined), [KASSBI_STUCK, 3, 30, ["bandage", "helmet"]], "reference: the rule off moves to 187 and casts the helmet")
+	assert.deepEqual(shape(episode()), [KASSBI_STUCK, 3, 30, ["bandage", "helmet"]], "the rule on does not refuse it")
 })
 
 test("the visited-cell guard lets a safety retreat through at the tactical level (evaluate): destination 187, danger 0", () => {
@@ -854,8 +855,8 @@ test("history: one [History] line per turn (shot, chip, move), through the joint
 		return { events: w.me.events, reserve: messages.some((m) => m.includes("[Reserve]")),
 			lines: messages.filter((m) => m.startsWith("[History]")) }
 	}
-	// Tour 7 du combat, blessé (200/339) : approche 364, bandage, deux tirs critiques de 30, repli 346.
-	const joint = turnLine(7, { k: 310, e: 262, enemyLife: 195, life: 200 }, 12, 0)
+	// Tour 7 du combat, blessé (100/339) : approche 364, bandage, deux tirs critiques de 30, repli 346.
+	const joint = turnLine(7, { k: 310, e: 262, enemyLife: 195, life: 100 }, 12, 0)
 	assert.deepEqual(joint.events, ["move:364", "chip:bandage", "shoot", "shoot", "move:346"])
 	assert.deepEqual(joint.lines, ["[History] T7 TP 10/10 MP 4/4 dealt 60 taken 12 passive 0 | " +
 		"move:3:-; bandage:1:-; machine_gun:2:30; machine_gun:2:30; move:1:-"])
@@ -886,24 +887,25 @@ function refusal({ k, e = OPEN_ENEMY, passiveTurns, inner, outer, life }) {
 }
 
 test("combat refusal: the risk weight drops with passive turns (advance by the 3rd, shot retained), a lethal danger stays refused", () => {
-	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 52,5 sur toutes les cases plus proches. Seule ice (0-8)
-	// atteint la cible, depuis une case à 4 PM : 19,8 de dégâts contre 52,5 de danger. Le tir est connu mais décliné : le plan
+	// Type 54944456 T7 : ennemi 151 PV immobile à distance 11, danger 105 (52,5 avant le poids 0,5 du comportement) sur toutes les cases plus proches. Seule ice (0-8)
+	// atteint la cible, depuis une case à 4 PM : 19,8 de dégâts contre 105 de danger. Le tir est connu mais décliné : le plan
 	// retenu est le maintien sur place sans action (avant le crédit des puces après déplacement : plan nul).
 	const shape = (plan) => plan && [plan.beforeMp + plan.afterMp, plan.weaponShots, plan.chips.map((chip) => chip.name), plan.tpUsed]
 	for (const passiveTurns of [0, 2]) {
-		assert.deepEqual(shape(refusal({ k: 274, passiveTurns, inner: 52.5, outer: 0 })), [0, 0, [], 0], `${passiveTurns} passive turn(s): hold`)
+		assert.deepEqual(shape(refusal({ k: 274, passiveTurns, inner: 105, outer: 0 })), [0, 0, [], 0], `${passiveTurns} passive turn(s): hold`)
 	}
 	// Puces sans cooldown lancées plusieurs fois : deux ice (39,6) battent le danger à poids réduit dès le 3e tour passif
 	// (avant : une seule ice, 19,8, maintien jusqu'au 4e tour).
-	assert.deepEqual(shape(refusal({ k: 274, passiveTurns: 3, inner: 52.5, outer: 0 })), [4, 0, ["ice", "ice"], 8], "3rd passive turn: advance and cast ice twice")
-	const advance = refusal({ k: 274, passiveTurns: 4, inner: 52.5, outer: 0 })
+	assert.deepEqual(shape(refusal({ k: 274, passiveTurns: 3, inner: 105, outer: 0 })), [4, 0, ["ice", "ice"], 8], "3rd passive turn: advance and cast ice twice")
+	const advance = refusal({ k: 274, passiveTurns: 4, inner: 105, outer: 0 })
 	assert.deepEqual(shape(advance), [4, 0, ["ice", "ice"], 8], "4th passive turn: the plan moves 4 MP and casts ice twice on arrival")
 	assert.equal(distance(advance.destination, cells[OPEN_ENEMY]), 7, "from distance 11 to 7 (4 MP)")
-	assert.equal(advance.danger, 52.5)
-	// Type 54946689 T10 : blessé (200/339), distance 9, case à danger 39,4, cases de tir à danger 150 : `bandage` seul.
-	const wounded = (passiveTurns) => refusal({ k: 310, e: 262, passiveTurns, inner: 150, outer: 39.4, life: 200 })
+	assert.equal(advance.danger, 105)
+	// Type 54946689 T10 : blessé (150/339 : soin sous menace), distance 9, case à danger 39,4, cases de tir à danger 100 : `bandage` seul.
+	const wounded = (passiveTurns) => refusal({ k: 310, e: 262, passiveTurns, inner: 100, outer: 39.4, life: 150 })
 	const held = wounded(2)
-	assert.deepEqual([held.weaponShots, held.afterMp, held.protection.map((chip) => chip.name)], [0, 0, ["bandage", "helmet"]])
+	// Poids du comportement 0,5 (avant : 1) : le tir à danger 100 est déjà pris au 2e tour passif (avant : maintien et protection).
+	assert.deepEqual([held.weaponShots, held.afterMp, held.protection.map((chip) => chip.name)], [2, 0, ["bandage"]])
 	const fired = wounded(4)
 	assert.deepEqual([fired.weaponShots, fired.shotCell.id], [2, 364], "nil risk weight: the two-shot plan is retained")
 	assert.deepEqual(fired.protection.map((chip) => chip.name), ["bandage"], "the heal credit is not reduced")

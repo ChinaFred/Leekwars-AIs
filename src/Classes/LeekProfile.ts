@@ -1,47 +1,20 @@
 // @version:5.8
-// file version: 3
-import { AggressiveStrategy } from "./Strategy/AggressiveStrategy.js"
-import { BalancedStrategy } from "./Strategy/BalancedStrategy.js"
-import { DefensiveStrategy } from "./Strategy/DefensiveStrategy.js"
-import { LeekStrategy } from "./Strategy/LeekStrategy.js"
+// file version: 4
+import { LeekBehavior } from "./LeekBehavior.js"
 
+/**
+ * Profil du poireau : son agressivité est fixée à la construction (plus de rôle ni de setters) et `behavior` en tire
+ * les seuils de soin, bouclier et repli. Les comportements autorisés (`allow*`) restent à revoir : tous permis.
+ */
 export class LeekProfile {
-	public role = "BALANCED"
-	public aggression = 50
+	public readonly aggression: number
+	public readonly behavior: LeekBehavior
 	public allowHealing = true
 	public allowShielding = true
 	public allowHiding = true
-	public strategyName = "BALANCED"
 
-	setRole(value: string): void {
-		if (value === "ATTACKER") {
-			value = "AGGRESSIVE"
-		}
-		if (value !== "AGGRESSIVE" && value !== "DEFENSIVE") {
-			value = "BALANCED"
-		}
-		this.role = value
-		this.strategyName = value
+	constructor(aggression = 50) {
+		this.behavior = new LeekBehavior(aggression)
+		this.aggression = this.behavior.aggression
 	}
-
-	setAggression(value: number): void {
-		this.aggression = Math.max(0, Math.min(100, value))
-	}
-
-	setSupportOptions(healing: boolean, shielding: boolean, hiding: boolean): void {
-		this.allowHealing = healing
-		this.allowShielding = shielding
-		this.allowHiding = hiding
-	}
-}
-
-/** Stratégie du rôle configuré (seuils de soin, bouclier, repli). */
-export function createStrategy(profile: LeekProfile): LeekStrategy {
-	if (profile.strategyName === "AGGRESSIVE") {
-		return new AggressiveStrategy(profile.aggression)
-	}
-	if (profile.strategyName === "DEFENSIVE") {
-		return new DefensiveStrategy(profile.aggression)
-	}
-	return new BalancedStrategy(profile.aggression)
 }

@@ -189,7 +189,8 @@ for (const scenario of [
 })
 
 test("turn 7: fallback reaches 711002/1M but remaining engine budget allows two shots and support", () => {
-	const w = arena({ turn: 7, distance: 1, life: 170, equipped: true,
+	const w = arena({ turn: 7, distance: 1, life: 160, equipped: true, // 160/333 = 0,48 : soin sous menace (≤ 0,50)
+		
 		initialOps: 665000, providerCost: 0, danger: c => c.x <= -2 ? 60.3 : 100 })
 	let injected = false
 	try {
@@ -326,7 +327,7 @@ for (const path of ["main", "reserve"]) {
 test("main: opt-outs are honored, native refusal is not retried and no second planner executes", () => {
 	const w = arena({ distance: 1, life: 82, equipped: true })
 	w.me.chips = []
-	w.profile.setSupportOptions(false, false, false)
+	w.profile.allowHealing = false; w.profile.allowShielding = false; w.profile.allowHiding = false
 	w.me.refuse = true
 	try {
 		const t = w.run()
@@ -481,7 +482,8 @@ test("entry without context remains effective and never invents known danger", (
 })
 
 test("complete main incumbent survives research80% and executes shots plus retreat beyond it", () => {
-	const w = arena({ turn: 7, distance: 1, life: 170, equipped: true,
+	const w = arena({ turn: 7, distance: 1, life: 160, equipped: true, // 160/333 = 0,48 : soin sous menace (≤ 0,50)
+		
 		initialOps: 750000, danger: c => c.x <= -2 ? 60.3 : 100 })
 	try {
 		const t = w.run(), actions = t.trace.filter(e => e.kind === "action")

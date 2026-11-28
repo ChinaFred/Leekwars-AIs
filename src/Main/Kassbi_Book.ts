@@ -26,12 +26,9 @@ initLeekLogging(leekLogConfig)
 const OBJECTIVE = OBJECTIVES.damage
 
 /** Profil : seuils de soin, bouclier et repli du faisceau, et profil du repli (plan conjoint existant). */
-const leekProfile = new LeekProfile()
-leekProfile.setRole("AGGRESSIVE")
-leekProfile.setAggression(50)
-leekProfile.setSupportOptions(true, true, true)
+const leekProfile = new LeekProfile(50)
 
-/** Compteur de duel (`BookStandoff.ts`) : nourri à chaque tour, lu par le faisceau en posture AGGRESSIVE seulement. */
+/** Compteur de duel (`BookStandoff.ts`) : nourri à chaque tour, lu par le faisceau. */
 const standoff = new StandoffTracker()
 
 /** Paroles : une erreur est journalisée sans interrompre le tour. */

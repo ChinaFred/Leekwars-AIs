@@ -11,10 +11,7 @@ const { initLeekLogging, LogConfig } = await import("../../dist/Toolbox/Logger.j
 initLeekLogging(new LogConfig())
 
 /** Profil du plan conjoint : agressif, soin, bouclier et repli autorisés. Les tests le modifient. */
-export const leekProfile = new LeekProfile()
-leekProfile.setRole("AGGRESSIVE")
-leekProfile.setAggression(100)
-leekProfile.setSupportOptions(true, true, true)
+export const leekProfile = new LeekProfile(100)
 
 export function turn() {
 	const me = Fight.me

@@ -128,7 +128,7 @@ function replay(id, { noChest = false, chestLife, enemyLife, enemyAt } = {}) {
 	const known = { id: 1, name: "enemy", strength: 140, tp: 10, weapon: null, otherWeapons: [], chips: [], boosts: [], science: 0,
 		reachable: computeReachableCells(enemy, enemy.mp, spec.turn, { ignoreEntityId: me.id }) }
 	const threat = buildThreatMap(me, reachable, [known], spec.turn, { extraDanger: (cell) => (game.get(cell.id) ?? 0) + chestDanger(cell) })
-	const profile = new LeekProfile(); profile.setRole("AGGRESSIVE"); profile.setAggression(50); profile.setSupportOptions(true, true, true)
+	const profile = new LeekProfile(50)
 	return { spec, me, enemy, iron, profile, reachable, threat, context: { reachable, threat }, cells, zone: [...reachable.entries()].map(({ cell }) => cell.id).sort((a, b) => a - b) }
 }
 const reach = (w, cell) => Math.abs(cell.x - w.iron.cell.x) + Math.abs(cell.y - w.iron.cell.y)

@@ -363,29 +363,20 @@ test("a chest next to me never triggers the boost; with no real enemy left nothi
 
 // --- le comportement configuré (leekProfile) décide, de bout en bout ---------------------------------------------
 
-test("turn() reads leekProfile: at 82 % life DEFENSIVE heals with its spare TP, the default AGGRESSIVE does not", () => {
-	const play = (turnNumber) => {
-		const w = makeWorld({ turnNumber, chips: [bandage()], life: 246 }) // 246/300 = 0,82
+test("turn() reads leekProfile: at 82 % life the fixed behavior does not heal, at 20 % it does with its spare TP", () => {
+	const play = (turnNumber, life) => {
+		const w = makeWorld({ turnNumber, chips: [bandage()], life })
 		captureTurn(w)
 		return w
 	}
-	assert.equal(leekProfile.strategyName, "AGGRESSIVE")
 	assert.equal(leekProfile.aggression, 100)
 	assert.deepEqual([leekProfile.allowHealing, leekProfile.allowShielding, leekProfile.allowHiding], [true, true, true])
-	const aggressive = play(61) // seuil de soin AGGRESSIVE : vie ≤ 0,325 (0,50 sous menace) ; ici 0,82
-	assert.equal(aggressive.actions.includes("bandage"), false)
-	assert.equal(aggressive.me.life, 246)
-	leekProfile.setRole("DEFENSIVE") // seuil de soin DEFENSIVE à agressivité 50 : vie ≤ 0,825
-	leekProfile.setAggression(50)
-	try {
-		const defensive = play(62)
-		assert.equal(defensive.actions.includes("bandage"), true)
-		assert.equal(defensive.me.life, 276)
-		assert.equal(defensive.actions.filter((action) => action === "shoot").length, 2)
-	} finally {
-		leekProfile.setRole("AGGRESSIVE")
-		leekProfile.setAggression(100)
-	}
+	const healthy = play(61, 246) // seuil de soin à agressivité 100 : vie ≤ 0,25 (0,50 sous menace) ; ici 0,82
+	assert.equal(healthy.actions.includes("bandage"), false)
+	assert.equal(healthy.me.life, 246)
+	const wounded = play(62, 60) // 60/300 = 0,20
+	assert.equal(wounded.actions.includes("bandage"), true)
+	assert.equal(wounded.me.life, 90)
 })
 
 // --- plan B --------------------------------------------------------------------------------------------------

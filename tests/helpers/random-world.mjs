@@ -69,8 +69,9 @@ export function spec(seed, force = {}) {
 	const scale = pick([0.2, 0.5, 0.9, 1.0, 1.1, 1.6, 3]) * life
 	const noise = Array.from({ length: 64 }, () => r())
 	const productionProfile = r() < 0.7
-	const profile = productionProfile ? { role: "AGGRESSIVE", aggression: 50, support: [true, true, true] }
-		: { role: pick(["AGGRESSIVE", "BALANCED", "DEFENSIVE"]), aggression: pick([0, 30, 50, 80, 100]),
+	const profile = productionProfile ? { aggression: 50, support: [true, true, true] }
+		: { legacyRoleDraw: pick([0, 1, 2]), // tirage de l'ancien rôle, gardé pour ne pas décaler les graines de `spec`
+			aggression: pick([0, 30, 50, 80, 100]),
 			// `legacyDraw` : tirage de l'ancien réglage de portée, gardé pour ne pas décaler les graines de `spec`.
 			legacyDraw: pick([1, 3, 5]), support: [r() < 0.8, r() < 0.8, r() < 0.8] }
 	const stag = r() < 0.35 ? { count: int(0, 4), stillTurns: int(0, 4), passive: int(0, 5), engaged: r() < 0.3, record: int(1, 20),
@@ -167,8 +168,8 @@ export function run(M, s, interruptAfter = null, act = false) {
 		const value = danger(cell); dangers.set(cell.x * 4096 + cell.y, value)
 		return [cell.x * 4096 + cell.y, { cell, mpCost: cost, danger: value, breakdown: [] }]
 	})), { candidateCells: reachable.size, truncated: false, inputsTruncated: false, enemyCount: enemies.length, pairsEvaluated: 0, lineOfSightCalls: 0 })
-	const profile = new M.LeekProfile(); profile.setRole(s.profile.role); profile.setAggression(s.profile.aggression)
-	profile.setSupportOptions(...s.profile.support)
+	const profile = new M.LeekProfile(s.profile.aggression)
+	;[profile.allowHealing, profile.allowShielding, profile.allowHiding] = s.profile.support
 	let stagnation
 	if (s.stag) {
 		stagnation = new M.StagnationTracker()
@@ -225,8 +226,7 @@ export function run(M, s, interruptAfter = null, act = false) {
 			geo: dist(startCell, enemies[0].cell) - dist(p.destination, enemies[0].cell),
 			noop: p.beforeMp + p.afterMp === 0 && p.weaponShots === 0 && p.chips.length === 0 && p.protection.length === 0 && !(p.boost?.chips ?? []).length }
 	}
-	const strategy = M.createStrategy(profile)
-	const hide = profile.allowHiding && strategy.shouldHide(s.life / s.maxLife, near(startCell))
+	const hide = profile.allowHiding && profile.behavior.shouldHide(s.life / s.maxLife, near(startCell))
 	return { end, plan: summary, reason: result.reason, logs, work, reads, originDanger, minDanger: Math.min(...dangers.values()), cells: reachable.size, hide,
 		closest: near(startCell), m, stayLethal: originDanger >= s.life * m,
 		refused: logs.filter((l) => l.startsWith("[Tactical] retreat without damage refused")).length, doomed: logs.some((l) => l.startsWith("[Tactical] doomed turn")) }

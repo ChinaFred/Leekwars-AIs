@@ -30,7 +30,7 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 | `src/Brain/` | Observation du tour (`TurnObservation.ts`), scénario du tour (`planAct`), boosts de force et de PT, arme du tour 1 |
 | `src/Classes/Context/` | Ce que l'IA sait du combat : mémoire de l'adversaire, cases atteignables, carte de danger, stagnation, cibles |
 | `src/Classes/Plannification/` | Livre de combos (`Book*`, `CombatBook`), repli gelé : plan conjoint (`TacticalPlanner` et `Tactical*` : types, score, tour suivant, stagnation, exécution), plan B (`ReservePlan`), budget d'opérations |
-| `src/Classes/Strategy/` | Seuils par rôle (`Aggressive`, `Balanced`, `Defensive`) |
+| `src/Classes/LeekBehavior.ts` | Comportement du poireau : seuils de soin, bouclier, repli (agressivité fixée par `LeekProfile`) |
 | `src/Toolbox/` | Journalisation par contexte, marques sur le terrain, constantes, rapports d'erreur et mesure d'opérations, paroles |
 | `tests/` | Tests Node (`*.test.mjs`) sur des mondes simulés ; ils importent `dist/` |
 | `types/` | `leekwars.d.ts` : sous-ensemble local de l'API du jeu |
