@@ -1,24 +1,5 @@
 [
  {
-  "id": "21a7ecc",
-  "account": "Kassbi",
-  "published_at": 1795790004,
-  "published_at_iso": "2026-11-27T14:33:24Z",
-  "commit": "21a7ecc53b91355636b6cda6e7898aefa01fd238",
-  "committed_at": 1795789961,
-  "subject": "refactor(profil): supprime la portée préférée sans effet réel",
-  "message": "refactor(profil): supprime la portée préférée sans effet réel\n\nPourquoi : preferredMinRange/preferredMaxRange n'influençaient pas le plan\ntactique ; le min ne servait qu'au seuil « trop près » de shouldHide\n(max(2, min - 1), soit 2 pour tout min de 0 à 3) et le max qu'à une pénalité\nnégligeable (0,02 à 0,07 par case) dans le choix d'arme du chemin de secours.\nStratégie: aucun changement de comportement pour les profils de src/Main (portée 3-8 et 2-8) : « trop près » = distance < 2 (MIN_SAFE_DISTANCE) ; chemin de secours : arme choisie aux dégâts moyens du tour, sans pénalité de portée.\nTests: npm test (740 réussites, 0 échec), npm run typecheck ; tests scoreWeapon supprimés, riskWeight vérifie la constante (distance 1 -> 2, distance 2 -> 1).\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6cFHDi4iPqcChRwJgH",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 11,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "9737131",
   "account": "Kassbi",
   "published_at": 1795790229,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 1,
    "updated": 8,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "f1a9a97",
+  "account": "Kassbi",
+  "published_at": 1795859998,
+  "published_at_iso": "2026-11-28T09:59:58Z",
+  "commit": "f1a9a9731a5612f7fe00f5b2b79afd270101c66d",
+  "committed_at": 1795859949,
+  "subject": "Merge remote-tracking branch 'origin/Master' into claude/modest-franklin-liv09k",
+  "message": "Merge remote-tracking branch 'origin/Master' into claude/modest-franklin-liv09k\n\n# Conflicts:\n#\tsrc/Classes/Plannification/BookBeam.ts",
+  "has_strategy_section": false,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 10,
    "deleted_files": 0,
    "deleted_folders": 0
   }

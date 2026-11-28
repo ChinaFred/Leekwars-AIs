@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 18
+// file version: 20
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { isLaser, laserBalance } from "../Context/LaserLine.js"
@@ -14,7 +14,7 @@ import {
 import { TacticalContext, TacticalPreparation } from "./TacticalTypes.js"
 import { netDamage, riskWeight, shouldHeal, shouldHealWithThreat, shouldShield } from "./TacticalScore.js"
 import { track } from "../Context/StagnationTracker.js"
-import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
+import { cutOperations, log, LOG_CONTEXT, LogText, getLogConfig, logSearchCut } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
 const key = (cell: Cell): number => cell.x * 4096 + cell.y
@@ -151,10 +151,17 @@ export function executeReservePlan(
 		!Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
 		System.operations < System.maxOperations * SEARCH_GLOBAL_FRACTION
 	let executionBudget: ExecutionBudget | null = null
-	const budget = (): boolean => executionBudget ? executionBudget.available() : hasExecutionRoom()
-	const searchBudget = (): boolean => globalBudget() && (typeof System === "undefined" ||
+	// Une seule ligne rouge par plan B : au premier refus d'un des deux budgets, qui décide la coupure.
+	let cutLogged = false
+	const cut = (cause: string): false => {
+		if (!cutLogged) { cutLogged = true; logSearchCut("plan B", cause, cutOperations()) }
+		return false
+	}
+	const budget = (): boolean => (executionBudget ? executionBudget.available() : hasExecutionRoom()) || cut("hard operations reserve")
+	const searchBudget = (): boolean => (globalBudget() && (typeof System === "undefined" ||
 		!Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
-		System.operations - startOps - loggingOps < System.maxOperations * SEARCH_FRACTION)
+		System.operations - startOps - loggingOps < System.maxOperations * SEARCH_FRACTION)) ||
+		cut(globalBudget() ? "search margin reached" : "operations reserve (global cap)")
 	const origin = me.cell
 	const initialMp = me.mp
 	const turn = Fight.turn
@@ -251,6 +258,12 @@ export function executeReservePlan(
 			.slice(0, RESERVE_LIMITS.weapons)
 		const chips = me.chips.slice(0, RESERVE_LIMITS.chips)
 		if (allEnemies.length > enemies.length || me.weapons.length > weapons.length || me.chips.length > chips.length) {
+			const over = [
+				allEnemies.length > enemies.length ? `enemies ${allEnemies.length} > ${RESERVE_LIMITS.enemies}` : "",
+				me.weapons.length > weapons.length ? `weapons ${me.weapons.length} > ${RESERVE_LIMITS.weapons}` : "",
+				me.chips.length > chips.length ? `chips ${me.chips.length} > ${RESERVE_LIMITS.chips}` : ""
+			].filter((text) => text !== "").join(", ")
+			logSearchCut("plan B", `candidate bound (${over})`, `${cutOperations()} repli=candidats retenus seuls`)
 			message("candidate cap; partial heuristic, not optimum")
 		}
 		// Borne prudente : hors portée maximale + PM, aucun fournisseur de tir n'est utile.
@@ -259,6 +272,7 @@ export function executeReservePlan(
 		const mayReach = (target: Entity, range: number): boolean => !Number.isFinite(range) ||
 			Math.abs(origin.x - target.cell.x) + Math.abs(origin.y - target.cell.y) <= range + initialMp
 		let goals: Cell[] | null = null
+		let nativeCutLogged = false
 		let best: Shot | null = null
 		const laserKind = laserKinds(me)
 		const consider = (shot: Shot): void => {
@@ -303,7 +317,14 @@ export function executeReservePlan(
 				// À 0 PM, le contrôle natif courant suffit ; aucun fournisseur hypothétique nécessaire.
 				if (!reachable || me.mp <= 0 || !potentiallyReachable || (!cachedCells && !searchBudget())) continue
 				const cells = cachedCells ?? Fight.weaponCells(target, weapon)
-				if (!budget() || cells.length > RESERVE_LIMITS.nativeCells) continue
+				if (!budget()) continue
+				if (cells.length > RESERVE_LIMITS.nativeCells) {
+					if (!nativeCutLogged) {
+						nativeCutLogged = true
+						logSearchCut("plan B", `native cells bound (${cells.length} > ${RESERVE_LIMITS.nativeCells})`, `${cutOperations()} repli=arme ignorée`)
+					}
+					continue
+				}
 				if (!searchBudget()) {
 					// Le fournisseur a déjà renvoyé ses résultats : vérification bornée, pas de
 					// nouvel appel/recherche. Garder une vraie option de tir si elle est dans ce préfixe.

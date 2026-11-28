@@ -1,6 +1,6 @@
 // @version:5.8
 // file version: 10
-import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
+import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { isLaser, laserBalance } from "../Context/LaserLine.js"
@@ -66,7 +66,17 @@ export interface BeamRun {
 export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile, options: BookOptions = {}): BeamRun | null {
 	const { reachable, threat } = context
 	const enemies = aliveEnemies().filter((enemy) => enemy.life > 0)
-	if (enemies.length === 0 || enemies.length > TACTICAL_LIMITS.enemies || !reachable || !threat || reachable.truncated ||
+	// Bornes qui écartent le livre (repli : plan conjoint puis plan B) : une ligne rouge, avec la valeur et la borne.
+	if (enemies.length > TACTICAL_LIMITS.enemies) {
+		logSearchCut("livre", `enemies bound (${enemies.length} > ${TACTICAL_LIMITS.enemies})`, `${cutOperations()} repli=plan conjoint puis plan B`)
+		return null
+	}
+	if (enemies.length > 0 && (reachable?.truncated || threat?.truncated || threat?.inputsTruncated)) {
+		logSearchCut("livre", `truncated data (${reachable?.truncated ? "zone atteignable" : threat?.truncated ? "carte de danger" : "données de la carte de danger"})`,
+			`${cutOperations()} repli=plan conjoint puis plan B`)
+		return null
+	}
+	if (enemies.length === 0 || !reachable || !threat || reachable.truncated ||
 		threat.truncated || threat.inputsTruncated || !reachable.isUpToDate(me.id, me.cell, me.mp, Fight.turn) ||
 		threat.entityId !== me.id || threat.turn !== Fight.turn || threat.candidateCells !== reachable.size ||
 		!hasExecutionRoom()) return null

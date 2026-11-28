@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 13
+// file version: 15
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
+import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "./ReachableCells.js"
@@ -474,7 +475,7 @@ function dominates(a: PreparedWeapon, b: PreparedWeapon, tp: number): boolean {
 }
 
 /** Configurations de force et de PT : aucun boost, puis combinaisons de puces de boost (≤ `MAX_THREAT_BOOSTS`), non dominées. */
-function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; gain: number; tpGain: number }> {
+function boostVariants(enemy: ThreatEnemy, tp: number, cuts: PrepareCuts): Array<{ cost: number; gain: number; tpGain: number }> {
 	const boosts: Array<{ cost: number; gain: number; tpGain: number }> = []
 	const candidates: Array<{ cost: number; gain: number; tpGain: number }> = []
 	for (const chip of enemy.boosts ?? []) {
@@ -496,6 +497,11 @@ function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; ga
 		const boost = candidates.splice(index, 1)[0]!
 		boosts.push(boost)
 		maxTp += Math.max(0, boost.tpGain - boost.cost)
+	}
+	// Plafond atteint avec des puces encore lançables : elles sont ignorées (valeur = retenues + restantes).
+	if (boosts.length >= MAX_THREAT_BOOSTS) {
+		const left = candidates.filter((boost) => boost.cost <= maxTp && boost.cost - boost.tpGain < maxTp).length
+		if (left > 0) cuts.boosts = Math.max(cuts.boosts, boosts.length + left)
 	}
 	const empty = { cost: 0, gain: 0, tpGain: 0 }
 	const all: Array<{ cost: number; gain: number; tpGain: number }> = [empty]
@@ -524,7 +530,7 @@ function boostVariants(enemy: ThreatEnemy, tp: number): Array<{ cost: number; ga
 }
 
 function prepareVariant(
-	enemy: ThreatEnemy, cost: number, gain: number, tpGain: number, tp: number, indexOf: (item: ShotItem) => number
+	enemy: ThreatEnemy, cost: number, gain: number, tpGain: number, tp: number, indexOf: (item: ShotItem) => number, cuts: PrepareCuts
 ): PreparedVariant | null {
 	const tpLeft = Math.floor(tp - cost + tpGain)
 	const strength = enemy.strength + gain
@@ -535,19 +541,22 @@ function prepareVariant(
 			found.push({ candidate, swapTp: 0, index: 0 })
 		}
 	}
+	let dropped = 0
 	for (const other of enemy.otherWeapons ?? []) {
-		if (found.length >= MAX_THREAT_WEAPONS) {
-			break
-		}
 		if (other === enemy.weapon || (enemy.weapon !== null && other.id === enemy.weapon.id)) {
 			continue
 		}
 		const candidate = toCandidate(other, false, strength)
 		if (candidate !== null && candidate.cost + WEAPON_SWAP_TP <= tpLeft &&
 			!found.some((entry) => entry.candidate.item.id === other.id)) {
+			if (found.length >= MAX_THREAT_WEAPONS) {
+				dropped++
+				continue
+			}
 			found.push({ candidate, swapTp: WEAPON_SWAP_TP, index: 0 })
 		}
 	}
+	if (dropped > 0) cuts.weapons = Math.max(cuts.weapons, found.length + dropped)
 	const weapons = found.filter((entry) => !found.some((rival) =>
 		rival !== entry && dominates(rival, entry, tpLeft) &&
 		// À égalité mutuelle, seule la première (l'équipée si elle y est) est conservée.
@@ -573,7 +582,16 @@ function prepareVariant(
 	}
 }
 
-function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
+/** Candidats écartés par `MAX_THREAT_WEAPONS` / `MAX_THREAT_BOOSTS` (nombre éligible observé, 0 : rien d'écarté), tous ennemis confondus. */
+interface PrepareCuts { weapons: number; boosts: number }
+
+/** Une ligne rouge par plafond effectivement atteint, une fois les ennemis préparés (jamais dans la boucle de variantes). */
+function logPrepareCuts(origin: string, cuts: PrepareCuts): void {
+	if (cuts.weapons > 0) logSearchCut(origin, `threat weapons bound (${cuts.weapons} > ${MAX_THREAT_WEAPONS})`, `${cutOperations()} repli=armes en trop ignorées`)
+	if (cuts.boosts > 0) logSearchCut(origin, `threat boosts bound (${cuts.boosts} > ${MAX_THREAT_BOOSTS})`, `${cutOperations()} repli=puces en trop ignorées`)
+}
+
+function prepare(enemy: ThreatEnemy, cuts: PrepareCuts): PreparedEnemy | null {
 	const tp = Number.isFinite(enemy.tp) && enemy.tp > 0 ? Math.floor(enemy.tp) : 0
 	const items: ShotItem[] = []
 	const indexOf = (item: ShotItem): number => {
@@ -585,8 +603,8 @@ function prepare(enemy: ThreatEnemy): PreparedEnemy | null {
 		return items.length - 1
 	}
 	const variants: PreparedVariant[] = []
-	for (const { cost, gain, tpGain } of boostVariants(enemy, tp)) {
-		const variant = prepareVariant(enemy, cost, gain, tpGain, tp, indexOf)
+	for (const { cost, gain, tpGain } of boostVariants(enemy, tp, cuts)) {
+		const variant = prepareVariant(enemy, cost, gain, tpGain, tp, indexOf, cuts)
 		if (variant !== null) {
 			variants.push(variant)
 		}
@@ -796,22 +814,26 @@ export function buildThreatMap(
 	const provider = options.provider ?? new GeometricShotCells()
 	const budget = { pairs: 0, max: options.maxPairs ?? MAX_THREAT_PAIRS }
 	const prepared: PreparedEnemy[] = []
+	const cuts: PrepareCuts = { weapons: 0, boosts: 0 }
 	let inputsTruncated = myReachable.truncated
 	for (const enemy of enemies) {
 		inputsTruncated = inputsTruncated || enemy.reachable.truncated
-		const item = prepare(enemy)
+		const item = prepare(enemy, cuts)
 		if (item !== null) {
 			prepared.push(item)
 		}
 	}
+	logPrepareCuts("carte de danger", cuts)
 
 	const ceiling = operationsCeiling()
 	const byKey = new Map<number, ThreatCell>()
 	let truncated = false
+	let cause = ""
 	evaluation:
 	for (const candidate of myReachable.entries()) {
 		if (overCeiling(ceiling)) {
 			truncated = true
+			cause = "operations ceiling"
 			break
 		}
 		let danger = 0
@@ -820,6 +842,7 @@ export function buildThreatMap(
 			const threat = bestThreat(item, candidate.cell, provider, budget)
 			if (threat === "aborted") {
 				truncated = true
+				cause = "pairs cap"
 				break evaluation
 			}
 			if (threat !== null) {
@@ -831,6 +854,9 @@ export function buildThreatMap(
 		byKey.set(cellKey(candidate.cell), { cell: candidate.cell, mpCost: candidate.cost, danger, breakdown })
 	}
 
+	if (truncated) {
+		logSearchCut("carte de danger", cause, `${cutOperations()} paires=${budget.pairs}/${budget.max} cases=${byKey.size}/${myReachable.size}`)
+	}
 	return new ThreatMap(me.id, turn, byKey, {
 		truncated,
 		inputsTruncated,
@@ -1151,9 +1177,12 @@ export function buildTargetZone(
 	const zones: ZoneEnemy[] = []
 	let inputsTruncated = false
 	let truncated = false
+	/** Plafond qui coupe (vide : pas de coupure, ou portée infinie, entrée non gérée et non plafond). */
+	let cause = ""
+	const cuts: PrepareCuts = { weapons: 0, boosts: 0 }
 	for (const enemy of enemies) {
 		inputsTruncated = inputsTruncated || enemy.reachable.truncated
-		const item = prepare(enemy)
+		const item = prepare(enemy, cuts)
 		if (item === null) {
 			continue
 		}
@@ -1163,6 +1192,7 @@ export function buildTargetZone(
 		}
 		zones.push(prepareZone(item, provider.launchPatterns === true))
 	}
+	logPrepareCuts("zone visée", cuts)
 
 	// Candidates rangées par distance à ma case (anneaux) : pas de tri, ordre stable.
 	const rings: Cell[][] = []
@@ -1204,6 +1234,7 @@ export function buildTargetZone(
 		for (let depth = 1; depth <= zone.range; depth++) {
 			if (overCeiling(ceiling)) {
 				truncated = true
+				cause = "operations ceiling (spreading)"
 				break spreading
 			}
 			const nextXs: number[] = []
@@ -1249,6 +1280,7 @@ export function buildTargetZone(
 				continue
 			}
 			if (truncated || overCeiling(ceiling)) {
+				if (!truncated) cause = "operations ceiling"
 				truncated = true
 				break evaluation
 			}
@@ -1258,6 +1290,7 @@ export function buildTargetZone(
 				const threat = zoneThreat(zone, cell, provider, budget)
 				if (threat === "aborted") {
 					truncated = true
+					cause = "pairs cap"
 					break evaluation
 				}
 				if (threat !== null) {
@@ -1270,6 +1303,9 @@ export function buildTargetZone(
 				byKey.set(cellKey(cell), { cell, mpCost: -1, danger, breakdown })
 			}
 		}
+	}
+	if (cause !== "") {
+		logSearchCut("zone visée", cause, `${cutOperations()} paires=${budget.pairs}/${budget.max} cases=${evaluatedCells}/${candidateCells}`)
 	}
 	return new ThreatMap(me.id, turn, byKey, {
 		truncated,

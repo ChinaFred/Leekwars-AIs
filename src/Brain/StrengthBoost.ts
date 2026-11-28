@@ -1,5 +1,6 @@
 // @version:5.8
-// file version: 10
+// file version: 11
+import { cutOperations, logSearchCut } from "../Toolbox/Logger.js"
 import { ReachableCells, computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import {
 	agilityBoostOf,
@@ -216,8 +217,10 @@ function cachedCells<T extends Weapon | Chip>(
 function boostedZone(me: Me, option: BoostOption, cellLimit: number): ReachableCells | string {
 	const boostedMp = me.mp + option.gain
 	const zone = computeReachableCells(me, boostedMp, Fight.turn)
-	return zone.truncated || zone.size > cellLimit
-		? `${zone.size}${zone.truncated ? "+" : ""} cells with ${boostedMp} MP > ${cellLimit}` : zone
+	if (!zone.truncated && zone.size <= cellLimit) return zone
+	const cells = `${zone.size}${zone.truncated ? "+" : ""}`
+	logSearchCut("boost PM", `cells bound (${cells} > ${cellLimit})`, `${cutOperations()} repli=plan sans boost`)
+	return `${cells} cells with ${boostedMp} MP > ${cellLimit}`
 }
 
 /** Même garde que les recherches (plan conjoint, plan B, carte de danger) : rien ne démarre passé 80 % des opérations. */
