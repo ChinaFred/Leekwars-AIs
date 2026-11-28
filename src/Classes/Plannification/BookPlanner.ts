@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -13,7 +13,8 @@ import {
 } from "./BookBeam.js"
 import { BOOK_DUEL_SEARCH_FRACTION, BookBudget } from "./BookBudget.js"
 import { catalogFor } from "./BookCatalog.js"
-import { EnemyMover, advanceTowardMe, futureDangerOf } from "./BookEnemyModel.js"
+import type { EnemyStance } from "../Context/EnemyBehavior.js"
+import { EnemyMover, advanceTowardMe, futureDangerOf, moverByStance } from "./BookEnemyModel.js"
 import { BookObjective, objectiveFor } from "./BookObjective.js"
 import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
@@ -31,6 +32,8 @@ export interface BookOptions {
 	readonly depth?: number
 	/** Hypothèse de déplacement de l'ennemi aux tours simulés (`BookEnemyModel.ts`). */
 	readonly mover?: EnemyMover
+	/** Posture de l'ennemi (`EnemyMemory.stanceOf`) : sans `mover`, un ennemi `defensive` recule aux tours simulés. */
+	readonly stanceOf?: (enemyId: number) => EnemyStance
 	/** Plafond d'unités de travail (tests) ; sans lui, seul le plafond d'opérations du jeu coupe. */
 	readonly workLimit?: number
 	/** Compteur de duel (`BookStandoff.ts`) : lu seulement en posture AGGRESSIVE. */
@@ -107,7 +110,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const futureDanger = futureDangerOf(known)
 	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
-		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
+		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? (options.stanceOf === undefined ? advanceTowardMe : moverByStance(options.stanceOf)), allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
 		zone(state, k) {
 			if (k === 0) return rootZone
 			const id = `${k}:${state.cell.id}`
