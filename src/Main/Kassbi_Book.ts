@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -11,6 +11,7 @@ import { planWithBook } from "../Classes/Plannification/BookPlanner.js"
 import { StandoffTracker } from "../Classes/Plannification/BookStandoff.js"
 import { aliveEnemies } from "../Classes/Context/Targets.js"
 import { executeTacticalPlan } from "../Classes/Plannification/TacticalExecution.js"
+import type { TacticalPlan } from "../Classes/Plannification/TacticalTypes.js"
 import { logTurnOperations, reportError, withErrorReporting } from "../Toolbox/Debug.js"
 import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.js"
 
@@ -62,6 +63,9 @@ export function turn(): void {
 		// Avant `observeTurn` : il ouvre le tour dans l'historique, `lastDealt` serait alors celui du tour qui commence (0).
 		const dealtLastTurn = actionHistory.lastDealt
 		observeTurn(me)
+		// PM du tour avant toute dépense, et plan du livre : lus en fin de tour par `equipOpeningWeapon`.
+		const mpStart = me.mp
+		let plan: TacticalPlan | null = null
 		if (!springChestTrap(me)) {
 			const context = {
 				reachable: enemyMemory.getReachable(me.id), threat: enemyMemory.getThreatMap(), stagnation,
@@ -73,7 +77,6 @@ export function turn(): void {
 				reportError("src/Main/Kassbi_Book.ts", "standoff", error)
 			}
 			const before = operations()
-			let plan = null
 			try {
 				plan = planWithBook(me, context, leekProfile, { standoff, stanceOf: (id) => enemyMemory.stanceOf(id)?.stance ?? "unknown" })
 			} catch (error) {
@@ -83,7 +86,7 @@ export function turn(): void {
 			if (plan !== null) executeTacticalPlan(me, plan)
 			else planAct(me, leekProfile, context)
 		}
-		equipOpeningWeapon(me)
+		equipOpeningWeapon(me, plan, mpStart)
 		recordMyTurnEnd(me)
 		actionHistory.end()
 		// Après l'historique : les PT restants sont ceux que le plan n'a pas utilisés.

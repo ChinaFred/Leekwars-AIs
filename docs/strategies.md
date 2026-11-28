@@ -23,8 +23,7 @@ Un tour, dans l'ordre :
    - sinon **plan B** (`ReservePlan.ts`), séquentiel et borné ;
    - sans `Field.cellFromXY`, `Fight.weaponCells` ou `me.canUseChip` (API du jeu actuel) : aucune action, absence
      journalisée (`PLANNING`).
-6. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper la meilleure
-   (dégâts moyens par PT, puis portée la plus longue). Puis mémorisation des PV de fin de tour.
+6. **Arme du tour 1** (`equipOpeningWeapon`) : si aucune arme n'est équipée et qu'il reste 1 PT, équiper l'arme que le meilleur enchaînement du livre utilise en premier aux tours simulés suivants (`TacticalPlan.later`, lu sans relancer la recherche). Repli (pas de plan du livre, tours non simulés, aucune arme dans ces tours) : dégâts moyens par PT × part des distances de tir plausibles du prochain contact où l'arme tire (`contactWindow` : distance à l'ennemi le plus proche, PM des deux camps, portée max ; modèle analogue à `idleBoostCredit` : mon déplacement du tour 1 est déjà fait, PM d'avant boost ; aucune constante), puis portée la plus longue. Une arme de portée 1 ne gagne que si le contact au corps à corps est plausible. Ligne `[Weapon]` avec la source. Puis mémorisation des PV de fin de tour.
 
 Un plan est entièrement décidé et affiché (`PLANNING`) **avant** sa première action, tous les boosts compris (force, PT, agilité, PM) :
 on observe, on compare, on planifie, on exécute ; aucune action n'est lancée ni décidée hors du plan. Exécution commencée, aucun second plan : un échec l'arrête.

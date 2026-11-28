@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
@@ -83,6 +83,11 @@ export interface TacticalPlan {
 	/** Distance vers une case de tir géométrique hypothétique, non native. */
 	readonly futureRouteDistance?: number
 	readonly searchStatus?: string
+	/**
+	 * Livre seulement : tours SIMULÉS après celui-ci par le meilleur enchaînement (`turns`, 0 = profondeur 1) et première arme
+	 * qu'il y utilise (`weapon`, null si aucune). Lu par `equipOpeningWeapon` ; absent = plan sans livre (repli).
+	 */
+	readonly later?: { readonly turns: number; readonly weapon: Weapon | null }
 	readonly state?: { readonly turn: number; readonly enemies: ReadonlyArray<{ enemy: Entity; cell: Cell }> }
 }
 
