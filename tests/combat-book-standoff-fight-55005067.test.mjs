@@ -246,11 +246,13 @@ test("step 2: in a duel, with a hit and run available the safe final cell wins o
 	assert.match(names(run, first(run)), /rock/)
 })
 
-test("step 3: level 2 only when the duel is active or a non-lethal plan promises more damage", () => {
+test("step 3: level 2 always opened unless deepen is false", () => {
 	const w = replay(5)
 	const normal = planBeam(w.me, w.context, w.profile, { depth: 2 })
-	assert.equal(normal.result.depth, 1, "clear best plan, no duel: one turn only")
-	assert.match(normal.result.skipped, /level 2/)
+	assert.equal(normal.result.depth, 2, "no duel, clear best plan: two turns anyway")
+	const off = planBeam(w.me, w.context, w.profile, { depth: 2, deepen: false })
+	assert.equal(off.result.depth, 1)
+	assert.match(off.result.skipped, /level 2/)
 	const dueled = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6) })
 	assert.equal(dueled.result.depth, 2, "duel: two turns")
 	assert.equal(dueled.result.cut, null)

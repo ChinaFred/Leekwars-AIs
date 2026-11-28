@@ -345,3 +345,14 @@ test("a defensive enemy retreats at the simulated turns, the others advance", as
 	}
 	assert.ok(second(() => "defensive") > second(() => "aggressive"), "l'ennemi défensif est plus loin au tour 2")
 })
+
+test("level 2 always opened: a lone best plan (no boost, no duel, nothing better) is still simulated two turns (fight 55029810, turn 2)", () => {
+	const w = world({ chips: [rock()] })
+	const open = planBeam(w.me, w.context, w.profile, { depth: 2 })
+	assert.equal(open.result.depth, 2)
+	assert.equal(open.result.skipped, null)
+	const w2 = world({ chips: [rock()] })
+	const off = planBeam(w2.me, w2.context, w2.profile, { depth: 2, deepen: false })
+	assert.equal(off.result.depth, 1)
+	assert.match(off.result.skipped, /level 2/)
+})
