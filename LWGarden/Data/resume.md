@@ -2,6 +2,27 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 8a79845 — chore(merge): intègre Master dans la branche de l'agressivité
+Compte Kassbi, publié le 2026-11-28T10:04:17Z.
+Combats : 2 — 0 victoires, 2 défaites, 0 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 82 % (combat 55025819), médiane des pics 78 %.
+Ressources : 16 tours joués, 3 sans aucune action payante (19 %), 25 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 47 % inutilisés sur 162 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55025819 (2/9, défaite), 55025104 (1/7, défaite).
+
+Défaites :
+- 55025104 : 7 tours · vs tungtung67 · pic ops 73 %
+- 55025819 : 9 tours · vs leghapilu · pic ops 82 %
+
+## 8150386 — feat(book): crédit de boost sans tir et rejeu du compteur de duel
+Compte Kassbi, publié le 2026-11-27T21:41:15Z.
+Stratégie : Kassbi_Book seulement. Boost de force sans tir crédité de
+Combats : 16 — 15 victoires, 0 défaites, 1 nuls (94 % de victoires), 0 sans logs.
+Ops : pic maximal 74 % (combat 55007909), médiane des pics 42 %.
+Ressources : 189 tours joués, 47 sans aucune action payante (25 %), 56 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 51 % inutilisés sur 1940 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55009037 (35/64, nul), 55007928 (3/10, victoire), 55007909 (2/8, victoire), 55007925 (1/5, victoire), 55008923 (1/5, victoire).
+
 ## 7092a85 — feat(book): sortie de duel AGGRESSIVE, repli sûr, budget de profondeur
 Compte Kassbi, publié le 2026-11-27T21:00:53Z.
 Stratégie : Kassbi_Book seulement (non branché aux IA actives). Corrige le
@@ -35,29 +56,3 @@ Combats les plus gaspilleurs (tours sans action payante) : 54994953 (63/64, nul)
 
 Défaites :
 - 54995102 : 4 tours · vs AntoineMouchamps · pic ops 77 %
-
-## 9737131 — chore(merge): fusion de Master (portée préférée supprimée)
-Compte Kassbi, publié le 2026-11-27T14:37:09Z.
-Stratégie : aucun changement de comportement en jeu.
-Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 39 % (combat 54993792), médiane des pics 38 %.
-Ressources : 12 tours joués, 1 sans aucune action payante (8 %), 32 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 30 % inutilisés sur 126 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54993794 (1/7, victoire), 54993792 (0/5, victoire).
-
-## d81e6a6 — chore(merge): fusion de Master (zone visée, posture par rôle)
-Compte Kassbi, publié le 2026-11-27T14:17:12Z.
-Stratégie : aucun changement de comportement (zone visée affichée au même moment).
-Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 39 % (combat 54992889), médiane des pics 39 %.
-Ressources : 18 tours joués, 5 sans aucune action payante (28 %), 53 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 55 % inutilisés sur 185 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54992889 (5/12, victoire), 54993249 (0/6, victoire).
-
-## 3cdee5d — chore(merge): fusion de Master (posture par rôle) dans la zone visée
-Compte Kassbi, publié le 2026-11-27T13:55:23Z.
-Combats : 2 — 2 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 38 % (combat 54992852), médiane des pics 37 %.
-Ressources : 18 tours joués, 3 sans aucune action payante (17 %), 67 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 35 % inutilisés sur 186 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54992852 (1/5, victoire), 54992730 (2/13, victoire).
