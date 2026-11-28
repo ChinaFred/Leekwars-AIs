@@ -2,6 +2,15 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## 4665531 — perf(book): marge de coût des nœuds ramenée de 2 à 1,2
+Compte Kassbi, publié le 2026-11-28T10:57:18Z.
+Stratégie : au niveau 2 du faisceau, le livre ouvre plus de nœuds quand le budget le permet : 5 sur 5 au lieu de 3 sur 5 aux tours 5 et 6 du combat 55027536 (tours finis à 44 % et 41 % des ops) ; marge NODE_COST_MARGIN 2 → 1,2, plafonds globaux inchangés (0,80 et 0,70).
+Combats : 3 — 3 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
+Ops : pic maximal 65 % (combat 55028293), médiane des pics 51 %.
+Ressources : 28 tours joués, 2 sans aucune action payante (7 %), 38 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 34 % inutilisés sur 285 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55028293 (2/8, victoire), 55028410 (0/9, victoire), 55028419 (0/11, victoire).
+
 ## e7ef19c — perf(ops): zones d'affichage coupées par défaut dans Kassbi_Book
 Compte Kassbi, publié le 2026-11-28T10:37:22Z.
 Stratégie : aucun changement de comportement du plan ; la zone visée (290k à 690k ops par tour, jamais transmise au planificateur) n'est plus calculée en combat, ce qui libère du budget pour la recherche du livre.
@@ -58,14 +67,3 @@ Défaites :
 - 55005849 : 7 tours · vs Gorglucks, Destan, Hakuko, dilph, DEVaporator · pic ops 53 %
 - 55005881 : 5 tours · vs HatsuNekron · pic ops 48 %
 - 55005891 : 2 tours · vs LaZeraclure · pic ops 25 %
-
-## 0be4b89 — chore(merge): fusion de Master (piège du coffre) dans la zone visée
-Compte Kassbi, publié le 2026-11-27T15:05:56Z.
-Combats : 12 — 10 victoires, 1 défaites, 1 nuls (83 % de victoires), 0 sans logs.
-Ops : pic maximal 77 % (combat 54995102), médiane des pics 49 %.
-Ressources : 147 tours joués, 76 sans aucune action payante (52 %), 67 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 64 % inutilisés sur 1493 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 54994953 (63/64, nul), 54994276 (9/19, victoire), 54994980 (1/5, victoire), 54996965 (1/5, victoire), 54995131 (1/7, victoire).
-
-Défaites :
-- 54995102 : 4 tours · vs AntoineMouchamps · pic ops 77 %
