@@ -1,2 +1,4 @@
 node_modules/
 dist/
+ExternalTooling/loadout/.cache/
+__pycache__/
