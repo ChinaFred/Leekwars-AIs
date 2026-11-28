@@ -73,3 +73,17 @@ test("execution cannot start at the genuine engine limit", () => {
 		assert.equal(new ExecutionBudget().available(), false)
 	})
 })
+
+test("the book may open its 3rd turn while it has spent less than 30 % of the total (0.08 never opened it: level 2 alone costs 400-540 k ops)", async () => {
+	const { BookBudget, BOOK_DEEPEN_FRACTION } = await import("../dist/Classes/Plannification/BookBudget.js")
+	assert.equal(BOOK_DEEPEN_FRACTION, 0.30)
+	let ops = 100000
+	globalThis.System = { get operations() { return ops }, maxOperations: 2000000 }
+	try {
+		const budget = new BookBudget()
+		ops += 300000 // 15 % du total consommé par le livre
+		assert.equal(budget.deepenOk(), true)
+		ops += 400000 // 35 %
+		assert.equal(budget.deepenOk(), false)
+	} finally { delete globalThis.System }
+})

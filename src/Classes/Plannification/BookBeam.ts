@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 13
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -26,14 +26,27 @@ export const TURN_WEIGHTS: readonly number[] = [1, 0.6, 0.4]
 export const REFINE_KEEP = 12
 /** Part des dégâts modélisés (danger de la case finale) retranchée de mes PV au tour simulé suivant. Heuristique. */
 export const DAMAGE_TAKEN_FRACTION = 0.5
-/** Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus : le tour 2 calcule aussi ses cases atteignables. */
-export const NODE_COST_MARGIN = 2
+/**
+ * Marge sur le coût mesuré d'un nœud pour décider d'ouvrir un niveau de plus. Le coût est mesuré sur le niveau 1 (une seule
+ * racine, qui calcule aussi ses cases atteignables) ; combat 55027536 (e7ef19c) : les nœuds du niveau 2 coûtent environ la
+ * moitié (≤ 87k contre 120-155k estimés). À 2, 3 nœuds sur 5 étaient ouverts aux tours 5 et 6 alors que le tour finissait à
+ * 44 % / 41 % des ops. Risque à 1,2 : un niveau coupé en cours est abandonné (travail perdu, le niveau précédent reste). Jamais
+ * au-delà du plafond global : `SEARCH_GLOBAL_FRACTION` (0,80) et `BOOK_SEARCH_FRACTION` (0,70) bornent toujours la recherche.
+ */
+export const NODE_COST_MARGIN = 1.2
 /**
  * Crédit d'un boost de force posé SANS tir (voir `idleBoostCredit`) : part des dégâts supplémentaires du boost sur les tours
  * où il sert, à 0,75 comme les autres crédits de tours futurs (`FUTURE_TURN_WEIGHT`). Durées relevées dans fight.json : protein 2
  * tours, motivation 3 (le tour du lancer compte pour 1 ; l'effet est retiré au début de mon tour suivant la durée).
  */
 export const IDLE_BOOST_SHOT_WEIGHT = 0.75
+/**
+ * Tempo perdu d'une fuite sans tir au tour 1 : une étape qui n'inflige rien, recule (progrès < 0) et ne soigne ni ne protège
+ * perd ce poids × les dégâts de la meilleure étape NON létale du même tour qui tire (`penalizeFleeNoShot`). Combat 55028419,
+ * tour 8 : recul de 5 cases + protein (0 dégât) retenu à 158,4 contre un tir non létal de 93,9 dégâts écarté à 77,2 (danger
+ * exposé 0,5 × 185,76). Valeur non calibrée.
+ */
+export const FLEE_NO_SHOT_WEIGHT = 1.0
 /** Multiplicateur d'un coup critique (CRITICAL_FACTOR officiel = 1,3), chance = agilité / 1000. */
 const CRITICAL_FACTOR = 1.3
 
@@ -138,6 +151,8 @@ export interface TurnStep {
 	/** Limite létale appliquée (PV + soin, × acceptation du duel) : pour le journal. */
 	readonly limit: number
 	readonly score: number
+	/** Pénalité de fuite sans tir déjà retranchée de `score` (tour 1, `penalizeFleeNoShot`) ; 0 sinon. */
+	readonly fleePenalty: number
 	/** Crédit d'un boost de force posé sans tir : ajouté au score du faisceau seulement s'il reste à un tour (voir `runBeam`). */
 	readonly idleCredit: number
 	/** Clé de distinction : actions et cases. */
@@ -281,7 +296,7 @@ function stepOf(env: BeamEnv, p: Plan): TurnStep {
 	const group = `${p.target?.enemy.id ?? "-"}:${signatureOf(p.combo)}:${p.variantIdx}:${supportMask}`
 	return {
 		target: p.target, shotCell: p.shotCell, finalCell: p.finalCell, beforeMp: p.beforeMp, afterMp: p.afterMp, combo: p.combo, net: p.net,
-		boosts: variant.boosts, supports: p.supports, tpGain: variant.tpGain, tpUsed, danger, outcome, lethal, limit, score,
+		boosts: variant.boosts, supports: p.supports, tpGain: variant.tpGain, tpUsed, danger, outcome, lethal, limit, score, fleePenalty: 0,
 		idleCredit: p.combo.items.length === 0 ? p.idleCredit : 0, key: `${p.finalCell.id}:${p.shotCell.id}:${group}`, group, plan: p
 	}
 }
@@ -552,7 +567,7 @@ function nextState(env: BeamEnv, state: SimState, step: TurnStep): SimState {
 	const enemies = state.enemies.map((enemy) => {
 		const life = enemy === step.target ? Math.max(0, enemy.life - step.outcome.damage) : enemy.life
 		return life > 0
-			? { enemy: enemy.enemy, life, cell: env.mover({ cell: enemy.cell, mp: enemy.enemy.mp }, step.finalCell) }
+			? { enemy: enemy.enemy, life, cell: env.mover({ cell: enemy.cell, mp: enemy.enemy.mp, id: enemy.enemy.id }, step.finalCell) }
 			: { enemy: enemy.enemy, life, cell: enemy.cell }
 	})
 	let held = state.held
@@ -592,6 +607,24 @@ export function worthDeepening(env: BeamEnv, beam: readonly BeamNode[]): boolean
 		const step = node.steps[0]!
 		return !step.lethal && step.outcome.damage > best.outcome.damage
 	})
+}
+
+/**
+ * Tour 1 : retranche `FLEE_NO_SHOT_WEIGHT` × (dégâts de la meilleure étape non létale qui tire) du score de chaque étape sans
+ * dégâts, en recul, sans soin ni bouclier. Sans étape non létale qui tire, la fuite est justifiée : rien n'est changé.
+ * Modifie `sink` en place (les diagnostics, qui lisent le même tableau, voient le score pénalisé).
+ */
+export function penalizeFleeNoShot(sink: TurnStep[]): void {
+	let lost = 0
+	for (const step of sink) if (!step.lethal && step.outcome.damage > lost) lost = step.outcome.damage
+	const penalty = FLEE_NO_SHOT_WEIGHT * lost
+	if (penalty <= 0) return
+	for (let i = 0; i < sink.length; i++) {
+		const { outcome } = sink[i]!
+		if (outcome.damage === 0 && outcome.progress < 0 && outcome.heal === 0 && outcome.shield === 0) {
+			sink[i] = { ...sink[i]!, score: sink[i]!.score - penalty, fleePenalty: penalty }
+		}
+	}
 }
 
 /**
@@ -636,6 +669,7 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 				if (!node.state.enemies.some((enemy) => enemy.life > 0)) { next.push(node); continue }
 				sink = []
 				expandTurn(env, node.state, k, sink)
+				if (k === 0) penalizeFleeNoShot(sink)
 				for (const step of selectTop(sink, width, betterStep)) {
 					next.push({
 						state: nextState(env, node.state, step), score: node.score + (TURN_WEIGHTS[k] ?? 0) * step.score,
@@ -648,6 +682,7 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 			cut = error.message
 			logSearchCut("livre", cut, `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
 			// Tour 1 coupé : les étapes déjà produites sont complètes, on garde les meilleures ; plus loin, niveau abandonné.
+			if (k === 0) penalizeFleeNoShot(sink)
 			if (k === 0) for (const step of selectTop(sink, width, betterStep)) {
 				next.push({ state: nextState(env, root, step), score: (TURN_WEIGHTS[0] ?? 1) * step.score, steps: [step], key: step.key, group: step.group })
 			}

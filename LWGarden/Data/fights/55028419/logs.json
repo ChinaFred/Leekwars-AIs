@@ -1,0 +1,1344 @@
+{
+ "98285": {
+  "1": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Speech] Greeting: \"Salutations!\""
+   ]
+  ],
+  "2": [
+   [
+    0,
+    1,
+    "[EnemyMemory] Identified poreaufessor (#1) lvl 39, 414 HP, 2 weapons, 8 chips"
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:54 (5 MP), enemy#1:26 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 54/54 cells, danger max 0.0 min 0.0, safest (-10,1), 1 armed enemies, 0 pairs, 0 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 502 work units, 1 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 28196, beam 111021 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.3: [233>233 - dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.3: [233>233 - boost:protein dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.3: [233>233 - boost:motivation dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.3: [233>233 - boost:motivation+protein dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.3: [163>163 - dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [233>233 - dmg 0.0 heal 0.0 danger 0 s 6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 144585, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":2,\"y\":-15}},\"origin\":{\"x\":-10,\"y\":1},\"shotCell\":{\"x\":-5,\"y\":1},\"destination\":{\"x\":-5,\"y\":1},\"tp\":{\"available\":9,\"planned\":0,\"gainedFromBoost\":0,\"remainingIfExecuted\":9},\"mp\":{\"available\":5,\"before\":5,\"after\":0},\"weapon\":null,\"chips\":[],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"no attack selected\",\"usefulDamage\":0,\"danger\":0,\"score\":6.25,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-10,\"y\":1},\"tp\":9,\"mp\":5,\"details\":{\"to\":{\"x\":-5,\"y\":1},\"mpCost\":5}}"
+   ]
+  ],
+  "4": [
+   [
+    0,
+    1,
+    "[Weapon] Opening equip: broadsword (1 TP, 9 → 8, result true)"
+   ],
+   [
+    0,
+    1,
+    "[History] T1 TP 1/9 MP 5/5 dealt 0 taken 0 passive 0 | move:5:-; equip:true:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Je suis né dans la terre, prêt à en découdre.\""
+   ]
+  ],
+  "5": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 204705/2000000 (10.2%)"
+   ]
+  ],
+  "18": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[EnemyMemory] poreaufessor observed: magnum, protein, helmet, motivation"
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:52 (5 MP), enemy#1:45 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 52/52 cells, danger max 294.9 min 0.0, safest (-5,1), 1 armed enemies, 765 pairs, 14 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 2416 work units, 2 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 28118, beam 178900 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 64.4: [269>269 - boost:protein dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 64.4: [269>269 - boost:motivation+protein dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 2.5: [269>269 - dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 2.5: [269>269 - boost:motivation dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 2.5: [234>234 - dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [269>269 - boost:protein dmg 0.0 heal 0.0 danger 0 s 2.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 212332, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-12}},\"origin\":{\"x\":-5,\"y\":1},\"shotCell\":{\"x\":-3,\"y\":1},\"destination\":{\"x\":-3,\"y\":1},\"tp\":{\"available\":10,\"planned\":3,\"gainedFromBoost\":0,\"remainingIfExecuted\":7},\"mp\":{\"available\":5,\"before\":2,\"after\":0},\"weapon\":null,\"chips\":[],\"mpBoost\":null,\"boost\":[{\"name\":\"protein\",\"cost\":3}],\"protection\":[],\"attackLegality\":\"no attack selected\",\"usefulDamage\":0,\"danger\":0,\"score\":64.44778749999998,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-5,\"y\":1},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-3,\"y\":1},\"mpCost\":2}}"
+   ]
+  ],
+  "19": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"boost\",\"from\":{\"x\":-3,\"y\":1},\"tp\":10,\"mp\":3,\"details\":{\"chip\":\"protein\",\"target\":0,\"tpCost\":3}}"
+   ]
+  ],
+  "21": [
+   [
+    0,
+    1,
+    "[History] T2 TP 3/10 MP 2/5 dealt 0 taken 0 passive 0 | move:2:-; protein:1:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"J'ai poussé à la dure, sous la pluie et le vent.\""
+   ]
+  ],
+  "22": [
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Dès le potager, j'ai compris la loi du plus fort.\""
+   ]
+  ],
+  "23": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 340565/2000000 (17.0%)"
+   ]
+  ],
+  "31": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[EnemyMemory] poreaufessor observed: stretching"
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:51 (5 MP), enemy#1:42 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 51/51 cells, danger max 360.0 min 0.0, safest (-8,1), 1 armed enemies, 1974 pairs, 318 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 2, 5 plans, 4229 work units, 3 tables, skipped level 3: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 14000, beam 564364 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 107.5: [179>179 - boost:motivation dmg 0.0 heal 0.0 danger 0 s -6.3] [146>128 flame+flame+flame dmg 189.6 heal 0.0 danger 0 s 189.6]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 77.4: [179>179 - boost:motivation dmg 0.0 heal 0.0 danger 0 s -6.3] [163>145 magnum+magnum dmg 139.4 heal 0.0 danger 0 s 139.4]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 73.5: [179>179 - dmg 0.0 heal 0.0 danger 0 s -6.3] [146>128 magnum+flame dmg 132.9 heal 0.0 danger 0 s 132.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 69.6: [179>179 - dmg 0.0 heal 0.0 danger 0 s -6.3] [146>128 flame+flame boost:motivation dmg 126.4 heal 0.0 danger 0 s 126.4]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 45.3: [179>179 - dmg 0.0 heal 0.0 danger 0 s -6.3] [163>145 magnum+spark dmg 86.0 heal 0.0 danger 0 s 86.0]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: [287>287 spark+spark+spark dmg 83.0 heal 0.0 danger 183.84 s -8.9] reason: lower score (-8.9 < -6.3)"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [179>179 - boost:motivation dmg 0.0 heal 0.0 danger 0 s -6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 584036, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":-1,\"y\":-8}},\"origin\":{\"x\":-3,\"y\":1},\"shotCell\":{\"x\":-8,\"y\":1},\"destination\":{\"x\":-8,\"y\":1},\"tp\":{\"available\":10,\"planned\":4,\"gainedFromBoost\":2,\"remainingIfExecuted\":8},\"mp\":{\"available\":5,\"before\":5,\"after\":0},\"weapon\":null,\"chips\":[],\"mpBoost\":null,\"boost\":[{\"name\":\"motivation\",\"cost\":4}],\"protection\":[],\"attackLegality\":\"no attack selected\",\"usefulDamage\":0,\"danger\":0,\"score\":107.49019999999999,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 2\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-3,\"y\":1},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-8,\"y\":1},\"mpCost\":5}}"
+   ]
+  ],
+  "32": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"boost\",\"from\":{\"x\":-8,\"y\":1},\"tp\":10,\"mp\":0,\"details\":{\"chip\":\"motivation\",\"target\":0,\"tpCost\":4}}"
+   ]
+  ],
+  "34": [
+   [
+    0,
+    1,
+    "[History] T3 TP 2/10 MP 5/5 dealt 0 taken 0 passive 0 | move:5:-; motivation:1:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Mes racines ont appris à s'ancrer pour encaisser.\""
+   ]
+  ],
+  "35": [
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"On m'a arraché du sol, mais jamais du combat.\""
+   ]
+  ],
+  "36": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 1019507/2000000 (51.0%)"
+   ]
+  ],
+  "45": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:52 (5 MP), enemy#1:46 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 52/52 cells, danger max 282.0 min 0.0, safest (-11,1), 1 armed enemies, 1610 pairs, 347 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 312 work units, 4 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 14095, beam 45325 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 53.2: [93>93 spark+spark+spark+spark dmg 125.2 heal 0.0 danger 144 s 53.2]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -3.8: [125>125 - dmg 0.0 heal 0.0 danger 0 s -3.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -3.8: [160>160 - dmg 0.0 heal 0.0 danger 0 s -3.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -3.8: [195>195 - dmg 0.0 heal 0.0 danger 0 s -3.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -3.8: [230>230 - dmg 0.0 heal 0.0 danger 0 s -3.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [93>93 spark+spark+spark+spark dmg 125.2 heal 0.0 danger 144 s 53.2]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 63123, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-4}},\"origin\":{\"x\":-8,\"y\":1},\"shotCell\":{\"x\":-9,\"y\":-3},\"destination\":{\"x\":-9,\"y\":-3},\"tp\":{\"available\":12,\"planned\":12,\"gainedFromBoost\":0,\"remainingIfExecuted\":0},\"mp\":{\"available\":5,\"before\":5,\"after\":0},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":125.17439999999999,\"danger\":144,\"score\":53.17439999999999,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-8,\"y\":1},\"tp\":12,\"mp\":5,\"details\":{\"to\":{\"x\":-9,\"y\":-3},\"mpCost\":5}}"
+   ]
+  ],
+  "46": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-3},\"tp\":12,\"mp\":0,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "48": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-3},\"tp\":9,\"mp\":0,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "50": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-3},\"tp\":6,\"mp\":0,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "52": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-3},\"tp\":3,\"mp\":0,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "54": [
+   [
+    0,
+    1,
+    "[History] T4 TP 12/12 MP 5/5 dealt 116 taken 0 passive 1 | move:5:-; spark:1:26; spark:1:28; spark:1:38; spark:1:24"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 493074/2000000 (24.7%)"
+   ]
+  ],
+  "68": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:46 (5 MP), enemy#1:44 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 46/46 cells, danger max 372.2 min 0.0, safest (-13,-3), 1 armed enemies, 1540 pairs, 154 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 2, 5 plans, 3760 work units, 4 tables, skipped level 3: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 13595, beam 399667 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 203.8: [59>76 spark+spark+spark boost:protein dmg 81.2 heal 0.0 danger 190.07999999999998 s -13.8] [131>131 broadsword+flash+pebble dmg 241.8 heal 0.0 danger 372.24 s 362.6]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 73.8: [59>76 spark+spark+spark boost:protein dmg 81.2 heal 0.0 danger 190.07999999999998 s -13.8] [59>76 flame+flash+pebble dmg 241.0 heal 0.0 danger 190.07999999999998 s 145.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 61.1: [59>76 spark+spark+spark boost:protein dmg 81.2 heal 0.0 danger 190.07999999999998 s -13.8] [41>58 flame+flash+spark dmg 219.9 heal 0.0 danger 190.07999999999998 s 124.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 43.7: [21>21 - boost:protein dmg 0.0 heal 0.0 danger 0 s -5.0] [39>21 spark+spark+spark dmg 81.2 heal 0.0 danger 0 s 81.2]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 42.8: [59>76 spark+spark+spark boost:protein dmg 81.2 heal 0.0 danger 190.07999999999998 s -13.8] [42>25 magnum+flame dmg 189.3 heal 0.0 danger 190.07999999999998 s 94.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [59>76 spark+spark+spark boost:protein dmg 81.2 heal 0.0 danger 190.07999999999998 s -13.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 418833, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-6}},\"origin\":{\"x\":-9,\"y\":-3},\"shotCell\":{\"x\":-9,\"y\":-5},\"destination\":{\"x\":-9,\"y\":-4},\"tp\":{\"available\":12,\"planned\":12,\"gainedFromBoost\":0,\"remainingIfExecuted\":0},\"mp\":{\"available\":5,\"before\":2,\"after\":1},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[{\"name\":\"protein\",\"cost\":3}],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":81.243,\"danger\":190.07999999999998,\"score\":203.78429999999997,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 2\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-9,\"y\":-3},\"tp\":12,\"mp\":5,\"details\":{\"to\":{\"x\":-9,\"y\":-5},\"mpCost\":2}}"
+   ]
+  ],
+  "69": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"boost\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":12,\"mp\":3,\"details\":{\"chip\":\"protein\",\"target\":0,\"tpCost\":3}}"
+   ]
+  ],
+  "71": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":9,\"mp\":3,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "73": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":6,\"mp\":3,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "75": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":3,\"mp\":3,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "77": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"final move\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":0,\"mp\":3,\"details\":{\"to\":{\"x\":-9,\"y\":-4},\"mpCost\":1}}"
+   ]
+  ],
+  "78": [
+   [
+    0,
+    1,
+    "[History] T5 TP 12/12 MP 3/5 dealt 59 taken 0 passive 0 | move:2:-; protein:1:-; spark:1:13; spark:1:22; spark:1:24; move:1:-"
+   ],
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 752025/2000000 (37.6%)"
+   ]
+  ],
+  "88": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:37 (5 MP), enemy#1:44 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 37/37 cells, danger max 372.2 min 0.0, safest (-13,-3), 1 armed enemies, 1408 pairs, 62 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 2, 5 plans, 2632 work units, 5 tables, skipped level 3: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 12833, beam 328783 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 27.1: [59>76 spark+spark+spark dmg 78.7 heal 0.0 danger 190.07999999999998 s -16.3] [59>76 flame+flash+pebble dmg 167.4 heal 0.0 danger 190.07999999999998 s 72.4]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 23.0: [21>21 - dmg 0.0 heal 0.0 danger 0 s -6.3] [4>4 spark+spark+spark dmg 48.7 heal 0.0 danger 0 s 48.7]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 17.7: [59>76 spark+spark+spark dmg 78.7 heal 0.0 danger 190.07999999999998 s -16.3] [41>58 flame+flash+spark dmg 151.8 heal 0.0 danger 190.07999999999998 s 56.7]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 12.9: [59>76 spark+spark+spark dmg 78.7 heal 0.0 danger 190.07999999999998 s -16.3] [39>21 spark+spark+spark dmg 48.7 heal 0.0 danger 0 s 48.7]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 6.4: [59>76 spark+spark+spark dmg 78.7 heal 0.0 danger 190.07999999999998 s -16.3] [42>25 magnum+flame dmg 132.9 heal 0.0 danger 190.07999999999998 s 37.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [59>76 spark+spark+spark dmg 78.7 heal 0.0 danger 190.07999999999998 s -16.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 346305, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-6}},\"origin\":{\"x\":-9,\"y\":-4},\"shotCell\":{\"x\":-9,\"y\":-5},\"destination\":{\"x\":-9,\"y\":-4},\"tp\":{\"available\":10,\"planned\":9,\"gainedFromBoost\":0,\"remainingIfExecuted\":1},\"mp\":{\"available\":5,\"before\":1,\"after\":1},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":78.71544000000002,\"danger\":190.07999999999998,\"score\":27.091860000000047,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 2\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-9,\"y\":-4},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-9,\"y\":-5},\"mpCost\":1}}"
+   ]
+  ],
+  "89": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":10,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "91": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":7,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "93": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":4,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "95": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"final move\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":1,\"mp\":4,\"details\":{\"to\":{\"x\":-9,\"y\":-4},\"mpCost\":1}}"
+   ]
+  ],
+  "96": [
+   [
+    0,
+    1,
+    "[History] T6 TP 9/10 MP 2/5 dealt 62 taken 0 passive 0 | move:1:-; spark:1:23; spark:1:15; spark:1:24; move:1:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Je n'ai pas grandi pour finir dans une soupe.\""
+   ]
+  ],
+  "97": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 666940/2000000 (33.3%)"
+   ]
+  ],
+  "107": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:37 (5 MP), enemy#1:44 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 37/37 cells, danger max 282.0 min 0.0, safest (-13,-3), 1 armed enemies, 1408 pairs, 0 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 181 work units, 5 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 12804, beam 33687 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [59>76 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [25>25 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [78>78 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [43>43 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -6.3: [21>21 - dmg 0.0 heal 0.0 danger 0 s -6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [59>76 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 50217, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-6}},\"origin\":{\"x\":-9,\"y\":-4},\"shotCell\":{\"x\":-9,\"y\":-5},\"destination\":{\"x\":-9,\"y\":-4},\"tp\":{\"available\":10,\"planned\":9,\"gainedFromBoost\":0,\"remainingIfExecuted\":1},\"mp\":{\"available\":5,\"before\":1,\"after\":1},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":93.8808,\"danger\":144,\"score\":21.880799999999994,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-9,\"y\":-4},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-9,\"y\":-5},\"mpCost\":1}}"
+   ]
+  ],
+  "108": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":10,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "110": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":7,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "112": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":4,\"mp\":4,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "114": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"final move\",\"from\":{\"x\":-9,\"y\":-5},\"tp\":1,\"mp\":4,\"details\":{\"to\":{\"x\":-9,\"y\":-4},\"mpCost\":1}}"
+   ]
+  ],
+  "115": [
+   [
+    0,
+    1,
+    "[History] T7 TP 9/10 MP 2/5 dealt 95 taken 0 passive 0 | move:1:-; spark:1:33; spark:1:30; spark:1:32; move:1:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Ma seule marmite, c'est l'arène.\""
+   ]
+  ],
+  "116": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 367337/2000000 (18.4%)"
+   ]
+  ],
+  "128": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:37 (5 MP), enemy#1:44 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 37/37 cells, danger max 363.8 min 0.0, safest (-13,-3), 1 armed enemies, 1408 pairs, 0 LoS"
+   ],
+   [
+    0,
+    1,
+    "SEARCH CUT [livre] cause=deepen fraction ops=837646/2000000 profondeur=3 niveau_atteint=2",
+    16711680
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 2, 5 plans, 4052 work units, 5 tables, skipped level 3: budget"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 12804, beam 522178 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 158.4: [21>21 - boost:protein dmg 0.0 heal 0.0 danger 0 s -6.3] [41>41 flame+flash+spark dmg 183.0 heal 0.0 danger 297.99 s 274.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 77.2: [59>76 spark+spark boost:protein dmg 54.2 heal 0.0 danger 185.76 s -38.7] [59>76 flame+flash+pebble dmg 128.8 heal 0.0 danger 185.76 s 193.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 77.2: [59>76 spark+spark boost:protein dmg 54.2 heal 0.0 danger 185.76 s -38.7] [41>58 flame+flash+spark dmg 128.8 heal 0.0 danger 185.76 s 193.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 77.2: [59>76 spark+spark boost:protein dmg 54.2 heal 0.0 danger 185.76 s -38.7] [42>25 magnum+flame dmg 128.8 heal 0.0 danger 185.76 s 193.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 77.2: [59>76 spark+spark boost:protein dmg 54.2 heal 0.0 danger 185.76 s -38.7] [59>76 flame+flash boost:motivation dmg 128.8 heal 0.0 danger 185.76 s 193.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: [59>76 spark+spark boost:protein dmg 54.2 heal 0.0 danger 185.76 s -38.7] reason: lower score (-38.7 < -6.3)"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [21>21 - boost:protein dmg 0.0 heal 0.0 danger 0 s -6.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 540651, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":0,\"y\":-6}},\"origin\":{\"x\":-9,\"y\":-4},\"shotCell\":{\"x\":-13,\"y\":-3},\"destination\":{\"x\":-13,\"y\":-3},\"tp\":{\"available\":10,\"planned\":3,\"gainedFromBoost\":0,\"remainingIfExecuted\":7},\"mp\":{\"available\":5,\"before\":5,\"after\":0},\"weapon\":null,\"chips\":[],\"mpBoost\":null,\"boost\":[{\"name\":\"protein\",\"cost\":3}],\"protection\":[],\"attackLegality\":\"no attack selected\",\"usefulDamage\":0,\"danger\":0,\"score\":158.45,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 2\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-9,\"y\":-4},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-13,\"y\":-3},\"mpCost\":5}}"
+   ]
+  ],
+  "129": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"boost\",\"from\":{\"x\":-13,\"y\":-3},\"tp\":10,\"mp\":0,\"details\":{\"chip\":\"protein\",\"target\":0,\"tpCost\":3}}"
+   ]
+  ],
+  "131": [
+   [
+    0,
+    1,
+    "[History] T8 TP 3/10 MP 5/5 dealt 0 taken 0 passive 0 | move:5:-; protein:1:-"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"J'ai affûté mes feuilles comme des lames.\""
+   ]
+  ],
+  "132": [
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Mon fût blanc encaisse les coups sans broncher.\""
+   ]
+  ],
+  "133": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 859481/2000000 (43.0%)"
+   ]
+  ],
+  "145": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:25 (5 MP), enemy#1:38 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 25/25 cells, danger max 363.8 min 0.0, safest (-13,0), 1 armed enemies, 760 pairs, 106 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 2, 5 plans, 2892 work units, 6 tables, skipped level 3: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 11832, beam 408661 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 103.6: [75>75 spark+spark+spark dmg 83.8 heal 0.0 danger 185.76 s -9.1] [59>59 flame+flash+pebble dmg 125.2 heal 0.0 danger 185.76 s 187.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 103.6: [75>75 spark+spark+spark dmg 83.8 heal 0.0 danger 185.76 s -9.1] [58>75 flame+flame+pebble dmg 125.2 heal 0.0 danger 185.76 s 187.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 103.6: [75>75 spark+spark+spark dmg 83.8 heal 0.0 danger 185.76 s -9.1] [77>77 broadsword+flash+pebble dmg 125.2 heal 0.0 danger 185.76 s 187.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 103.6: [75>75 spark+spark+spark dmg 83.8 heal 0.0 danger 185.76 s -9.1] [77>77 broadsword+flash boost:motivation dmg 125.2 heal 0.0 danger 185.76 s 187.8]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 100.8: [75>75 spark+spark boost:motivation dmg 55.8 heal 0.0 danger 185.76 s -37.0] [59>59 flame+flame+flash dmg 153.2 heal 0.0 danger 185.76 s 229.7]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [75>75 spark+spark+spark dmg 83.8 heal 0.0 danger 185.76 s -9.1]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 425397, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":-3,\"y\":-6}},\"origin\":{\"x\":-13,\"y\":-3},\"shotCell\":{\"x\":-10,\"y\":-3},\"destination\":{\"x\":-10,\"y\":-3},\"tp\":{\"available\":10,\"planned\":9,\"gainedFromBoost\":0,\"remainingIfExecuted\":1},\"mp\":{\"available\":5,\"before\":3,\"after\":0},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":83.77055999999997,\"danger\":185.76,\"score\":103.59705600000001,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 2\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"approach\",\"from\":{\"x\":-13,\"y\":-3},\"tp\":10,\"mp\":5,\"details\":{\"to\":{\"x\":-10,\"y\":-3},\"mpCost\":3}}"
+   ]
+  ],
+  "146": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":10,\"mp\":2,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "148": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":7,\"mp\":2,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "150": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":4,\"mp\":2,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "152": [
+   [
+    0,
+    1,
+    "[History] T9 TP 9/10 MP 3/5 dealt 106 taken 0 passive 1 | move:3:-; spark:1:33; spark:1:37; spark:1:36"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Chaque cicatrice sur mon vert est un trophée.\""
+   ]
+  ],
+  "153": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 631811/2000000 (31.6%)"
+   ]
+  ],
+  "164": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:37 (5 MP), enemy#1:31 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 37/37 cells, danger max 282.0 min 144.0, safest (-10,-3), 1 armed enemies, 1147 pairs, 140 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 337 work units, 6 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 12804, beam 61532 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [75>75 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 21.9: [93>93 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -9.4: [75>75 spark+spark boost:motivation dmg 62.6 heal 0.0 danger 144 s -9.4]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -73.3: [57>57 - dmg 0.0 heal 0.0 danger 144 s -73.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -73.3: [57>57 - boost:motivation dmg 0.0 heal 0.0 danger 144 s -73.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [75>75 spark+spark+spark dmg 93.9 heal 0.0 danger 144 s 21.9]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 78437, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":-4,\"y\":-7}},\"origin\":{\"x\":-10,\"y\":-3},\"shotCell\":{\"x\":-10,\"y\":-3},\"destination\":{\"x\":-10,\"y\":-3},\"tp\":{\"available\":10,\"planned\":9,\"gainedFromBoost\":0,\"remainingIfExecuted\":1},\"mp\":{\"available\":5,\"before\":0,\"after\":0},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":93.8808,\"danger\":144,\"score\":21.880799999999994,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":10,\"mp\":5,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "166": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":7,\"mp\":5,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "168": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":4,\"mp\":5,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "170": [
+   [
+    0,
+    1,
+    "[History] T10 TP 9/10 MP 0/5 dealt 105 taken 0 passive 0 | spark:1:33; spark:1:37; spark:1:35"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"J'ai déjà croqué plus d'un bulbe prétentieux.\""
+   ]
+  ],
+  "171": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 425416/2000000 (21.3%)"
+   ]
+  ],
+  "183": [
+   [
+    0,
+    1,
+    "\n=== KASSBI BOOK TURN START ==="
+   ],
+   [
+    0,
+    1,
+    "[Reachable] me:37 (5 MP), enemy#1:31 (5 MP)"
+   ],
+   [
+    0,
+    1,
+    "[Threat] 37/37 cells, danger max 375.1 min 191.5, safest (-10,-3), 1 armed enemies, 1147 pairs, 0 LoS"
+   ],
+   [
+    0,
+    1,
+    "[Book] profile aggression 50: depth 1, 5 plans, 647 work units, 6 tables, skipped level 2: no better non-lethal plan, no boost, no duel"
+   ],
+   [
+    0,
+    1,
+    "[Book] ops: prepare 12803, beam 112577 (units are not ops)"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam 73.5: [75>75 spark+spark boost:protein dmg 49.0 heal 0.0 danger 191.52 s 73.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -47.0: [75>75 spark+spark+spark dmg 48.7 heal 0.0 danger 191.52 s -47.0]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -63.3: [75>75 spark+spark boost:motivation dmg 32.5 heal 0.0 danger 191.52 s -63.3]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -68.7: [75>75 spark boost:motivation+protein dmg 27.1 heal 0.0 danger 191.52 s -68.7]"
+   ],
+   [
+    0,
+    1,
+    "[Book] beam -97.0: [57>57 - dmg 0.0 heal 0.0 danger 191.52 s -97.0]"
+   ],
+   [
+    0,
+    1,
+    "[Book] unchosen with more damage: none"
+   ],
+   [
+    0,
+    1,
+    "[Book] chosen: [75>75 spark+spark boost:protein dmg 49.0 heal 0.0 danger 191.52 s 73.5]"
+   ],
+   [
+    0,
+    1,
+    "[Book] planning ops: 130377, plan found"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] plan before execution {\"mode\":\"complete intent; native checks may cancel actions\",\"order\":[\"approach\",\"boost\",\"protection\",\"equipment if needed\",\"offensive chips\",\"weapon shots\",\"final move\"],\"target\":{\"id\":1,\"position\":{\"x\":-4,\"y\":-7}},\"origin\":{\"x\":-10,\"y\":-3},\"shotCell\":{\"x\":-10,\"y\":-3},\"destination\":{\"x\":-10,\"y\":-3},\"tp\":{\"available\":10,\"planned\":9,\"gainedFromBoost\":0,\"remainingIfExecuted\":1},\"mp\":{\"available\":5,\"before\":0,\"after\":0},\"weapon\":null,\"chips\":[{\"name\":\"spark\",\"cost\":3},{\"name\":\"spark\",\"cost\":3}],\"mpBoost\":null,\"boost\":[{\"name\":\"protein\",\"cost\":3}],\"protection\":[],\"attackLegality\":\"native cells; range/LOS checked in selection, native permission rechecked at execution\",\"usefulDamage\":49,\"danger\":191.52,\"score\":73.5,\"nextTurn\":0,\"stateCurrent\":true,\"progress\":0,\"progressModel\":\"Manhattan\",\"stagnation\":null,\"searchStatus\":\"book beam depth 1\",\"executionBudget\":\"remaining > 3% total + 2 * largest observed execution segment; opaque costs not guaranteed\",\"estimates\":\"damage/score/danger modeled, not guaranteed outcome\"}"
+   ],
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"boost\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":10,\"mp\":5,\"details\":{\"chip\":\"protein\",\"target\":0,\"tpCost\":3}}"
+   ]
+  ],
+  "185": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":7,\"mp\":5,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "187": [
+   [
+    0,
+    1,
+    "[Tactical] phase before action {\"phase\":\"offensive chip\",\"from\":{\"x\":-10,\"y\":-3},\"tp\":4,\"mp\":5,\"details\":{\"chip\":\"spark\",\"target\":1,\"tpCost\":3}}"
+   ]
+  ],
+  "193": [
+   [
+    0,
+    1,
+    "[History] T11 TP 9/10 MP 0/5 dealt 49 taken 0 passive 0 | protein:1:-; spark:1:14; spark:1:35"
+   ],
+   [
+    0,
+    1,
+    "[Speech] Leek life: \"Les faibles finissent en rondelles ; moi je reste entier.\""
+   ]
+  ],
+  "194": [
+   [
+    0,
+    1,
+    "=== KASSBI BOOK TURN END ===\n"
+   ],
+   [
+    0,
+    1,
+    "Operations: 470326/2000000 (23.5%)"
+   ]
+  ]
+ }
+}

@@ -75,7 +75,7 @@ export function turn(): void {
 			const before = operations()
 			let plan = null
 			try {
-				plan = planWithBook(me, context, leekProfile, { standoff })
+				plan = planWithBook(me, context, leekProfile, { standoff, stanceOf: (id) => enemyMemory.stanceOf(id)?.stance ?? "unknown" })
 			} catch (error) {
 				reportError("src/Main/Kassbi_Book.ts", "planWithBook", error)
 			}

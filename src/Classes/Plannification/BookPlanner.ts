@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -13,7 +13,8 @@ import {
 } from "./BookBeam.js"
 import { BOOK_DUEL_SEARCH_FRACTION, BookBudget } from "./BookBudget.js"
 import { catalogFor } from "./BookCatalog.js"
-import { EnemyMover, advanceTowardMe, futureDangerOf } from "./BookEnemyModel.js"
+import type { EnemyStance } from "../Context/EnemyBehavior.js"
+import { EnemyMover, advanceTowardMe, futureDangerOf, moverByStance } from "./BookEnemyModel.js"
 import { BookObjective, objectiveFor } from "./BookObjective.js"
 import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
@@ -31,6 +32,8 @@ export interface BookOptions {
 	readonly depth?: number
 	/** Hypothèse de déplacement de l'ennemi aux tours simulés (`BookEnemyModel.ts`). */
 	readonly mover?: EnemyMover
+	/** Posture de l'ennemi (`EnemyMemory.stanceOf`) : sans `mover`, un ennemi `defensive` recule aux tours simulés. */
+	readonly stanceOf?: (enemyId: number) => EnemyStance
 	/** Plafond d'unités de travail (tests) ; sans lui, seul le plafond d'opérations du jeu coupe. */
 	readonly workLimit?: number
 	/** Compteur de duel (`BookStandoff.ts`) : lu seulement en posture AGGRESSIVE. */
@@ -47,7 +50,7 @@ function describe(node: BeamNode, items: Catalog["book"]["items"]): string {
 		return `[${step.shotCell.id}>${step.finalCell.id} ${names.join("+") || "-"}` +
 			`${step.boosts.length ? ` boost:${step.boosts.map((b) => b.chip.name).join("+")}` : ""}` +
 			`${step.supports.length ? ` support:${step.supports.map((s) => s.chip.name).join("+")}` : ""} ` +
-			`dmg ${step.outcome.damage.toFixed(1)} heal ${step.outcome.heal.toFixed(1)} danger ${step.danger} s ${step.score.toFixed(1)}]`
+			`dmg ${step.outcome.damage.toFixed(1)} heal ${step.outcome.heal.toFixed(1)} danger ${step.danger} s ${step.score.toFixed(1)}${step.fleePenalty > 0 ? ` (flee no shot -${step.fleePenalty.toFixed(1)})` : ""}]`
 	}).join(" ")
 }
 type Catalog = ReturnType<typeof catalogFor>
@@ -131,7 +134,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const futureDanger = futureDangerOf(known)
 	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
-		me, catalog, objective, budget, rootMpGain: boostedZone === null ? 0 : mpGain, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
+		me, catalog, objective, budget, rootMpGain: boostedZone === null ? 0 : mpGain, mover: options.mover ?? (options.stanceOf === undefined ? advanceTowardMe : moverByStance(options.stanceOf)), allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
 		zone(state, k, mp) {
 			if (k === 0) return mp > me.mp && boostedZone !== null ? boostedZone : rootZone
 			const id = `${k}:${state.cell.id}:${mp}`

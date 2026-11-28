@@ -1,5 +1,7 @@
 // @version:5.8
-// file version: 1
+// file version: 2
+
+import type { EnemyStance } from "../Context/EnemyBehavior.js"
 
 /**
  * Hypothèses sur l'adversaire aux tours SIMULÉS (le tour 1 lit la carte de danger du jeu). Isolées ici : remplacer
@@ -7,7 +9,7 @@
  */
 
 /** Position de l'ennemi après son tour, sachant que je finis le mien sur `me`. */
-export type EnemyMover = (enemy: { cell: Cell; mp: number }, me: Cell) => Cell
+export type EnemyMover = (enemy: { cell: Cell; mp: number; id?: number }, me: Cell) => Cell
 
 /** Hypothèse « il reste là ». */
 export const stayStill: EnemyMover = (enemy) => enemy.cell
@@ -33,6 +35,35 @@ export const advanceTowardMe: EnemyMover = (enemy, me) => {
 		if (!moved) break
 	}
 	return cell
+}
+
+/**
+ * Hypothèse d'un ennemi à posture défensive (`EnemyBehavior.ts`) : il recule de ses PM, un pas à la fois sur l'axe de plus
+ * grand écart (puis l'autre), uniquement si le pas l'éloigne de moi ; il s'arrête contre un obstacle, une entité ou le bord.
+ * Ni soin ni armure simulés. Non vérifiée en combat.
+ */
+export const retreatFromMe: EnemyMover = (enemy, me) => {
+	let cell = enemy.cell
+	for (let step = 0; step < enemy.mp; step++) {
+		const dx = cell.x - me.x
+		const dy = cell.y - me.y
+		const away = (delta: number): number => delta === 0 ? 1 : Math.sign(delta)
+		const axes: Array<[number, number]> = Math.abs(dx) >= Math.abs(dy)
+			? [[away(dx), 0], [0, away(dy)]] : [[0, away(dy)], [away(dx), 0]]
+		let moved = false
+		for (const [sx, sy] of axes) {
+			const next = Field.cellFromXY(cell.x + sx, cell.y + sy)
+			if (next !== null && !next.obstacle && next.entity === null) { cell = next; moved = true; break }
+		}
+		if (!moved) break
+	}
+	return cell
+}
+
+/** Hypothèse choisie par ennemi selon sa posture : recul s'il est `defensive`, sinon avance vers moi (défaut inchangé). */
+export function moverByStance(stanceOf: (enemyId: number) => EnemyStance): EnemyMover {
+	return (enemy, me) => enemy.id !== undefined && stanceOf(enemy.id) === "defensive"
+		? retreatFromMe(enemy, me) : advanceTowardMe(enemy, me)
 }
 
 /**
