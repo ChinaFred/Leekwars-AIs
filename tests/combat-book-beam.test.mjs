@@ -5,7 +5,7 @@ globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, REL
 const { planBeam, planWithBook } = await import("../dist/Classes/Plannification/BookPlanner.js")
 const { OBJECTIVES } = await import("../dist/Classes/Plannification/BookObjective.js")
 const { advanceTowardMe, stayStill, futureDangerOf } = await import("../dist/Classes/Plannification/BookEnemyModel.js")
-const { TURN_WEIGHTS } = await import("../dist/Classes/Plannification/BookBeam.js")
+const { TURN_WEIGHTS, FLEE_NO_SHOT_WEIGHT, penalizeFleeNoShot } = await import("../dist/Classes/Plannification/BookBeam.js")
 const { resetBookCache } = await import("../dist/Classes/Plannification/BookCatalog.js")
 const { computeReachableCells } = await import("../dist/Classes/Context/ReachableCells.js")
 const { ThreatMap } = await import("../dist/Classes/Context/ThreatMap.js")
@@ -300,4 +300,31 @@ test("search cut: the book is refused by the enemy bound or truncated data with 
 		globalThis.Color = oldColor
 		initLeekLogging(previous)
 	}
+})
+
+// Fuite sans tir (combat 55028419, tour 8) : sans repli après tir, tirer depuis x >= 4 expose à `danger`, fuir en x = 3 (hors portée) ne coûte que le recul.
+test("flee without a shot loses against a non-lethal shot, wins when every shot is lethal", () => {
+	const pick = (danger) => {
+		const w = world({ chips: [], enemies: [[10, 5, 1000]], danger: (cell) => cell.x <= 3 ? 0 : danger })
+		w.profile.allowHiding = false
+		return planBeam(w.me, w.context, w.profile, { depth: 1 }).result.best.steps[0]
+	}
+	const shot = pick(100) // tir 40 dégâts, danger exposé 50 : score -10 contre fuite -3,75 sans la pénalité
+	assert.ok(shot.outcome.damage > 0 && !shot.lethal, "le tir non létal l'emporte sur la fuite")
+	const flee = pick(400) // tout tir est létal (400 >= 300 PV) : la fuite reste choisie
+	assert.equal(flee.outcome.damage, 0)
+	assert.ok(flee.outcome.progress < 0 && flee.fleePenalty === 0, "fuite justifiée : aucune pénalité")
+})
+
+test("flee penalty: only a retreat without damage, heal or shield at turn 1", () => {
+	const step = (o, extra = {}) => ({ outcome: { damage: 0, heal: 0, shield: 0, progress: 0, ...o }, lethal: false, score: 10, fleePenalty: 0, ...extra })
+	const shooter = step({ damage: 40 }, { score: 5 })
+	const sink = [step({ progress: -3 }), step({ progress: 2 }), step({ progress: 0 }), step({ progress: -3, heal: 20 }), step({ progress: -3, shield: 8 }),
+		step({ progress: -3, damage: 5 }), shooter, step({ progress: -3 }, { lethal: true })]
+	penalizeFleeNoShot(sink)
+	assert.deepEqual(sink.map((s) => s.fleePenalty), [40, 0, 0, 0, 0, 0, 0, 40])
+	assert.equal(sink[0].score, 10 - 40 * FLEE_NO_SHOT_WEIGHT)
+	const lethalOnly = [step({ progress: -3 }), step({ damage: 40 }, { lethal: true })]
+	penalizeFleeNoShot(lethalOnly)
+	assert.deepEqual(lethalOnly.map((s) => s.fleePenalty), [0, 0], "aucun tir non létal : pas de pénalité")
 })

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 10
+// file version: 11
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -47,7 +47,7 @@ function describe(node: BeamNode, items: Catalog["book"]["items"]): string {
 		return `[${step.shotCell.id}>${step.finalCell.id} ${names.join("+") || "-"}` +
 			`${step.boosts.length ? ` boost:${step.boosts.map((b) => b.chip.name).join("+")}` : ""}` +
 			`${step.supports.length ? ` support:${step.supports.map((s) => s.chip.name).join("+")}` : ""} ` +
-			`dmg ${step.outcome.damage.toFixed(1)} heal ${step.outcome.heal.toFixed(1)} danger ${step.danger} s ${step.score.toFixed(1)}]`
+			`dmg ${step.outcome.damage.toFixed(1)} heal ${step.outcome.heal.toFixed(1)} danger ${step.danger} s ${step.score.toFixed(1)}${step.fleePenalty > 0 ? ` (flee no shot -${step.fleePenalty.toFixed(1)})` : ""}]`
 	}).join(" ")
 }
 type Catalog = ReturnType<typeof catalogFor>
