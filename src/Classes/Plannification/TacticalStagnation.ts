@@ -1,11 +1,11 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { toCandidate } from "../Context/ShotPlan.js"
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { STAGNATION_TURNS } from "../Context/StagnationTracker.js"
-import { Budget, Skipped, TacticalPlan, TacticalPreparation, Unavailable, key, validCost } from "./TacticalTypes.js"
+import { Budget, Skipped, TacticalPlan, TacticalPreparation, NATIVE_CELLS_LIMIT, key, validCost } from "./TacticalTypes.js"
 import { PASSIVE_DANGER_LIFE_FRACTION } from "./TacticalScore.js"
 
 /**
@@ -94,7 +94,7 @@ export function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 	// Zone de tir : cases natives de toutes mes armes/puces offensives (listes déjà obtenues, sinon un appel).
 	const goals = new Map<number, Cell>()
 	const addZone = (raw: readonly Cell[]): void => {
-		if (raw.length > 613) throw new Unavailable("native cells bound")
+		if (raw.length > NATIVE_CELLS_LIMIT) budget.bound("native cells", raw.length, NATIVE_CELLS_LIMIT, "native cells bound", "plan en cours, sinon plan B")
 		for (const cell of raw) {
 			budget.tick()
 			if (!cell.obstacle && (cell.entity === null || cell.entity.id === me.id)) goals.set(key(cell), cell)
@@ -140,6 +140,11 @@ export function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 			queue.push(neighbor)
 			if (wanted.has(id)) missing--
 		}
+	}
+	// Plafond du BFS atteint avant d'avoir étiqueté toute ma zone : une seule ligne, à la sortie de la boucle.
+	if (missing > 0 && queue.length >= STAGNATION_ROUTE_CELLS) {
+		logSearchCut("stagnation", `walking route cells bound (${queue.length} >= ${STAGNATION_ROUTE_CELLS})`,
+			`${cutOperations()} cases_sans_route=${missing}`)
 	}
 	const origin = walk.get(key(me.cell))
 	if (origin === undefined) return hold("no walking route to a firing zone")

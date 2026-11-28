@@ -325,6 +325,42 @@ test("step 3: the next level opens only the nodes the measured cost of a node al
 	assert.equal(poor.result.best.steps[0].key, one.result.best.steps[0].key)
 })
 
+test("search cut: a deeper level refused or narrowed by the operations allowance is one red line; a roomy budget gives none", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const { NODE_COST_MARGIN } = await import("../dist/Classes/Plannification/BookBeam.js")
+	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const budgetOf = (cap, deepen = true) => new class extends BookBudget {
+		ops() { return this.work * 250 }
+		remainingOps() { return cap - this.work * 250 }
+		deepenOk() { return deepen }
+		guard() {}
+	}()
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const run = (options) => { const w = replay(5); initLeekLogging(errors); lines.length = 0; const result = planBeam(w.me, w.context, w.profile, { standoff: duel(6), ...options }); return { result, lines: [...lines] } }
+	try {
+		const level1 = run({ depth: 1 }).result.work * 250
+		const roomy = run({ depth: 2, budget: budgetOf(level1 * 100) })
+		assert.equal(roomy.result.result.depth, 2)
+		assert.deepEqual(roomy.lines, [])
+		const narrow = run({ depth: 2, budget: budgetOf(level1 * (1 + 2.5 * NODE_COST_MARGIN)) })
+		assert.equal(narrow.lines.length, 1, narrow.lines.join("\n"))
+		assert.match(narrow.lines[0], /^SEARCH CUT \[livre\] cause=beam nodes bound \(\d+ > 2\) ops=\d+\/\? profondeur=2 niveau_atteint=1$/)
+		const poor = run({ depth: 2, budget: budgetOf(level1 * 1.5) })
+		assert.equal(poor.lines.length, 1, poor.lines.join("\n"))
+		assert.match(poor.lines[0], /^SEARCH CUT \[livre\] cause=remaining ops < node cost ops=\d+\/\? profondeur=2 niveau_atteint=1$/)
+		const capped = run({ depth: 3, budget: budgetOf(level1 * 100, false) })
+		assert.equal(capped.lines.length, 1, capped.lines.join("\n"))
+		assert.match(capped.lines[0], /^SEARCH CUT \[livre\] cause=deepen fraction ops=\d+\/\? profondeur=3 niveau_atteint=2$/)
+	} finally {
+		globalThis.Debug = oldDebug
+		globalThis.Color = oldColor
+		initLeekLogging(previous)
+	}
+})
+
 test("archived fights: the duel counter stays silent on won fights (one window at most) and fires on 55005067", async () => {
 	const { readFileSync } = await import("node:fs")
 	const triggers = (id) => {

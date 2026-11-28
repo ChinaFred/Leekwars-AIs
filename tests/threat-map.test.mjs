@@ -1548,3 +1548,30 @@ test("search cut: danger map and target zone emit exactly one red line per cut, 
 		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
 	}
 })
+
+// Plafonds des armes et des puces de boost prises en compte par ennemi : une ligne rouge `SEARCH CUT [carte de danger]`
+// seulement quand un candidat lançable est effectivement écarté (valeur observée > borne), aucune sous la borne.
+async function threatCuts(run) {
+	const { initLeekLogging, getLogConfig, LogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const start = debugLogs.length, config = new LogConfig(), previous = getLogConfig()
+	config.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	try { initLeekLogging(config); run() } finally { initLeekLogging(previous) }
+	return debugLogs.slice(start).map(String).filter((text) => text.includes("SEARCH CUT"))
+}
+
+test("search cut: weapons over MAX_THREAT_WEAPONS and boost chips over MAX_THREAT_BOOSTS are logged once, with value and bound", async () => {
+	const build = (spares, boosts) => () => {
+		const grid = makeGrid(21, 21)
+		const { me, myReach } = setupMe(grid, [10, 10])
+		const spareWeapons = Array.from({ length: spares }, (_, i) => weapon({ id: 80 + i, name: `spare${i}`, cost: 2 }))
+		const { input } = addEnemy(grid, me, 2, [7, 10], { weaponItem: weapon({ id: 70, cost: 3 }), otherWeapons: spareWeapons })
+		buildThreatMap(me, myReach, [{ ...input, boosts: Array.from({ length: boosts }, (_, i) => boostChip(1, 10 + i)) }], 1)
+	}
+	assert.deepEqual(await threatCuts(build(3, 3)), [], "4 weapons and 3 boosts: at the limits")
+	const weapons = await threatCuts(build(4, 0))
+	assert.equal(weapons.length, 1, weapons.join("\n"))
+	assert.match(weapons[0], /^SEARCH CUT \[carte de danger\] cause=threat weapons bound \(5 > 4\) ops=\?\/\? repli=/)
+	const boosts = await threatCuts(build(0, 4))
+	assert.equal(boosts.length, 1, boosts.join("\n"))
+	assert.match(boosts[0], /^SEARCH CUT \[carte de danger\] cause=threat boosts bound \(4 > 3\) ops=\?\/\? repli=/)
+})

@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 7
+// file version: 8
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import { LeekStrategy } from "../Strategy/LeekStrategy.js"
@@ -7,7 +7,7 @@ import {
 	BoostOption, agilityBoostFutureDamage, pickAgilityBoost, pickBoost, pickTpBoost, strengthBoostFutureDamage,
 	tpBoostFutureDamage
 } from "../../Brain/StrengthBoost.js"
-import { Budget, TACTICAL_LIMITS, TacticalPlan, Unavailable, validCost } from "./TacticalTypes.js"
+import { Budget, TACTICAL_LIMITS, TacticalPlan, validCost } from "./TacticalTypes.js"
 
 function featureValue(chip: Chip, type: number): number {
 	let value = 0
@@ -130,7 +130,7 @@ export function protections(me: Me, healing: boolean, shielding: boolean, budget
 			((feature.type === Effect.ABSOLUTE_SHIELD || feature.type === Effect.RELATIVE_SHIELD) && shielding)
 		) && usable(chip)
 	)
-	if (candidates.length > TACTICAL_LIMITS.protectionChips) throw new Unavailable("protection bound")
+	if (candidates.length > TACTICAL_LIMITS.protectionChips) budget.bound("protections", candidates.length, TACTICAL_LIMITS.protectionChips, "protection bound")
 	const result: Protection[] = [{ chips: [], cost: 0, heal: 0, absolute: 0, relative: 0 }]
 	for (const chip of candidates) {
 		for (const previous of result.slice()) {

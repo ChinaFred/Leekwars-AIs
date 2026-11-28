@@ -253,6 +253,26 @@ test("(c) not cast when the boosted zone exceeds the joint-plan bound, or when +
 	assert.equal(w.actions.includes("leather_boots"), false)
 })
 
+
+test("(c) search cut: a boosted zone over the cell bound is one red line with value and bound; under the bound, none", async () => {
+	const { initLeekLogging, getLogConfig, LogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const lines = [], oldDebug = globalThis.Debug, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	const config = new LogConfig(); config.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const open = { height: 17, meAt: [8, 8], mp: 6, enemyAt: [21, 8] }
+	try {
+		initLeekLogging(config)
+		assert.equal(decide(open).decision.option, null)
+		assert.equal(lines.length, 1, lines.join("\n"))
+		assert.match(lines[0], /^SEARCH CUT \[boost PM\] cause=cells bound \(145 > 113\) ops=\?\/\? repli=plan sans boost$/)
+		lines.length = 0
+		assert.ok(decide(open, { limit: 145 }).decision.option)
+		assert.deepEqual(lines, [])
+	} finally {
+		globalThis.Debug = oldDebug
+		initLeekLogging(previous)
+	}
+})
 test("5 MP + 2 on open ground (113 cells): the boots are cast when they unlock a shot, and the joint plan keeps the turn", () => {
 	// Ennemi à distance 12 : hors de portée à 5 PM (6 + 5), à portée à 7 PM. Refusé tant que la borne était de 85 cases.
 	const w = makeWorld({ turnNumber: 23, mp: 5, height: 17, meAt: [8, 8], enemyAt: [20, 8] })

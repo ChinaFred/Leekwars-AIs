@@ -64,12 +64,13 @@ test("search cut: global cap, volume bound of the search and boost origin keep t
 	assert.equal(boost.length, 1)
 	assert.match(boost[0], /^SEARCH CUT \[boost PM\] cause=operations reserve \(search fraction\) ops=650\/1000 /)
 
-	const silent = capture(() => {
+	const nextTurn = capture(() => {
 		globalThis.System = { operations: 0, maxOperations: 1000 }
-		const budget = new Budget(0.05, null); System.operations = 100
-		assert.equal(reason(() => budget.check()), "operations reserve", "the next-turn value keeps its own message")
+		const budget = new Budget(0.05, "tour suivant", "N = 0"); System.operations = 100
+		assert.equal(reason(() => budget.check()), "operations reserve", "the exception message is unchanged")
 	})
-	assert.deepEqual(silent, [])
+	assert.equal(nextTurn.length, 1)
+	assert.match(nextTurn[0], /^SEARCH CUT \[tour suivant\] cause=operations reserve \(search fraction\) ops=100\/1000 /)
 })
 
 // Couloir 40 x 3, zone de tir à 26 cases de marche (même monde que stagnation-route-allowance) : le BFS lit `System.operations`
@@ -92,7 +93,7 @@ function escape(step) {
 		me, target: { id: 2, cell: at(39, 1) }, turns: 2, weapons: [], attackChips: [chip],
 		chipZones: new Map([[chip, [...grid.values()].filter((cell) => cell.x >= 27 && cell.x <= 34)]]), entries,
 		dangers: new Map([...grid.values()].map((cell) => [cell.x * 4096 + cell.y, 0])),
-		preparation: { weaponCells: new Map() }, skipped: { refused: 0, noProgress: null }, budget: new Budget(undefined, null),
+		preparation: { weaponCells: new Map() }, skipped: { refused: 0, noProgress: null }, budget: new Budget(),
 		visited: () => false, riskFree: false
 	})
 }
