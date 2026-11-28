@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 44
+// file version: 45
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { LaserHits, isLaser, laserBalance } from "../Context/LaserLine.js"
 import { laserHitsFrom, laserKinds } from "../Context/LaserShot.js"
@@ -17,7 +17,7 @@ import {
 } from "./TacticalTypes.js"
 import {
 	AttackChoice, BoostVariant, PASSIVE_DANGER_LIFE_FRACTION, Protection, attackChoices, attacks, beats, better, boostFuture,
-	boostVariants, killsLastEnemy, lethal, netDamage, posture, protections, riskCost, riskWeight, shieldCredit, woundedRiskFactor
+	boostVariants, killsLastEnemy, lethal, netDamage, posture, protections, riskCost, riskWeight, shieldCredit, shouldHeal, shouldHealWithThreat, shouldHide, shouldShield, woundedRiskFactor
 } from "./TacticalScore.js"
 import {
 	NEXT_TURN_FRACTION, NEXT_TURN_WEIGHT, NextTurn, futureWeaponRoute, nextTurnDamages
@@ -200,7 +200,6 @@ function evaluate(
 	if (weapons.length > TACTICAL_LIMITS.weapons) budget.bound("weapons", weapons.length, TACTICAL_LIMITS.weapons, items)
 	if (attackChips.length > TACTICAL_LIMITS.attackChips) budget.bound("attack chips", attackChips.length, TACTICAL_LIMITS.attackChips, items)
 	// Le comportement configuré décide du soin, du bouclier et du poids du risque (seuils du rôle, comme le plan B).
-	const behavior = profile.behavior
 	const lifeRatio = me.life / me.maxLife
 	let closest: Entity | null = null
 	let closestDistance = Infinity
@@ -209,9 +208,9 @@ function evaluate(
 		if (range < closestDistance) { closest = enemy; closestDistance = range }
 	}
 	const support = protections(me,
-		profile.allowHealing && (behavior.shouldHeal(lifeRatio) ||
-			behavior.shouldHealWithThreat(lifeRatio, closestDistance)),
-		profile.allowShielding && closest !== null && behavior.shouldShield(lifeRatio, closestDistance,
+		profile.allowHealing && (shouldHeal(profile.aggression, lifeRatio) ||
+			shouldHealWithThreat(profile.aggression, lifeRatio, closestDistance)),
+		profile.allowShielding && closest !== null && shouldShield(profile.aggression, lifeRatio, closestDistance,
 			closest.mp + (closest.weapon?.maxRange ?? 1)),
 		budget, tp)
 	const weight = riskWeight(profile, lifeRatio, closestDistance)
@@ -266,7 +265,7 @@ function evaluate(
 	// le remplacent ; sans un tel plan, ou s'il vise une case déjà visitée par une sortie de stagnation (refusée ensuite :
 	// plan nul), le recul est gardé. Vaut aussi quand aucune attaque n'est possible ce tour (phase d'approche).
 	const freeRetreat = stance.retreat === "free" || doomed || enemies.length !== 1 ||
-		(profile.allowHiding && behavior.shouldHide(lifeRatio, closestDistance))
+		(profile.allowHiding && shouldHide(profile.aggression, lifeRatio, closestDistance))
 	const originDanger = dangers.get(key(me.cell))!
 	let leaderRetreat = false
 	let substitute: TacticalPlan | null = null

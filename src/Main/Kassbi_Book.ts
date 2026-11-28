@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 6
+// file version: 7
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
 import { planAct } from "../Brain/PlanActScenario.js"
@@ -7,7 +7,6 @@ import { greetOnce, startTurnSpeech, tellLeekLife } from "../Brain/TurnSpeech.js
 import { enemyMemory, mpBoostCandidate, observeTurn, recordMyTurnEnd, stagnation } from "../Brain/TurnObservation.js"
 import { actionHistory } from "../Classes/Context/StagnationTracker.js"
 import { LeekProfile } from "../Classes/LeekProfile.js"
-import { OBJECTIVES } from "../Classes/Plannification/BookObjective.js"
 import { planWithBook } from "../Classes/Plannification/BookPlanner.js"
 import { StandoffTracker } from "../Classes/Plannification/BookStandoff.js"
 import { aliveEnemies } from "../Classes/Context/Targets.js"
@@ -19,13 +18,7 @@ import { initLeekLogging, log, LogConfig, LOG_CONTEXT } from "../Toolbox/Logger.
 export const leekLogConfig = new LogConfig()
 initLeekLogging(leekLogConfig)
 
-/**
- * Objectif du faisceau : le SEUL réglage à changer pour essayer un autre profil (`damage` par défaut, `heal`, `support`,
- * `survival` ; voir `BookObjective.ts`). La survie reste une pénalité létale quel que soit le profil.
- */
-const OBJECTIVE = OBJECTIVES.damage
-
-/** Profil : seuils de soin, bouclier et repli du faisceau, et profil du repli (plan conjoint existant). */
+/** Profil : l'agressivité fixée ici choisit l'objectif du faisceau (`objectiveFor`) et les seuils du repli gelé. */
 const leekProfile = new LeekProfile(50)
 
 /** Compteur de duel (`BookStandoff.ts`) : nourri à chaque tour, lu par le faisceau. */
@@ -74,7 +67,7 @@ export function turn(): void {
 			const before = operations()
 			let plan = null
 			try {
-				plan = planWithBook(me, context, leekProfile, { objective: OBJECTIVE, standoff })
+				plan = planWithBook(me, context, leekProfile, { standoff })
 			} catch (error) {
 				reportError("src/Main/Kassbi_Book.ts", "planWithBook", error)
 			}

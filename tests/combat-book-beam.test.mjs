@@ -261,6 +261,18 @@ test("boost durations in the archived fight 55005067: protein lasts 2 turns, mot
 	for (const r of protein) { assert.equal(r.turns, 2); assert.equal(r.removedTurn - r.turn, 2); assert.equal(r.removedBy, 0, "removed in my own turn section") }
 })
 
+test("aggression picks the scenario: a cautious profile heals first, a bold one strikes", () => {
+	const first = (aggression) => {
+		const w = world({ life: 60, chips: [cure(40)], enemies: [[9, 5, 1000]], danger: () => 20 })
+		w.profile = new LeekProfile(aggression)
+		return planBeam(w.me, w.context, w.profile, { depth: 1 }).result.best.steps[0]
+	}
+	const cautious = first(0), bold = first(100)
+	assert.equal(cautious.supports.length, 1, "peu agressif : se soigne")
+	assert.equal(bold.supports.length, 0, "très agressif : garde ses PT pour frapper")
+	assert.ok(bold.outcome.damage >= cautious.outcome.damage)
+})
+
 test("search cut: the book is refused by the enemy bound or truncated data with one red line each; within the bounds, none", async () => {
 	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
 	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()

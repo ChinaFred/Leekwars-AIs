@@ -23,7 +23,7 @@ const chip = (name, cost, damage, options = {}) =>
 const shield = (cost = 2, amount = 30) => chip("shield", cost, 0, {
 	minRange: 0, features: [{ type: Effect.ABSOLUTE_SHIELD, minValue: amount, maxValue: amount }]
 })
-// Le bouclier n'est candidat qu'au seuil du rôle (`shouldShield`) : blessé (voir le seuil de `LeekBehavior.shouldShield`)
+// Le bouclier n'est candidat qu'au seuil du rôle (`shouldShield`) : blessé (voir `shouldShield`, `TacticalScore.ts`)
 // et à portée de menace de l'ennemi (ses PM + portée de son arme). Sans effet sur le poids du risque (pas de repli).
 const shieldable = { maxLife: 300, enemyWeapon: { maxRange: 5 } }
 const xyKey = (cell) => cell.x * 4096 + cell.y

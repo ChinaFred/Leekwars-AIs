@@ -84,7 +84,7 @@ export interface BeamEnv {
 	/** Danger de la case au tour simulé `k` : carte du jeu au tour 0, hypothèse de `BookEnemyModel` ensuite. */
 	dangerAt(cell: Cell, k: number): number
 	lineOfSight(from: Cell, to: Cell): boolean
-	/** Soin et bouclier permis par les seuils du profil (`LeekBehavior`) à cet état. */
+	/** Soin et bouclier permis par le profil à cet état ; l'agressivité les départage par le score (`objectiveFor`). */
 	supportAllowed(state: SimState): { heal: boolean; shield: boolean }
 	/** Retraite après tir permise (`allowHiding`). */
 	readonly allowRetreat: boolean
@@ -200,7 +200,7 @@ export function boostVariants(env: BeamEnv, state: SimState): Variant[] {
 	return variants
 }
 
-/** Sous-ensembles non vides de puces de soin/bouclier prêtes, permis par les seuils, abordables avec `tp` PT. */
+/** Sous-ensembles non vides de puces de soin/bouclier prêtes, permis par le profil (soin seulement si des PV manquent), abordables avec `tp` PT. */
 function supportSubsets(env: BeamEnv, state: SimState, tp: number): SupportItem[][] {
 	const allowed = env.supportAllowed(state)
 	const ready = env.catalog.supports.filter((support) =>

@@ -76,7 +76,7 @@ Une puce refusée à l'arrivée est journalisée (`chip unavailable`) et sautée
 Dès que le compteur réduit le poids (3e tour passif), `m` garde le danger accepté sous 75 % de mes PV (critiques × 1,3 non modélisés) ; `w × H` n'est pas réduit. Le plan B n'applique pas `p`.
 **Ennemi blessé** (`woundedRiskFactor`, `TacticalScore.ts`) : si la cible de progression (`enemies[0]`) a moins de 30 % de ses PV max (`WOUNDED_ENEMY_LIFE_FRACTION`), `p` vaut 0 (`WOUNDED_RISK_FACTOR`, le plus petit des deux facteurs s'applique) et `m` garde 75 % de mes PV : Kassbi poursuit au lieu de tenir une case sans danger (54995131, tour 5 : 98/318 PV, 10 PT et 5 PM perdus). 30 % et 0 non mesurés.
 
-**Comportement configuré** (seuils de « Seuils du comportement », `vie` et distance à l'ennemi vivant le plus proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et que le seuil « Soin » ou « Soin si menace » est atteint ; un **bouclier**, que si le seuil « Bouclier » l'est ; sous le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la case finale pèse deux fois plus, donc le plan préfère une case sûre et un recul après tir, et le recul sans tir est admis (voir « Score »). `RETREAT_RISK_FACTOR` est heuristique, non calibré.
+**Comportement configuré** (seuils de « Agressivité », repli gelé, `vie` et distance à l'ennemi vivant le plus proche prises au début du tour, depuis ma case) : une puce de **soin** n'est candidate que si le profil l'autorise et que le seuil « Soin » ou « Soin si menace » est atteint ; un **bouclier**, que si le seuil « Bouclier » l'est ; sous le seuil de **repli** (profil autorisant le repli), `w` double : le danger de la case finale pèse deux fois plus, donc le plan préfère une case sûre et un recul après tir, et le recul sans tir est admis (voir « Score »). `RETREAT_RISK_FACTOR` est heuristique, non calibré.
 **Posture** (`posture`, `TacticalScore.ts`, seul endroit où le comportement règle le plan conjoint en dehors des seuils) : `w` × 0,5, `a` × 1,25, plancher de `p` 0, recul sans tir en tête cédant à un plan à dégâts puis à une avance, arme visée par le trajet futur = meilleurs dégâts moyens sur un tour (tirs permis par PT et `maxUses`, 1 PT si hors main). Valeurs heuristiques (anciennement `AGGRESSIVE`), non calibrées en combat.
 
 **Anticipation** (un seul ennemi, sinon `N` = 0). **`N`** (`nextTurn` dans le journal du plan) valorise la **position** finale, jamais des dégâts non infligés : il ne dépend que de la case finale et de l'arme en main à la fin du plan.
@@ -160,20 +160,32 @@ par type et par tour (le plus grand gain), jamais tant que l'effet est actif. Fo
   Le candidat porte la zone à PM + gain et SA carte de danger (`EnemyMemory.threatMapFor`, entrées ennemies de la carte du tour, ligne de vue partagée). **Seconde recherche** complète (`evaluate` avec `Frame` : PM + gain, PT − coût, zone et danger boostés ; listes natives d'armes et de puces réutilisées, jamais refaites ; aucun effet de bord sur la stagnation ; prochain tour à PM + gain si durée ≥ 2). Le plan boosté (`tpUsed` + coût) remplace le plan sans boost seulement s'il le **bat strictement au même score** : le danger des cases débloquées y compte (coût de risque, létalité), la fuite aussi. Référence : le score du plan sans boost, sinon celui du meilleur plan classé sans action (rester sur place). Tour condamné : tuer d'abord. Plan boosté avec tir refusé sous 50 % de PV ; erreur, limite ou absence de plan de la seconde recherche : plan sans boost gardé. Ligne `[Boost] MP:` (`PLANNING`) : scores, dangers, motif, ticks de la seconde recherche (et opérations si `System`). Exécution : lancer du boost, puis approche avec les PM réels ; refus natif ou PM non gagnés = **arrêt du plan** (rien d'autre n'est tenté).
   Un plan boosté qui reste sur place (boost seul) est possible : il vaut par `N` à PM + gain.
 
-## Seuils du comportement (`LeekBehavior.ts`)
+## Agressivité (`LeekProfile`, `BookObjective.ts`, `TacticalScore.ts`)
 
-`LeekProfile(agressivité)` fixe l'agressivité (0–100, immuable) ; `profile.behavior` fournit les seuils de soin, bouclier et repli au plan conjoint, au plan B et au faisceau Book. Les trois rôles (`Aggressive`, `Balanced`, `Defensive`) ont disparu : leurs valeurs `Aggressive` ont été conservées. Les comportements permis (`allowHealing`, `allowShielding`, `allowHiding`, tous vrais) sont à revoir.
-`vie` = PV / PV max ; `d` = distance à la cible ; `a` = agressivité / 100 (0,5 par défaut, valeur entre parenthèses).
+`LeekProfile(agressivité)` fixe l'agressivité (0–100, immuable ; `Kassbi_Book.ts` : 50). Les comportements permis (`allowHealing`, `allowShielding`, `allowHiding`, tous vrais) sont à revoir.
+
+**Livre** : l'agressivité choisit le scénario retenu par le score (`objectiveFor`, interpolation linéaire des poids du `TurnOutcome`, 50 = `OBJECTIVES.damage`). Soin et bouclier ne sont plus filtrés par des seuils : permis si le profil l'autorise (soin seulement s'il manque des PV), le score tranche. La pénalité létale ne dépend pas de l'agressivité. Poids non calibrés :
+
+| Poids | 0 (prudent) | 50 | 100 (ardent) |
+|---|---|---|---|
+| dégâts | 0,8 | 1 | 1,2 |
+| soin | 1 | 0,5 | 0,1 |
+| bouclier | 0,4 | 0 | 0 |
+| danger exposé | 1,2 | 0,5 | 0,2 |
+| progrès sans tir | 0,4 | 1,25 | 2,5 |
+| prime de mise à mort | 0,3 | 0,5 | 0,7 |
+
+**Repli gelé** (plan conjoint, plan B ; fonctions de `TacticalScore.ts`, `vie` = PV / PV max, `d` = distance à la cible, `a` = agressivité / 100, valeur à 0,5 entre parenthèses) :
 
 | Décision | Seuil |
 |---|---|
-| Soin | `vie ≤ 0,40 − 0,15a` (0,325) |
+| Soin (`shouldHeal`) | `vie ≤ 0,40 − 0,15a` (0,325) |
 | Soin si menace (`d ≤ 10`) | `vie ≤ 0,50` |
 | Bouclier | `d ≤ portée de menace` et `vie ≤ 0,45 − 0,15a` (0,375) |
 | Repli (trop près et blessé) | `vie ≤ 0,30 − 0,15a` (0,225) |
 | Repli préventif | `d ≤ 1` et `vie ≤ 0,50`, ou `d ≤ 10` et `vie ≤ 0,25` |
 
-- « Trop près » : `d < 2` (`MIN_SAFE_DISTANCE`, `LeekBehavior.ts`). Portée de menace : PM de l'ennemi + portée max de son arme.
+- « Trop près » : `d < 2` (`MIN_SAFE_DISTANCE`). Portée de menace : PM de l'ennemi + portée max de son arme.
 
 ## Mémoire de l'adversaire
 

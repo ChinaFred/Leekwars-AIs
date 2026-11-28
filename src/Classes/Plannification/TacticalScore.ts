@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { ShotCandidate, baseMeanDamage, maxUsesOf } from "../Context/ShotPlan.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
@@ -112,7 +112,7 @@ export interface Protection {
 }
 
 /**
- * `healing` / `shielding` : le profil l'autorise ET le seuil du comportement (`LeekBehavior.ts`) est atteint ; mêmes seuils
+ * `healing` / `shielding` : le profil l'autorise ET le seuil de l'agressivité (`shouldHeal`, `shouldShield`) est atteint ; mêmes seuils
  * que le plan B.
  */
 export function protections(me: Me, healing: boolean, shielding: boolean, budget: Budget, tp: number = me.tp): Protection[] {
@@ -158,8 +158,33 @@ export function shieldCredit(protection: Protection, danger: number): number {
  */
 export const RETREAT_RISK_FACTOR = 2
 
+/** Sous cette distance (Manhattan) à l'ennemi, le poireau est « trop près » pour `shouldHide`. */
+export const MIN_SAFE_DISTANCE = 2
+
 /**
- * Posture du comportement (`LeekBehavior.ts`) : LE seul endroit où il règle le plan conjoint, en plus de ses seuils.
+ * Seuils de soin, de bouclier et de repli du repli gelé (plan conjoint et plan B), fonctions de l'agressivité (0 à 100).
+ * Le livre n'en dépend pas : l'agressivité y pèse sur le choix des scénarios (`objectiveFor`, `BookObjective.ts`).
+ * Valeurs heuristiques (anciennement `AGGRESSIVE`), non calibrées en combat.
+ */
+export function shouldHeal(aggression: number, lifeRatio: number): boolean {
+	return lifeRatio <= 0.40 - 0.15 * aggression / 100
+}
+/** Comme `shouldHeal`, mais un ennemi à 10 cases ou moins déclenche le soin dès 50 % de vie. */
+export function shouldHealWithThreat(aggression: number, lifeRatio: number, distance: number): boolean {
+	return (distance <= 10 && lifeRatio <= 0.50) || shouldHeal(aggression, lifeRatio)
+}
+/** Bouclier quand l'ennemi atteint le poireau (`threatRange` : PM + portée max) et que la vie est basse. */
+export function shouldShield(aggression: number, lifeRatio: number, distance: number, threatRange: number): boolean {
+	return lifeRatio <= 0.45 - 0.15 * aggression / 100 && distance <= threatRange
+}
+/** Repli : trop près et blessé, au contact à vie moyenne, ou en panique (≤ 25 %) à 10 cases ou moins. */
+export function shouldHide(aggression: number, lifeRatio: number, distance: number): boolean {
+	return (distance < MIN_SAFE_DISTANCE && lifeRatio <= 0.30 - 0.15 * aggression / 100) ||
+		(distance <= 1 && lifeRatio <= 0.50) || (distance <= 10 && lifeRatio <= 0.25)
+}
+
+/**
+ * Posture du repli gelé : LE seul endroit où il règle le plan conjoint, en plus de ses seuils.
  * Valeurs heuristiques (reprises de l'ancienne posture AGGRESSIVE), NON calibrées en combat.
  * - `risk` : facteur du poids du risque `w` (voir `riskWeight`, commun au plan B).
  * - `approach` : facteur du poids d'approche `a` (voir `posture`), appliqué à `G` et à `N` dans le score.
@@ -197,12 +222,12 @@ export function posture(profile: LeekProfile, approachMax: number): RolePosture 
 
 /**
  * Poids du risque, commun au plan conjoint et au plan B : facteur de posture (`RolePosture.risk`) × (1,5 − agressivité /
- * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `profile.behavior.shouldHide` le demande
+ * 100), multiplié par `RETREAT_RISK_FACTOR` si le profil autorise le repli et que `shouldHide` le demande
  * (`distance` : Manhattan à l'ennemi vivant le plus proche ; « trop près » : `distance < MIN_SAFE_DISTANCE`).
  */
 export function riskWeight(profile: LeekProfile, lifeRatio: number, distance: number): number {
 	const weight = BASE_POSTURE.risk * (1.5 - profile.aggression / 100)
-	return profile.allowHiding && profile.behavior.shouldHide(lifeRatio, distance)
+	return profile.allowHiding && shouldHide(profile.aggression, lifeRatio, distance)
 		? weight * RETREAT_RISK_FACTOR : weight
 }
 
