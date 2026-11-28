@@ -1,24 +1,5 @@
 [
  {
-  "id": "0be4b89",
-  "account": "Kassbi",
-  "published_at": 1795791956,
-  "published_at_iso": "2026-11-27T15:05:56Z",
-  "commit": "0be4b89e19c91defd48b8dce9b4b1d68c36c94d1",
-  "committed_at": 1795791890,
-  "subject": "chore(merge): fusion de Master (piège du coffre) dans la zone visée",
-  "message": "chore(merge): fusion de Master (piège du coffre) dans la zone visée\n\nConflit du ChangeLog résolu (les deux lignes gardées).\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6btnRxGPsLDbdHk8TB",
-  "has_strategy_section": false,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 5,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "f01d6d4",
   "account": "Kassbi",
   "published_at": 1795805871,
@@ -179,6 +160,25 @@
   "committed_at": 1795862164,
   "subject": "perf(ops): zones d'affichage coupées par défaut dans Kassbi_Book",
   "message": "perf(ops): zones d'affichage coupées par défaut dans Kassbi_Book\n\nStratégie: aucun changement de comportement du plan ; la zone visée (290k à 690k ops par tour, jamais transmise au planificateur) n'est plus calculée en combat, ce qui libère du budget pour la recherche du livre.\nTests: typecheck et npm test verts ; nouveau test sur la config de journalisation ; retrait du test des combats archivés, qui lisait des fichiers élagués de l'archive.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bV2w4rsULrKgscc8U",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 1,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "4665531",
+  "account": "Kassbi",
+  "published_at": 1795863438,
+  "published_at_iso": "2026-11-28T10:57:18Z",
+  "commit": "4665531490d197f0fb5c86ebe4cfe71c88c0c584",
+  "committed_at": 1795863341,
+  "subject": "perf(book): marge de coût des nœuds ramenée de 2 à 1,2",
+  "message": "perf(book): marge de coût des nœuds ramenée de 2 à 1,2\n\nStratégie: au niveau 2 du faisceau, le livre ouvre plus de nœuds quand le budget le permet : 5 sur 5 au lieu de 3 sur 5 aux tours 5 et 6 du combat 55027536 (tours finis à 44 % et 41 % des ops) ; marge NODE_COST_MARGIN 2 → 1,2, plafonds globaux inchangés (0,80 et 0,70).\nTests: typecheck et npm test verts ; nouveau test de régression (5 nœuds ouverts, échoue avec la marge 2) ; effet en combat non mesuré.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bV2w4rsULrKgscc8U",
   "has_strategy_section": true,
   "dirty": false,
   "dirty_files": [],
