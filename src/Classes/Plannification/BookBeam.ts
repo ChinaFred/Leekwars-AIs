@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -539,7 +539,7 @@ function nextState(env: BeamEnv, state: SimState, step: TurnStep): SimState {
 	const enemies = state.enemies.map((enemy) => {
 		const life = enemy === step.target ? Math.max(0, enemy.life - step.outcome.damage) : enemy.life
 		return life > 0
-			? { enemy: enemy.enemy, life, cell: env.mover({ cell: enemy.cell, mp: enemy.enemy.mp }, step.finalCell) }
+			? { enemy: enemy.enemy, life, cell: env.mover({ cell: enemy.cell, mp: enemy.enemy.mp, id: enemy.enemy.id }, step.finalCell) }
 			: { enemy: enemy.enemy, life, cell: enemy.cell }
 	})
 	let held = state.held
