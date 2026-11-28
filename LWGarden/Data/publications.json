@@ -1,24 +1,5 @@
 [
  {
-  "id": "9737131",
-  "account": "Kassbi",
-  "published_at": 1795790229,
-  "published_at_iso": "2026-11-27T14:37:09Z",
-  "commit": "97371313dff2ba3d636653b2bec88d77da16f245",
-  "committed_at": 1795790174,
-  "subject": "chore(merge): fusion de Master (portée préférée supprimée)",
-  "message": "chore(merge): fusion de Master (portée préférée supprimée)\n\nPourquoi : Master a retiré la portée préférée du profil pendant la suppression\ndu repli historique ; shouldHide prend MIN_SAFE_DISTANCE, Plannification.ts et\nses tests restent supprimés.\nStratégie: aucun changement de comportement en jeu.\nTests: npm run typecheck, npm test (suite complète) sur l'état fusionné.\n\nCo-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6ePc62UD35gKG15kVw",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 0,
-   "updated": 11,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "1d5f9f2",
   "account": "Kassbi",
   "published_at": 1795791579,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 10,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "8a79845",
+  "account": "Kassbi",
+  "published_at": 1795860257,
+  "published_at_iso": "2026-11-28T10:04:17Z",
+  "commit": "8a79845b94290fc2c38f2b45fba4138f700e2bb2",
+  "committed_at": 1795860205,
+  "subject": "chore(merge): intègre Master dans la branche de l'agressivité",
+  "message": "chore(merge): intègre Master dans la branche de l'agressivité\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6f4Y9JTMtZsVfkxELT",
+  "has_strategy_section": false,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 8,
    "deleted_files": 0,
    "deleted_folders": 0
   }
