@@ -22,7 +22,9 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-DEFAULT_RETENTION = 10
+# Publications (versions) gardées par compte, et les combats depuis la plus ancienne : 1000 ≈ tout l'historique, pour analyser
+# des dizaines de combats (≈ 65 Ko par combat). Réglable par `retention_versions` de la configuration.
+DEFAULT_RETENTION = 1000
 DEFAULT_MAX_NEW_FIGHTS = 100
 PUBLICATIONS_FILE = "publications.json"
 FIGHTS_FOLDER = "fights"

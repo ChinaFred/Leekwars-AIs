@@ -197,17 +197,20 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(stats["archived"], 1)
         self.assertEqual(FightArchive.list_archived_fights(self.data)[0]["logs_status"], "ok")
 
+    def test_default_retention_is_1000_publications(self):
+        self.assertEqual(FightArchive.DEFAULT_RETENTION, 1000)
+
     def test_retention_keeps_last_ten_publications_and_their_fights(self):
         for index in range(12):
             FightArchive.record_publication(
                 self.data, "me", git_state(("%07x" % (index + 1)).ljust(40, "0")), "ab" * 20,
-                {}, now=1000 + index * 100
+                {}, now=1000 + index * 100, retention=10
             )
         publications = FightArchive.load_publications(self.data)
         self.assertEqual(len(publications), 10)
         self.assertEqual(publications[0]["published_at"], 1200)
         api = FakeApi({1: make_fight(1, 1150), 2: make_fight(2, 1250)})
-        FightArchive.archive_fights(api, self.data, 7, "me")
+        FightArchive.archive_fights(api, self.data, 7, "me", retention=10)
         remaining = [meta["fight_id"] for meta in FightArchive.list_archived_fights(self.data)]
         self.assertEqual(remaining, [2])
 
