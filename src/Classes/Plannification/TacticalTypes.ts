@@ -52,6 +52,8 @@ export interface TacticalPlan {
 	readonly afterMp: number
 	readonly weapon: Weapon | null
 	readonly weaponShots: number
+	/** Arme laser : ids des alliés que la ligne touche et que le plan accepte de toucher (jamais de coffre) ; revérifié avant chaque tir. */
+	readonly laserAllies?: readonly number[]
 	readonly chips: readonly Chip[]
 	readonly protection: readonly Chip[]
 	/** Boosts lancés avant la protection (PT, force, puis agilité de remplissage) ; `tpGain` : PT que le plan compte recevoir du boost de PT. */

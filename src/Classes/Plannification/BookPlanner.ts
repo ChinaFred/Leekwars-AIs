@@ -3,6 +3,9 @@
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
+import { isLaser, laserBalance } from "../Context/LaserLine.js"
+import { laserHitsFrom } from "../Context/LaserShot.js"
+import { toCandidate } from "../Context/ShotPlan.js"
 import { aliveChests, aliveEnemies } from "../Context/Targets.js"
 import { LeekProfile, createStrategy } from "../LeekProfile.js"
 import {
@@ -14,6 +17,7 @@ import { EnemyMover, advanceTowardMe, futureDangerOf } from "./BookEnemyModel.js
 import { BookObjective, DEFAULT_OBJECTIVE } from "./BookObjective.js"
 import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
+import { netDamage } from "./TacticalScore.js"
 import { TACTICAL_LIMITS, TacticalContext, TacticalPlan } from "./TacticalTypes.js"
 
 /**
@@ -160,7 +164,25 @@ export function planWithBook(me: Me, context: TacticalContext, profile: LeekProf
 	}
 	log(() => unchosen(first, run.trace, catalog.book.items, me.mp), LOG_CONTEXT.PLANNING)
 	log(() => `[Book] chosen: ${describe({ ...best, steps: [first] }, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
-	return toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score)
+	return laserChecked(me, toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score))
+}
+
+/**
+ * Laser : le faisceau ne simule pas la ligne. Le plan retenu est écarté (repli sur `planAct`, qui la simule) si la ligne
+ * touche un coffre, ou si les alliés touchés coûtent plus que les ennemis ne rapportent ; sinon il note les alliés acceptés
+ * pour la revérification avant tir. Pas d'optimisation de la visée dans le livre.
+ */
+function laserChecked(me: Me, plan: TacticalPlan): TacticalPlan | null {
+	if (plan.weapon === null || plan.weaponShots === 0 || !isLaser(plan.weapon)) return plan
+	const hits = laserHitsFrom(me, plan.shotCell, plan.target.cell, plan.weapon)
+	const item = toCandidate(plan.weapon, false, me.strength)
+	const balance = item === null ? 0 : laserBalance(hits, plan.weaponShots, (entity) => netDamage(item, entity), plan.target)
+	if (hits.chests.length > 0 || plan.usefulDamage + balance <= 0) {
+		log(() => `[Book] laser line ${hits.chests.length > 0 ? "hits a chest" : `costs more on allies (balance ${balance})`}: fallback`,
+			LOG_CONTEXT.PLANNING)
+		return null
+	}
+	return { ...plan, laserAllies: hits.allies.map((ally) => ally.id) }
 }
 
 /**
