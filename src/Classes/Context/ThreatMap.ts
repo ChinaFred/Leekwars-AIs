@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 13
+// file version: 14
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
+import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { SEARCH_GLOBAL_FRACTION } from "../Plannification/ExecutionBudget.js"
 import { isCellInLaunchPattern, LAUNCH_TYPE } from "./LaunchPattern.js"
 import { MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "./ReachableCells.js"
@@ -808,10 +809,12 @@ export function buildThreatMap(
 	const ceiling = operationsCeiling()
 	const byKey = new Map<number, ThreatCell>()
 	let truncated = false
+	let cause = ""
 	evaluation:
 	for (const candidate of myReachable.entries()) {
 		if (overCeiling(ceiling)) {
 			truncated = true
+			cause = "operations ceiling"
 			break
 		}
 		let danger = 0
@@ -820,6 +823,7 @@ export function buildThreatMap(
 			const threat = bestThreat(item, candidate.cell, provider, budget)
 			if (threat === "aborted") {
 				truncated = true
+				cause = "pairs cap"
 				break evaluation
 			}
 			if (threat !== null) {
@@ -831,6 +835,9 @@ export function buildThreatMap(
 		byKey.set(cellKey(candidate.cell), { cell: candidate.cell, mpCost: candidate.cost, danger, breakdown })
 	}
 
+	if (truncated) {
+		logSearchCut("carte de danger", cause, `${cutOperations()} paires=${budget.pairs}/${budget.max} cases=${byKey.size}/${myReachable.size}`)
+	}
 	return new ThreatMap(me.id, turn, byKey, {
 		truncated,
 		inputsTruncated,
@@ -1151,6 +1158,8 @@ export function buildTargetZone(
 	const zones: ZoneEnemy[] = []
 	let inputsTruncated = false
 	let truncated = false
+	/** Plafond qui coupe (vide : pas de coupure, ou portée infinie, entrée non gérée et non plafond). */
+	let cause = ""
 	for (const enemy of enemies) {
 		inputsTruncated = inputsTruncated || enemy.reachable.truncated
 		const item = prepare(enemy)
@@ -1204,6 +1213,7 @@ export function buildTargetZone(
 		for (let depth = 1; depth <= zone.range; depth++) {
 			if (overCeiling(ceiling)) {
 				truncated = true
+				cause = "operations ceiling (spreading)"
 				break spreading
 			}
 			const nextXs: number[] = []
@@ -1249,6 +1259,7 @@ export function buildTargetZone(
 				continue
 			}
 			if (truncated || overCeiling(ceiling)) {
+				if (!truncated) cause = "operations ceiling"
 				truncated = true
 				break evaluation
 			}
@@ -1258,6 +1269,7 @@ export function buildTargetZone(
 				const threat = zoneThreat(zone, cell, provider, budget)
 				if (threat === "aborted") {
 					truncated = true
+					cause = "pairs cap"
 					break evaluation
 				}
 				if (threat !== null) {
@@ -1270,6 +1282,9 @@ export function buildTargetZone(
 				byKey.set(cellKey(cell), { cell, mpCost: -1, danger, breakdown })
 			}
 		}
+	}
+	if (cause !== "") {
+		logSearchCut("zone visée", cause, `${cutOperations()} paires=${budget.pairs}/${budget.max} cases=${evaluatedCells}/${candidateCells}`)
 	}
 	return new ThreatMap(me.id, turn, byKey, {
 		truncated,

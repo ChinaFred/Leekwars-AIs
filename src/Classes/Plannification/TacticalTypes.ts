@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 5
+// file version: 6
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
+import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
@@ -114,22 +115,36 @@ export class Budget {
 	/** Ticks de recherche consommés (mesure indirecte : un tick n'est pas une opération du moteur). */
 	get used(): number { return this.work }
 
-	/** `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`). */
-	constructor(fraction: number = SEARCH_FRACTION) { this.fraction = fraction }
+	private cutLogged = false
+
+	/**
+	 * `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`).
+	 * `origin` : étiquette de la ligne rouge `SEARCH CUT` émise à la coupure (null : pas de ligne, la valeur du tour
+	 * suivant a son propre message).
+	 */
+	constructor(fraction: number = SEARCH_FRACTION, private readonly origin: string | null = "tactique") { this.fraction = fraction }
+
+	/** Une seule ligne par budget, là où la coupure est décidée (l'exception remonte ensuite sans autre ligne). */
+	private cut(cause: string): never {
+		if (!this.cutLogged && this.origin !== null) {
+			this.cutLogged = true
+			logSearchCut(this.origin, cause, `${cutOperations()} ticks=${this.work}/${TACTICAL_LIMITS.work}`)
+		}
+		throw new Unavailable(cause === "search bound" ? cause : "operations reserve")
+	}
 
 	tick(): void {
 		if (++this.work > TACTICAL_LIMITS.work) {
-			throw new Unavailable("search bound")
+			this.cut("search bound")
 		}
 		if (this.work % 64 === 1) this.check()
 	}
 
 	check(): void {
 		if (typeof System !== "undefined" &&
-			Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
-			(System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION ||
-				System.operations - this.start >= System.maxOperations * this.fraction)) {
-			throw new Unavailable("operations reserve")
+			Number.isFinite(System.maxOperations) && System.maxOperations > 0) {
+			if (System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION) this.cut("operations reserve (global cap)")
+			if (System.operations - this.start >= System.maxOperations * this.fraction) this.cut("operations reserve (search fraction)")
 		}
 	}
 }

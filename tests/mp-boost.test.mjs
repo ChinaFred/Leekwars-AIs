@@ -359,3 +359,26 @@ test("pickMpBoost: largest integer gain; BUFF_MP is amplified by science and flo
 	assert.equal(pickMpBoost(unit([boots()]), 2), null)
 	assert.equal(pickMpBoost(unit([boots({ cost: 0 })]), 10), null)
 })
+
+test("search cut: a cut of the SECOND (boosted) search emits one red [boost PM] line and keeps the plan without boost; no cut, no line", () => {
+	const cutsOf = (lines) => lines.filter((text) => text.includes("SEARCH CUT"))
+	const clean = makeWorld({ turnNumber: 1 })
+	assert.deepEqual(cutsOf(captureTurn(clean)), [], "no cut, no line")
+
+	const w = makeWorld({ turnNumber: 1 })
+	let ops = 0
+	globalThis.System = { get operations() { return ops }, maxOperations: 1_000_000 }
+	// `evaluate` appelé depuis `withMpBoost` est la seconde recherche : la dépense y saute au-dessus du plafond global.
+	const alive = Fight.getAliveEnemies
+	Fight.getAliveEnemies = () => {
+		const stack = new Error().stack
+		if (stack.includes("withMpBoost") && /at evaluate /.test(stack)) ops = 900_000
+		return alive()
+	}
+	let lines
+	try { lines = captureTurn(w) } finally { delete globalThis.System }
+	const cuts = cutsOf(lines)
+	assert.equal(cuts.length, 1, lines.filter((text) => /Boost|Tactical|SEARCH/.test(text)).join("\n"))
+	assert.match(cuts[0], /^SEARCH CUT \[boost PM\] cause=operations reserve \(global cap\) ops=900000\/1000000 ticks=\d+\/\d+$/)
+	assert.ok(lines.some((text) => text.includes("[Boost] MP: boosted search unavailable (operations reserve); plan without boost kept")))
+})

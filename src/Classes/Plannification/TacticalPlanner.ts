@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 42
+// file version: 43
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { LaserHits, isLaser, laserBalance } from "../Context/LaserLine.js"
 import { laserHitsFrom, laserKinds } from "../Context/LaserShot.js"
@@ -77,7 +77,7 @@ export function evaluateTacticalPlans(
 				...preparation, reachable: candidate.reachable, mp: frame.mp, tp: frame.tp, enemies: [], dangers: null, currentWeapons: new Map()
 			}
 			const boostedSkipped: Skipped = { refused: 0, noProgress: null, doomed: false, leaderScore: null }
-			const boostedBudget = new Budget()
+			const boostedBudget = new Budget(undefined, "boost PM")
 			const startOps = typeof System === "undefined" ? 0 : System.operations
 			const found = evaluate(me, profile, { ...context, reachable: candidate.reachable, threat: candidate.threat },
 				boostedSkipped, boostedBudget, boostedPreparation, frame)
@@ -588,7 +588,7 @@ function evaluate(
 				const cells = chipZones.get(chip)
 				if (cells && (chip.cooldown === 0 || chip.cooldown === 1)) zones.push({ item: chip, isChip: true, cells })
 			}
-			nextDamages = nextTurnDamages(me, enemies[0]!, entries, entryIndex, zones, new Budget(NEXT_TURN_FRACTION),
+			nextDamages = nextTurnDamages(me, enemies[0]!, entries, entryIndex, zones, new Budget(NEXT_TURN_FRACTION, null),
 				// Prochain tour : mes PM, plus ceux du boost de PM s'il dure encore (durée >= 2 : hypothèse non vérifiée).
 				frame.boost !== null && frame.boost.turns >= 2 ? mp : me.mp)
 		} catch (error) {

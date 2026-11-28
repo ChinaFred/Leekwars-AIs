@@ -1502,3 +1502,49 @@ test("EnemyMemory.computeTargetZone: on demand, from the turn's danger map input
 	assert.equal(scenario.memory.updateThreatMap(scenario.me, [scenario.enemy], 2), null)
 	assert.equal(scenario.memory.computeTargetZone(scenario.me), null)
 })
+
+// --- journal de coupure : une ligne rouge `SEARCH CUT` par carte coupée par un plafond ---------------------------------
+
+test("search cut: danger map and target zone emit exactly one red line per cut, with the ceiling in play; no cut, no line", async () => {
+	const { buildTargetZone } = await import("../dist/Classes/Context/ThreatMap.js")
+	const { initLeekLogging, LogConfig } = await import("../dist/Toolbox/Logger.js")
+	const lines = [], oldDebug = globalThis.Debug
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled("error", true); initLeekLogging(errors)
+	const cuts = () => lines.splice(0).filter((text) => text.includes("SEARCH CUT"))
+	const setup = () => {
+		const grid = makeGrid(21, 21)
+		const { me, myReach } = setupMe(grid, [5, 10], 2) // 13 cases
+		const { input } = addEnemy(grid, me, 2, [12, 10], { mp: 2, weaponItem: weapon({ minRange: 1, maxRange: 20 }) })
+		return { me, myReach, input }
+	}
+	try {
+		let { me, myReach, input } = setup()
+		assert.equal(buildThreatMap(me, myReach, [input], 1).truncated, false)
+		assert.equal(buildTargetZone(me, [input], 1).truncated, false)
+		assert.deepEqual(cuts(), [], "no cut, no line")
+
+		assert.equal(buildThreatMap(me, myReach, [input], 1, { maxPairs: 30 }).truncated, true)
+		assert.deepEqual(cuts(), ["SEARCH CUT [carte de danger] cause=pairs cap ops=?/? paires=30/30 cases=2/13"])
+
+		globalThis.System = { operations: 900, maxOperations: 1000 }
+		assert.equal(buildThreatMap(me, myReach, [input], 1).truncated, true)
+		assert.deepEqual(cuts(), ["SEARCH CUT [carte de danger] cause=operations ceiling ops=900/1000 paires=0/" + MAX_THREAT_PAIRS + " cases=0/13"])
+		delete globalThis.System
+
+		assert.equal(buildTargetZone(me, [input], 1, { maxPairs: 3 }).truncated, true)
+		const pairs = cuts()
+		assert.equal(pairs.length, 1)
+		assert.match(pairs[0], /^SEARCH CUT \[zone visée\] cause=pairs cap ops=\?\/\? paires=\d+\/3 cases=\d+\/\d+$/)
+
+		globalThis.System = { operations: 1000, maxOperations: 1000 }
+		assert.equal(buildTargetZone(me, [input], 1).truncated, true)
+		const ceiling = cuts()
+		assert.equal(ceiling.length, 1)
+		assert.match(ceiling[0], /^SEARCH CUT \[zone visée\] cause=operations ceiling \(spreading\) ops=1000\/1000 paires=0\/\d+ cases=0\/\d+$/)
+	} finally {
+		delete globalThis.System
+		globalThis.Debug = oldDebug
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+})

@@ -462,3 +462,29 @@ test("search cut: a cut of the book emits exactly one red SEARCH CUT line with i
 		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
 	}
 })
+
+test("search cut: the book names both operations causes (book fraction, global cap) on its single red line", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text, color) => lines.push({ text, color }) }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled("error", true); initLeekLogging(errors)
+	try {
+		for (const [operations, cause] of [[700, "operations reserve (book fraction)"], [850, "operations reserve (global cap)"]]) {
+			lines.length = 0
+			const w = replay(5)
+			globalThis.System = { operations: 0, maxOperations: 1000 }
+			const budget = new BookBudget()
+			System.operations = operations
+			const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget })
+			assert.equal(run.result.cut, cause)
+			assert.equal(lines.length, 1, cause)
+			assert.equal(lines[0].color, 0xff0000)
+			assert.match(lines[0].text, new RegExp(`^SEARCH CUT \\[livre\\] cause=${cause.replace(/[()]/g, "\\$&")} ops=${operations}/1000 profondeur=1 niveau_atteint=0$`))
+		}
+	} finally {
+		delete globalThis.System
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+})

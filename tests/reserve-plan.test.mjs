@@ -478,3 +478,43 @@ test("reserve scores and retreat reuse only the complete validated danger snapsh
 	assert.equal(reads, w.context.reachable.size)
 	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["move", -2, 0, 3]])
 })
+
+// --- journal de coupure : une ligne rouge `SEARCH CUT` par recherche coupée par son plafond ---------------------------------
+
+function captureCuts(run) {
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true); initLeekLogging(errors)
+	try { run() } finally {
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+	return lines.filter((text) => text.includes("SEARCH CUT"))
+}
+
+test("search cut: the joint search emits one red line where its relative cap decides; no cut, no line", () => {
+	const w = world()
+	const cuts = captureCuts(() => {
+		assert.equal(evaluateTacticalPlans(w.me, w.profile, w.context).reason, "operations reserve")
+		w.resetOps(); w.steady()
+		assert.notEqual(evaluateTacticalPlans(w.me, w.profile, w.context).reason, "operations reserve")
+	})
+	assert.equal(cuts.length, 1)
+	assert.match(cuts[0], /^SEARCH CUT \[tactique\] cause=operations reserve \(search fraction\) ops=710000\/1000000 ticks=\d+\/100000$/)
+})
+
+test("search cut: plan B emits one red line at its first refusal (margin or hard reserve); no cut, no line", () => {
+	const run = (setup) => {
+		const w = world()
+		w.steady()
+		setup(w)
+		return captureCuts(() => executeReservePlan(w.me, w.profile, w.context))
+	}
+	assert.deepEqual(run(() => {}), [], "no cut, no line")
+	const margin = run((w) => { const native = Fight.weaponCells; Fight.weaponCells = (...args) => { w.setOps(550000); return native(...args) } })
+	assert.deepEqual(margin, ["SEARCH CUT [plan B] cause=search margin reached ops=550000/1000000"])
+	const hard = run((w) => w.setOps(990000))
+	assert.equal(hard.length, 1)
+	assert.match(hard[0], /^SEARCH CUT \[plan B\] cause=(hard operations reserve|operations reserve \(global cap\)) ops=990000\/1000000$/)
+})

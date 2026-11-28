@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 17
+// file version: 18
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { isLaser, laserBalance } from "../Context/LaserLine.js"
@@ -14,7 +14,7 @@ import {
 import { TacticalContext, TacticalPreparation } from "./TacticalTypes.js"
 import { netDamage, riskWeight } from "./TacticalScore.js"
 import { track } from "../Context/StagnationTracker.js"
-import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
+import { cutOperations, log, LOG_CONTEXT, LogText, getLogConfig, logSearchCut } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
 
 const key = (cell: Cell): number => cell.x * 4096 + cell.y
@@ -151,10 +151,17 @@ export function executeReservePlan(
 		!Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
 		System.operations < System.maxOperations * SEARCH_GLOBAL_FRACTION
 	let executionBudget: ExecutionBudget | null = null
-	const budget = (): boolean => executionBudget ? executionBudget.available() : hasExecutionRoom()
-	const searchBudget = (): boolean => globalBudget() && (typeof System === "undefined" ||
+	// Une seule ligne rouge par plan B : au premier refus d'un des deux budgets, qui décide la coupure.
+	let cutLogged = false
+	const cut = (cause: string): false => {
+		if (!cutLogged) { cutLogged = true; logSearchCut("plan B", cause, cutOperations()) }
+		return false
+	}
+	const budget = (): boolean => (executionBudget ? executionBudget.available() : hasExecutionRoom()) || cut("hard operations reserve")
+	const searchBudget = (): boolean => (globalBudget() && (typeof System === "undefined" ||
 		!Number.isFinite(System.maxOperations) || System.maxOperations <= 0 ||
-		System.operations - startOps - loggingOps < System.maxOperations * SEARCH_FRACTION)
+		System.operations - startOps - loggingOps < System.maxOperations * SEARCH_FRACTION)) ||
+		cut(globalBudget() ? "search margin reached" : "operations reserve (global cap)")
 	const origin = me.cell
 	const initialMp = me.mp
 	const turn = Fight.turn

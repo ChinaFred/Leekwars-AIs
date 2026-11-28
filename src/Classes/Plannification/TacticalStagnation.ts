@@ -1,9 +1,9 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { toCandidate } from "../Context/ShotPlan.js"
-import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
+import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { STAGNATION_TURNS } from "../Context/StagnationTracker.js"
 import { Budget, Skipped, TacticalPlan, TacticalPreparation, Unavailable, key, validCost } from "./TacticalTypes.js"
 import { PASSIVE_DANGER_LIFE_FRACTION } from "./TacticalScore.js"
@@ -124,7 +124,10 @@ export function stagnationEscape(input: StagnationInput): TacticalPlan | null {
 		System.maxOperations * OPS_BUDGET.SEARCH_GLOBAL) : Number.POSITIVE_INFINITY
 	for (let head = 0; head < queue.length && missing > 0 && queue.length < STAGNATION_ROUTE_CELLS; head++) {
 		budget.tick()
-		if (metered && System.operations >= limit) return approach("walking route search stopped by its operations allowance")
+		if (metered && System.operations >= limit) {
+			logSearchCut("stagnation", "walking route allowance", `${cutOperations()} limite=${Math.floor(limit)} cases=${queue.length}`)
+			return approach("walking route search stopped by its operations allowance")
+		}
 		const cell = queue[head]!
 		const next = walk.get(key(cell))! + 1
 		for (const [dx, dy] of MOVE_NEIGHBOR_OFFSETS) {
