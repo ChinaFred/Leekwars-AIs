@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
+import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
 import { BoostItem, Buff, Catalog, SupportItem } from "./BookCatalog.js"
 import { EnemyMover } from "./BookEnemyModel.js"
@@ -571,13 +572,25 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 	let cut: string | null = null
 	let skipped: string | null = null
 	let nodeOps = 0
+	const opsDetail = (): string => `ops=${env.budget.ops()}/${typeof System === "undefined" ? "?" : System.maxOperations}`
 	for (let k = 0; k < depth; k++) {
 		let nodes = beam
 		if (k >= 1) {
 			if (!worthDeepening(env, beam)) { skipped = `level ${k + 1}: no better non-lethal plan, no boost, no duel`; break }
-			if (k >= 2 && !env.budget.deepenOk()) { skipped = `level ${k + 1}: budget`; break }
+			if (k >= 2 && !env.budget.deepenOk()) {
+				skipped = `level ${k + 1}: budget`
+				logSearchCut("livre", "deepen fraction", `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
+				break
+			}
 			const affordable = Math.floor(env.budget.remainingOps() / Math.max(1, nodeOps * NODE_COST_MARGIN))
-			if (affordable < 1) { skipped = `level ${k + 1}: remaining ops ${Math.round(env.budget.remainingOps())} < ${Math.round(nodeOps * NODE_COST_MARGIN)}`; break }
+			if (affordable < 1) {
+				skipped = `level ${k + 1}: remaining ops ${Math.round(env.budget.remainingOps())} < ${Math.round(nodeOps * NODE_COST_MARGIN)}`
+				logSearchCut("livre", "remaining ops < node cost", `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
+				break
+			}
+			if (affordable < beam.length) {
+				logSearchCut("livre", `beam nodes bound (${beam.length} > ${affordable})`, `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
+			}
 			nodes = beam.slice(0, affordable)
 		}
 		const next: BeamNode[] = []
@@ -598,6 +611,7 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 		} catch (error) {
 			if (!(error instanceof BookCut)) throw error
 			cut = error.message
+			logSearchCut("livre", cut, `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
 			// Tour 1 coupé : les étapes déjà produites sont complètes, on garde les meilleures ; plus loin, niveau abandonné.
 			if (k === 0) for (const step of selectTop(sink, width, betterStep)) {
 				next.push({ state: nextState(env, root, step), score: (TURN_WEIGHTS[0] ?? 1) * step.score, steps: [step], key: step.key, group: step.group })

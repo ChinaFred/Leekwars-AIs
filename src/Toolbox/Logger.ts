@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 6
 //
 // Journalisation par contexte : TOUTE sortie texte (log de combat) passe par `log(texte, contexte)`.
 // Ce fichier est le seul de `src/` autorisé à appeler `console.log` / `Debug.log` (voir
@@ -203,6 +203,19 @@ function emit(value: unknown, options?: LogOptions): void {
 	if (typeof Debug !== "undefined" && typeof Debug.log === "function") {
 		Debug.log(value)
 	}
+}
+
+/**
+ * Une recherche coupée par son plafond : UNE ligne rouge (contexte ERROR, donc ses drapeaux et sa protection).
+ * Format : `SEARCH CUT [origine] cause=<cause> <détail>`. À appeler une seule fois, au point où la coupure est attrapée.
+ */
+export function logSearchCut(origin: string, cause: string, detail: string): void {
+	log(`SEARCH CUT [${origin}] cause=${cause} ${detail}`, LOG_CONTEXT.ERROR)
+}
+
+/** Détail `ops=<utilisées>/<max>` d'une coupure (`?` hors du jeu). Un seul appel par coupure. */
+export function cutOperations(): string {
+	return `ops=${typeof System === "undefined" ? "?" : System.operations}/${typeof System === "undefined" ? "?" : System.maxOperations}`
 }
 
 /**

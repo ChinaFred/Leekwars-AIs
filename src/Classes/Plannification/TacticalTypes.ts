@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 5
+// file version: 7
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
+import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
 import { ThreatMap } from "../Context/ThreatMap.js"
 import { SEARCH_GLOBAL_FRACTION } from "./ExecutionBudget.js"
@@ -91,6 +92,9 @@ export const TACTICAL_LIMITS = {
 	cells: 113, enemies: 4, weapons: 4, attackChips: 8, protectionChips: 3, tp: 30, work: 100000
 } as const
 
+/** Liste native de cases de tir (`getCellsToUse*`) : la carte compte 613 cases au plus ; au-delà, la donnée est refusée. */
+export const NATIVE_CELLS_LIMIT = 613
+
 /**
  * Arrêt de la recherche, en fraction de `System.maxOperations`. Relevé de 15 % à 30 % (combat 54939649, tours 4 et 5 :
  * la recherche interrompue à 150 000 laissait au plan B une attaque à danger 147 alors que le planificateur complet
@@ -114,22 +118,54 @@ export class Budget {
 	/** Ticks de recherche consommés (mesure indirecte : un tick n'est pas une opération du moteur). */
 	get used(): number { return this.work }
 
-	/** `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`). */
-	constructor(fraction: number = SEARCH_FRACTION) { this.fraction = fraction }
+	private cutLogged = false
+
+	/**
+	 * `fraction` : part de `System.maxOperations` permise depuis la construction (recherche : `SEARCH_FRACTION`).
+	 * `origin` : étiquette de la ligne rouge `SEARCH CUT` émise à la coupure ; `fallback` : ce qui reprend la main (`repli=`).
+	 */
+	constructor(
+		fraction: number = SEARCH_FRACTION, private readonly origin: string = "tactique", private readonly fallback: string = "plan B"
+	) { this.fraction = fraction }
+
+	/** Une seule ligne par budget, là où la coupure est décidée (l'exception remonte ensuite sans autre ligne). */
+	private cut(cause: string): never {
+		this.emit(cause, `${cutOperations()} ticks=${this.work}/${TACTICAL_LIMITS.work}`)
+		throw new Unavailable(cause === "search bound" ? cause : "operations reserve")
+	}
+
+	private emit(cause: string, detail: string): void {
+		if (this.cutLogged) return
+		this.cutLogged = true
+		logSearchCut(this.origin, cause, detail)
+	}
+
+	/**
+	 * Recherche refusée avant ou pendant son déroulement (borne de volume, données tronquées) : une ligne rouge puis
+	 * l'exception `message` (inchangé) ; `fallback` reprend la main.
+	 */
+	refuse(cause: string, message: string, fallback: string = this.fallback): never {
+		this.emit(cause, `${cutOperations()} repli=${fallback}`)
+		throw new Unavailable(message)
+	}
+
+	/** Borne de volume de `TACTICAL_LIMITS` (ou équivalente) dépassée : cause `<quoi> bound (<valeur> > <borne>)`. */
+	bound(what: string, value: number, limit: number, message: string, fallback?: string): never {
+		return this.refuse(`${what} bound (${value} > ${limit})`, message, fallback)
+	}
 
 	tick(): void {
 		if (++this.work > TACTICAL_LIMITS.work) {
-			throw new Unavailable("search bound")
+			this.cut("search bound")
 		}
 		if (this.work % 64 === 1) this.check()
 	}
 
 	check(): void {
 		if (typeof System !== "undefined" &&
-			Number.isFinite(System.maxOperations) && System.maxOperations > 0 &&
-			(System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION ||
-				System.operations - this.start >= System.maxOperations * this.fraction)) {
-			throw new Unavailable("operations reserve")
+			Number.isFinite(System.maxOperations) && System.maxOperations > 0) {
+			if (System.operations >= System.maxOperations * SEARCH_GLOBAL_FRACTION) this.cut("operations reserve (global cap)")
+			if (System.operations - this.start >= System.maxOperations * this.fraction) this.cut("operations reserve (search fraction)")
 		}
 	}
 }

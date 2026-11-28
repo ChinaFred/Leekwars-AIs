@@ -253,6 +253,26 @@ test("(c) not cast when the boosted zone exceeds the joint-plan bound, or when +
 	assert.equal(w.actions.includes("leather_boots"), false)
 })
 
+
+test("(c) search cut: a boosted zone over the cell bound is one red line with value and bound; under the bound, none", async () => {
+	const { initLeekLogging, getLogConfig, LogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const lines = [], oldDebug = globalThis.Debug, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	const config = new LogConfig(); config.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const open = { height: 17, meAt: [8, 8], mp: 6, enemyAt: [21, 8] }
+	try {
+		initLeekLogging(config)
+		assert.equal(decide(open).decision.option, null)
+		assert.equal(lines.length, 1, lines.join("\n"))
+		assert.match(lines[0], /^SEARCH CUT \[boost PM\] cause=cells bound \(145 > 113\) ops=\?\/\? repli=plan sans boost$/)
+		lines.length = 0
+		assert.ok(decide(open, { limit: 145 }).decision.option)
+		assert.deepEqual(lines, [])
+	} finally {
+		globalThis.Debug = oldDebug
+		initLeekLogging(previous)
+	}
+})
 test("5 MP + 2 on open ground (113 cells): the boots are cast when they unlock a shot, and the joint plan keeps the turn", () => {
 	// Ennemi à distance 12 : hors de portée à 5 PM (6 + 5), à portée à 7 PM. Refusé tant que la borne était de 85 cases.
 	const w = makeWorld({ turnNumber: 23, mp: 5, height: 17, meAt: [8, 8], enemyAt: [20, 8] })
@@ -358,4 +378,27 @@ test("pickMpBoost: largest integer gain; BUFF_MP is amplified by science and flo
 	assert.equal(pickMpBoost(unit([boots()], 200), 10).gain, 2) // PM bruts : non amplifiés
 	assert.equal(pickMpBoost(unit([boots()]), 2), null)
 	assert.equal(pickMpBoost(unit([boots({ cost: 0 })]), 10), null)
+})
+
+test("search cut: a cut of the SECOND (boosted) search emits one red [boost PM] line and keeps the plan without boost; no cut, no line", () => {
+	const cutsOf = (lines) => lines.filter((text) => text.includes("SEARCH CUT"))
+	const clean = makeWorld({ turnNumber: 1 })
+	assert.deepEqual(cutsOf(captureTurn(clean)), [], "no cut, no line")
+
+	const w = makeWorld({ turnNumber: 1 })
+	let ops = 0
+	globalThis.System = { get operations() { return ops }, maxOperations: 1_000_000 }
+	// `evaluate` appelé depuis `withMpBoost` est la seconde recherche : la dépense y saute au-dessus du plafond global.
+	const alive = Fight.getAliveEnemies
+	Fight.getAliveEnemies = () => {
+		const stack = new Error().stack
+		if (stack.includes("withMpBoost") && /at evaluate /.test(stack)) ops = 900_000
+		return alive()
+	}
+	let lines
+	try { lines = captureTurn(w) } finally { delete globalThis.System }
+	const cuts = cutsOf(lines)
+	assert.equal(cuts.length, 1, lines.filter((text) => /Boost|Tactical|SEARCH/.test(text)).join("\n"))
+	assert.match(cuts[0], /^SEARCH CUT \[boost PM\] cause=operations reserve \(global cap\) ops=900000\/1000000 ticks=\d+\/\d+$/)
+	assert.ok(lines.some((text) => text.includes("[Boost] MP: boosted search unavailable (operations reserve); plan without boost kept")))
 })

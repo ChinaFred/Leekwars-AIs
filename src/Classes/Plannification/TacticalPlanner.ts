@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 42
+// file version: 44
 import { MOVE_NEIGHBOR_OFFSETS } from "../Context/ReachableCells.js"
 import { LaserHits, isLaser, laserBalance } from "../Context/LaserLine.js"
 import { laserHitsFrom, laserKinds } from "../Context/LaserShot.js"
@@ -12,7 +12,7 @@ import {
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
 import {
-	Budget, MpBoostCandidate, Skipped, TACTICAL_LIMITS, TacticalContext, TacticalPlan, TacticalPreparation, Unavailable,
+	Budget, MpBoostCandidate, NATIVE_CELLS_LIMIT, Skipped, TACTICAL_LIMITS, TacticalContext, TacticalPlan, TacticalPreparation, Unavailable,
 	key, same, validCost
 } from "./TacticalTypes.js"
 import {
@@ -77,7 +77,7 @@ export function evaluateTacticalPlans(
 				...preparation, reachable: candidate.reachable, mp: frame.mp, tp: frame.tp, enemies: [], dangers: null, currentWeapons: new Map()
 			}
 			const boostedSkipped: Skipped = { refused: 0, noProgress: null, doomed: false, leaderScore: null }
-			const boostedBudget = new Budget()
+			const boostedBudget = new Budget(undefined, "boost PM", "plan sans boost")
 			const startOps = typeof System === "undefined" ? 0 : System.operations
 			const found = evaluate(me, profile, { ...context, reachable: candidate.reachable, threat: candidate.threat },
 				boostedSkipped, boostedBudget, boostedPreparation, frame)
@@ -164,12 +164,16 @@ function evaluate(
 	const threat = context?.threat
 	if (!reachable || !threat) throw new Unavailable("missing threat/reachable data")
 	budget.check()
-	if (reachable.truncated || threat.truncated || threat.inputsTruncated) throw new Unavailable("truncated data")
+	if (reachable.truncated || threat.truncated || threat.inputsTruncated) {
+		const source = reachable.truncated ? "zone atteignable" : threat.truncated ? "carte de danger" : "données de la carte de danger"
+		budget.refuse(`truncated data (${source})`, "truncated data")
+	}
 	if (!reachable.isUpToDate(me.id, me.cell, mp, Fight.turn) ||
 		threat.entityId !== me.id || threat.turn !== Fight.turn ||
 		threat.candidateCells !== reachable.size) throw new Unavailable("stale/inconsistent data")
-	if (reachable.size > TACTICAL_LIMITS.cells || !Number.isInteger(tp) ||
-		tp < 0 || tp > TACTICAL_LIMITS.tp) throw new Unavailable("cells/PT bound")
+	if (reachable.size > TACTICAL_LIMITS.cells) budget.bound("cells", reachable.size, TACTICAL_LIMITS.cells, "cells/PT bound")
+	if (tp > TACTICAL_LIMITS.tp) budget.bound("PT", tp, TACTICAL_LIMITS.tp, "cells/PT bound")
+	if (!Number.isInteger(tp) || tp < 0) throw new Unavailable("cells/PT bound")
 
 	const enemies = aliveEnemies().filter((enemy) => enemy.life > 0)
 	preparation.enemies.push(...enemies.map((enemy) => ({ enemy, cell: enemy.cell })))
@@ -191,8 +195,10 @@ function evaluate(
 		chip.currentCooldown === 0 && chip.cost <= tp && validCost(chip.cost) &&
 		toCandidate(chip, true, me.strength) !== null
 	)
-	if (enemies.length > TACTICAL_LIMITS.enemies || weapons.length > TACTICAL_LIMITS.weapons ||
-		attackChips.length > TACTICAL_LIMITS.attackChips) throw new Unavailable("items/targets bound")
+	const items = "items/targets bound"
+	if (enemies.length > TACTICAL_LIMITS.enemies) budget.bound("enemies", enemies.length, TACTICAL_LIMITS.enemies, items)
+	if (weapons.length > TACTICAL_LIMITS.weapons) budget.bound("weapons", weapons.length, TACTICAL_LIMITS.weapons, items)
+	if (attackChips.length > TACTICAL_LIMITS.attackChips) budget.bound("attack chips", attackChips.length, TACTICAL_LIMITS.attackChips, items)
 	// Le comportement configuré décide du soin, du bouclier et du poids du risque (seuils du rôle, comme le plan B).
 	const behavior = profile.behavior
 	const lifeRatio = me.life / me.maxLife
@@ -470,7 +476,7 @@ function evaluate(
 		budget.check()
 		const raw = getCells()
 		budget.check()
-		if (raw.length > 613) throw new Unavailable("native cells bound")
+		if (raw.length > NATIVE_CELLS_LIMIT) budget.bound("native cells", raw.length, NATIVE_CELLS_LIMIT, "native cells bound", "plan en cours, sinon plan B")
 		const cells = new Set<number>()
 		for (const cell of raw) {
 			budget.tick()
@@ -588,7 +594,7 @@ function evaluate(
 				const cells = chipZones.get(chip)
 				if (cells && (chip.cooldown === 0 || chip.cooldown === 1)) zones.push({ item: chip, isChip: true, cells })
 			}
-			nextDamages = nextTurnDamages(me, enemies[0]!, entries, entryIndex, zones, new Budget(NEXT_TURN_FRACTION),
+			nextDamages = nextTurnDamages(me, enemies[0]!, entries, entryIndex, zones, new Budget(NEXT_TURN_FRACTION, "tour suivant", "N = 0"),
 				// Prochain tour : mes PM, plus ceux du boost de PM s'il dure encore (durée >= 2 : hypothèse non vérifiée).
 				frame.boost !== null && frame.boost.turns >= 2 ? mp : me.mp)
 		} catch (error) {

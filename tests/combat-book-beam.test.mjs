@@ -260,3 +260,32 @@ test("boost durations in the archived fight 55005067: protein lasts 2 turns, mot
 	assert.ok(protein.length >= 2)
 	for (const r of protein) { assert.equal(r.turns, 2); assert.equal(r.removedTurn - r.turn, 2); assert.equal(r.removedBy, 0, "removed in my own turn section") }
 })
+
+test("search cut: the book is refused by the enemy bound or truncated data with one red line each; within the bounds, none", async () => {
+	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const cuts = (w) => { lines.length = 0; const run = planBeam(w.me, w.context, w.profile); return { run, lines: [...lines] } }
+	try {
+		initLeekLogging(errors)
+		const four = cuts(world({ enemies: [[10, 5, 100], [11, 5, 100], [12, 5, 100], [13, 5, 100]] }))
+		assert.ok(four.run !== null)
+		assert.deepEqual(four.lines, [], "4 enemies: at the bound")
+		const five = cuts(world({ enemies: [[10, 5, 100], [11, 5, 100], [12, 5, 100], [13, 5, 100], [14, 5, 100]] }))
+		assert.equal(five.run, null)
+		assert.equal(five.lines.length, 1, five.lines.join("\n"))
+		assert.match(five.lines[0], /^SEARCH CUT \[livre\] cause=enemies bound \(5 > 4\) ops=\?\/\? repli=plan conjoint puis plan B$/)
+		const truncated = world()
+		truncated.context.threat.truncated = true
+		const result = cuts(truncated)
+		assert.equal(result.run, null)
+		assert.equal(result.lines.length, 1, result.lines.join("\n"))
+		assert.match(result.lines[0], /^SEARCH CUT \[livre\] cause=truncated data \(carte de danger\) ops=\?\/\? repli=plan conjoint puis plan B$/)
+	} finally {
+		globalThis.Debug = oldDebug
+		globalThis.Color = oldColor
+		initLeekLogging(previous)
+	}
+})

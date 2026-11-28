@@ -6,7 +6,7 @@ import { computeReachableCells } from "../dist/Classes/Context/ReachableCells.js
 import { executeReservePlan } from "../dist/Classes/Plannification/ReservePlan.js"
 import { ThreatMap } from "../dist/Classes/Context/ThreatMap.js"
 import { LeekProfile } from "../dist/Classes/LeekProfile.js"
-import { initLeekLogging, LogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
+import { initLeekLogging, getLogConfig, LogConfig, LOG_CONTEXT } from "../dist/Toolbox/Logger.js"
 
 function world({ obstacles = [], los = () => true, danger = c => c.x === -2 ? 0 : 100,
 	positions = [[7, 0]], tp = 10, mp = 4, range = 6, chips = [] } = {}) {
@@ -476,4 +476,87 @@ test("reserve scores and retreat reuse only the complete validated danger snapsh
 	executeReservePlan(w.me, w.profile, w.context)
 	assert.equal(reads, w.context.reachable.size)
 	assert.deepEqual(w.events, [["move", 1, 0, 1], "shoot", "shoot", ["move", -2, 0, 3]])
+})
+
+// --- journal de coupure : une ligne rouge `SEARCH CUT` par recherche coupée par son plafond ---------------------------------
+
+function captureCuts(run) {
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true); initLeekLogging(errors)
+	try { run() } finally {
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+	return lines.filter((text) => text.includes("SEARCH CUT"))
+}
+
+test("search cut: the joint search emits one red line where its relative cap decides; no cut, no line", () => {
+	const w = world()
+	const cuts = captureCuts(() => {
+		assert.equal(evaluateTacticalPlans(w.me, w.profile, w.context).reason, "operations reserve")
+		w.resetOps(); w.steady()
+		assert.notEqual(evaluateTacticalPlans(w.me, w.profile, w.context).reason, "operations reserve")
+	})
+	assert.equal(cuts.length, 1)
+	assert.match(cuts[0], /^SEARCH CUT \[tactique\] cause=operations reserve \(search fraction\) ops=710000\/1000000 ticks=\d+\/100000$/)
+})
+
+test("search cut: plan B emits one red line at its first refusal (margin or hard reserve); no cut, no line", () => {
+	const run = (setup) => {
+		const w = world()
+		w.steady()
+		setup(w)
+		return captureCuts(() => executeReservePlan(w.me, w.profile, w.context))
+	}
+	assert.deepEqual(run(() => {}), [], "no cut, no line")
+	const margin = run((w) => { const native = Fight.weaponCells; Fight.weaponCells = (...args) => { w.setOps(550000); return native(...args) } })
+	assert.deepEqual(margin, ["SEARCH CUT [plan B] cause=search margin reached ops=550000/1000000"])
+	const hard = run((w) => w.setOps(990000))
+	assert.equal(hard.length, 1)
+	assert.match(hard[0], /^SEARCH CUT \[plan B\] cause=(hard operations reserve|operations reserve \(global cap\)) ops=990000\/1000000$/)
+})
+
+test("search cut: plan B over its candidate or native-cell bounds emits one red line each; within the bounds, none", async () => {
+	const { getLogConfig } = await import("../dist/Toolbox/Logger.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const cuts = (options, adjust = () => {}) => {
+		const w = world(options)
+		w.steady()
+		adjust(w)
+		initLeekLogging(errors)
+		lines.length = 0
+		executeReservePlan(w.me, w.profile, w.context)
+		return lines.filter((text) => text.includes("SEARCH CUT"))
+	}
+	try {
+		assert.deepEqual(cuts({ positions: [[7, 0], [7, 1], [7, 2], [7, 3]] }), [], "4 enemies: at the bound")
+		const enemies = cuts({ positions: [[7, 0], [7, 1], [7, 2], [7, 3], [7, -1]] })
+		assert.equal(enemies.length, 1, enemies.join("\n"))
+		assert.match(enemies[0], /^SEARCH CUT \[plan B\] cause=candidate bound \(enemies 5 > 4\) ops=\d+\/1000000 repli=candidats retenus seuls$/)
+		const items = (count) => (w) => {
+			w.me.weapons = Array.from({ length: count }, (_, i) => ({ ...w.me.weapon, name: `gun${i}` }))
+			w.me.weapon = w.me.weapons[0]
+		}
+		assert.deepEqual(cuts({}, items(4)), [], "4 weapons: at the bound")
+		const weapons = cuts({}, items(5))
+		assert.equal(weapons.length, 1, weapons.join("\n"))
+		assert.match(weapons[0], /cause=candidate bound \(weapons 5 > 4\)/)
+		const big = (count) => (w) => {
+			const all = [...Array(count)].map((_, i) => ({ x: i, y: 100, id: i, obstacle: false, entity: null }))
+			Fight.weaponCells = () => all
+		}
+		assert.deepEqual(cuts({}, big(613)).filter((text) => text.includes("native cells")), [])
+		const native = cuts({}, big(614))
+		assert.equal(native.length, 1, native.join("\n"))
+		assert.match(native[0], /^SEARCH CUT \[plan B\] cause=native cells bound \(614 > 613\) ops=\d+\/1000000 repli=arme ignorée$/)
+	} finally {
+		globalThis.Debug = oldDebug
+		globalThis.Color = oldColor
+		initLeekLogging(previous)
+	}
 })

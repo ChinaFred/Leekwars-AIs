@@ -320,6 +320,42 @@ test("step 3: the next level opens only the nodes the measured cost of a node al
 	assert.equal(poor.result.best.steps[0].key, one.result.best.steps[0].key)
 })
 
+test("search cut: a deeper level refused or narrowed by the operations allowance is one red line; a roomy budget gives none", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const { NODE_COST_MARGIN } = await import("../dist/Classes/Plannification/BookBeam.js")
+	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const budgetOf = (cap, deepen = true) => new class extends BookBudget {
+		ops() { return this.work * 250 }
+		remainingOps() { return cap - this.work * 250 }
+		deepenOk() { return deepen }
+		guard() {}
+	}()
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	const run = (options) => { const w = replay(5); initLeekLogging(errors); lines.length = 0; const result = planBeam(w.me, w.context, w.profile, { standoff: duel(6), ...options }); return { result, lines: [...lines] } }
+	try {
+		const level1 = run({ depth: 1 }).result.work * 250
+		const roomy = run({ depth: 2, budget: budgetOf(level1 * 100) })
+		assert.equal(roomy.result.result.depth, 2)
+		assert.deepEqual(roomy.lines, [])
+		const narrow = run({ depth: 2, budget: budgetOf(level1 * (1 + 2.5 * NODE_COST_MARGIN)) })
+		assert.equal(narrow.lines.length, 1, narrow.lines.join("\n"))
+		assert.match(narrow.lines[0], /^SEARCH CUT \[livre\] cause=beam nodes bound \(\d+ > 2\) ops=\d+\/\? profondeur=2 niveau_atteint=1$/)
+		const poor = run({ depth: 2, budget: budgetOf(level1 * 1.5) })
+		assert.equal(poor.lines.length, 1, poor.lines.join("\n"))
+		assert.match(poor.lines[0], /^SEARCH CUT \[livre\] cause=remaining ops < node cost ops=\d+\/\? profondeur=2 niveau_atteint=1$/)
+		const capped = run({ depth: 3, budget: budgetOf(level1 * 100, false) })
+		assert.equal(capped.lines.length, 1, capped.lines.join("\n"))
+		assert.match(capped.lines[0], /^SEARCH CUT \[livre\] cause=deepen fraction ops=\d+\/\? profondeur=3 niveau_atteint=2$/)
+	} finally {
+		globalThis.Debug = oldDebug
+		globalThis.Color = oldColor
+		initLeekLogging(previous)
+	}
+})
+
 test("archived fights: the duel counter stays silent on won fights (one window at most) and fires on 55005067", async () => {
 	const { readFileSync } = await import("node:fs")
 	const triggers = (id) => {
@@ -433,4 +469,52 @@ test("book budget: 25-30 % of the operations no longer cuts the beam; the cut na
 	System.operations = 800
 	assert.equal(cause(late), "operations reserve (global cap)", "global cap binds when the beam starts late")
 	delete globalThis.System
+})
+
+test("search cut: a cut of the book emits exactly one red SEARCH CUT line with its cause; no cut, no line", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text, color) => lines.push({ text, color }) }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled("error", true); initLeekLogging(errors)
+	try {
+		let w = replay(5)
+		planBeam(w.me, w.context, w.profile, { depth: 1, standoff: duel(6) })
+		assert.equal(lines.length, 0, "no cut, no line")
+		w = replay(5)
+		const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: new BookBudget(30) })
+		assert.equal(run.result.cut, "work limit")
+		assert.equal(lines.length, 1)
+		assert.equal(lines[0].color, 0xff0000)
+		assert.match(lines[0].text, /^SEARCH CUT \[livre\] cause=work limit ops=0\/\? profondeur=1 niveau_atteint=0$/)
+	} finally {
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+})
+
+test("search cut: the book names both operations causes (book fraction, global cap) on its single red line", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text, color) => lines.push({ text, color }) }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled("error", true); initLeekLogging(errors)
+	try {
+		for (const [operations, cause] of [[700, "operations reserve (book fraction)"], [850, "operations reserve (global cap)"]]) {
+			lines.length = 0
+			const w = replay(5)
+			globalThis.System = { operations: 0, maxOperations: 1000 }
+			const budget = new BookBudget()
+			System.operations = operations
+			const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget })
+			assert.equal(run.result.cut, cause)
+			assert.equal(lines.length, 1, cause)
+			assert.equal(lines[0].color, 0xff0000)
+			assert.match(lines[0].text, new RegExp(`^SEARCH CUT \\[livre\\] cause=${cause.replace(/[()]/g, "\\$&")} ops=${operations}/1000 profondeur=1 niveau_atteint=0$`))
+		}
+	} finally {
+		delete globalThis.System
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
 })
