@@ -226,5 +226,24 @@
    "deleted_files": 0,
    "deleted_folders": 0
   }
+ },
+ {
+  "id": "1e4cfd8",
+  "account": "Kassbi",
+  "published_at": 1795874217,
+  "published_at_iso": "2026-11-28T13:56:57Z",
+  "commit": "1e4cfd8570d542e1c97cfb914ac406a888bc1055",
+  "committed_at": 1795874074,
+  "subject": "feat(main): journaliser la version déployée au début du tour",
+  "message": "feat(main): journaliser la version déployée au début du tour\n\nStratégie: aucun changement de comportement ; une ligne `Version : <commit> — <sujet>` est journalisée (contexte system) après le début du tour, lue dans DEPLOYED_VERSION.\nTests: npm run typecheck, npm test et unittest LWGarden OK.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6c5MB9AdVEsEuahSbT",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 1,
+   "updated": 1,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
  }
 ]
