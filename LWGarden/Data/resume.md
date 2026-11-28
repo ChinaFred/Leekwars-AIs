@@ -2,17 +2,30 @@
 
 Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ; ne pas modifier à la main. Détail d'un combat : `--fight <id>`.
 
+## e7ef19c — perf(ops): zones d'affichage coupées par défaut dans Kassbi_Book
+Compte Kassbi, publié le 2026-11-28T10:37:22Z.
+Stratégie : aucun changement de comportement du plan ; la zone visée (290k à 690k ops par tour, jamais transmise au planificateur) n'est plus calculée en combat, ce qui libère du budget pour la recherche du livre.
+Combats : 1 — 0 victoires, 1 défaites, 0 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 58 % (combat 55027536), médiane des pics 58 %.
+Ressources : 9 tours joués, 1 sans aucune action payante (11 %), 29 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 51 % inutilisés sur 93 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55027536 (1/9, défaite).
+
+Défaites :
+- 55027536 : 10 tours · vs Vanellope · pic ops 58 %
+
 ## 8a79845 — chore(merge): intègre Master dans la branche de l'agressivité
 Compte Kassbi, publié le 2026-11-28T10:04:17Z.
-Combats : 2 — 0 victoires, 2 défaites, 0 nuls (0 % de victoires), 0 sans logs.
-Ops : pic maximal 82 % (combat 55025819), médiane des pics 78 %.
-Ressources : 16 tours joués, 3 sans aucune action payante (19 %), 25 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 47 % inutilisés sur 162 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55025819 (2/9, défaite), 55025104 (1/7, défaite).
+Combats : 3 — 0 victoires, 3 défaites, 0 nuls (0 % de victoires), 0 sans logs.
+Ops : pic maximal 82 % (combat 55025819), médiane des pics 73 %.
+Ressources : 24 tours joués, 5 sans aucune action payante (21 %), 28 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 47 % inutilisés sur 241 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55026416 (2/8, défaite), 55025819 (2/9, défaite), 55025104 (1/7, défaite).
 
 Défaites :
 - 55025104 : 7 tours · vs tungtung67 · pic ops 73 %
 - 55025819 : 9 tours · vs leghapilu · pic ops 82 %
+- 55026416 : 8 tours · vs Billloute · pic ops 54 %
 
 ## 8150386 — feat(book): crédit de boost sans tir et rejeu du compteur de duel
 Compte Kassbi, publié le 2026-11-27T21:41:15Z.
