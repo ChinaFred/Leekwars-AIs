@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { DEPLOYED_VERSION } from "../DEPLOYED.js"
 import { springChestTrap } from "../Brain/ChestTrap.js"
 import { equipOpeningWeapon } from "../Brain/OpeningWeapon.js"
@@ -59,7 +59,9 @@ export function turn(): void {
 	withErrorReporting("src/Main/Kassbi_Book.ts", "turn", () => {
 		const me = Fight.me
 		log(`\n=== KASSBI BOOK TURN START ===`, LOG_CONTEXT.SYSTEM)
-		log(`Version : ${DEPLOYED_VERSION}`, LOG_CONTEXT.SYSTEM)
+		if (Fight.turn === 1) {
+			log(`Version : ${DEPLOYED_VERSION}`, LOG_CONTEXT.SYSTEM)
+		}
 		startTurnSpeech()
 		guarded("greeting", () => greetOnce(me))
 		// Avant `observeTurn` : il ouvre le tour dans l'historique, `lastDealt` serait alors celui du tour qui commence (0).

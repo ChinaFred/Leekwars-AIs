@@ -56,7 +56,7 @@ Lignes écrites pendant l'observation :
 
 Lignes écrites ensuite, pendant la planification, l'exécution et en fin de tour :
 
-- `=== KASSBI BOOK TURN START ===` et `END` (contexte `system`), puis `Version : <commit> — <sujet>` juste après le début : la constante `DEPLOYED_VERSION` de `src/DEPLOYED.ts`, que LWGarden réécrit à chaque PUSH (`locale (non déployée)` hors déploiement).
+- `=== KASSBI BOOK TURN START ===` et `END` (contexte `system`), puis, au tour 1 seulement, `Version : <commit> — <sujet>` juste après le début : la constante `DEPLOYED_VERSION` de `src/DEPLOYED.ts`, que LWGarden réécrit à chaque PUSH (`locale (non déployée)` hors déploiement).
 - `[Book] ...` et `[Tactical] ...` (contexte `planning`) : voir les parties 2 et 3.
 - `[History] T<tour> TP <utilisés>/<dispo> MP <utilisés>/<dispo> dealt <n> taken <n> passive <n> | <action>:<résultat>:<dégâts>`
   (contexte `combat`) : ce que le tour a réellement fait. Un `-` veut dire dégâts non mesurables, un `?` appel sans retour.

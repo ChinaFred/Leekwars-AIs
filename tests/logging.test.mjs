@@ -318,10 +318,10 @@ const makeEntity = (id, mp) => ({
 })
 
 /** Monde jouable par les plans actuels (`helpers/turn-world.mjs`) : alliée en (5,7), ennemi armé à 4 cases. */
-function makeCombatWorld(runId, { enemyLife = 100 } = {}) {
+function makeCombatWorld(runId, { enemyLife = 100, turnNumber = 100 + runId } = {}) {
 	const grid = makeGrid(21, 21)
 	return makeTurnWorld({
-		turnNumber: 100 + runId, grid, enemyId: 200 + 2 * runId, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5, enemyLife,
+		turnNumber, grid, enemyId: 200 + 2 * runId, enemyAt: [9, 5], enemyMp: 2, enemyTp: 5, enemyLife,
 		ally: makeEntity(201 + 2 * runId, 2),
 		enemyWeapon: {
 			id: 90, name: "enemy gun", cost: 3, minRange: 0, maxRange: 6, needsLos: false,
@@ -385,7 +385,7 @@ test("turn() with every context enabled: unchanged lines and order (TURN END, th
 		const { lines, actions } = await playTurn(new LogConfig(), { enemyLife: 10 })
 		assert.deepEqual(actions, ["shoot"]) // 10 PV : le premier tir (22) tue, le second est annulé
 		assert.equal(lines[0], "\n=== KASSBI BOOK TURN START ===")
-		assert.equal(lines[1], "Version : locale (non déployée)") // `DEPLOYED_VERSION`, réécrit par Garden à chaque PUSH
+		assert.equal(lines.some((line) => line.startsWith("Version : ")), false) // la version n'est écrite qu'au tour 1
 		assert.equal(lines.at(-1), "Operations: 10/100 (10.0%)")
 		assert.equal(lines.at(-2), "=== KASSBI BOOK TURN END ===\n")
 		// Sans provocation, les 2 `say` du tour sont des lignes du récit du poireau.
@@ -425,6 +425,20 @@ for (const context of Object.keys(CONTEXT_LINES)) {
 		}
 	})
 }
+
+test("turn() logs the deployed version right after TURN START, at turn 1 only", async () => {
+	const originalRandom = Math.random
+	Math.random = () => 0
+	try {
+		const first = await playTurn(new LogConfig(), { turnNumber: 1 })
+		// `DEPLOYED_VERSION` : réécrit par Garden à chaque PUSH.
+		assert.equal(first.lines[1], "Version : locale (non déployée)")
+		const later = await playTurn(new LogConfig(), { turnNumber: 2 })
+		assert.equal(later.lines.some((line) => line.startsWith("Version : ")), false)
+	} finally {
+		Math.random = originalRandom
+	}
+})
 
 test("turn() with setAll(false): no log line at all, same actions; the config is restored afterwards", async () => {
 	const baseline = await playTurn(new LogConfig())
