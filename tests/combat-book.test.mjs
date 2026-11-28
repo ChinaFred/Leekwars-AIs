@@ -149,19 +149,24 @@ function bruteBest(items, usable, held, tp, weapon, stats) {
 	const chips = items.map((it, i) => i).filter((i) => !items[i].isWeapon && (usable >> i & 1))
 	let best = 0
 	if (weapon >= 0 && !(usable >> weapon & 1)) return 0
-	const options = weapon === ANY ? [NONE, ...weapons] : [weapon]
+	// ANY : puces seules, une arme, ou deux armes différentes (au moins un tir de chacune ; l'arme en main d'abord, 1 PT par changement).
+	const options = weapon === ANY ? [[], ...weapons.map((w) => [w]), ...weapons.flatMap((a, i) => weapons.slice(i + 1).map((b) => [a, b]))] : [weapon === NONE ? [] : [weapon]]
 	for (const option of options) {
-		const equip = option >= 0 && option !== held ? 1 : 0
-		const shotsMax = option >= 0 ? Math.min(items[option].uses, Math.floor((tp - equip) / items[option].cost)) : 0
-		for (let shots = option >= 0 ? 1 : 0; shots <= shotsMax; shots++) {
-			const spend = (option >= 0 ? equip + shots * items[option].cost : 0)
-			const walk = (k, left, total) => {
-				if (k === chips.length) { best = Math.max(best, total); return }
-				const it = items[chips[k]]
-				for (let n = 0; n <= Math.min(it.uses, Math.floor(left / it.cost)); n++) walk(k + 1, left - n * it.cost, total + n * dmg(it))
+		const sizes = (k, left, total) => {
+			if (k === option.length) {
+				const walk = (c, rest, sum) => {
+					if (c === chips.length) { best = Math.max(best, sum); return }
+					const it = items[chips[c]]
+					for (let n = 0; n <= Math.min(it.uses, Math.floor(rest / it.cost)); n++) walk(c + 1, rest - n * it.cost, sum + n * dmg(it))
+				}
+				walk(0, left, total)
+				return
 			}
-			walk(0, tp - spend, option >= 0 ? shots * dmg(items[option]) : 0)
+			const w = items[option[k]]
+			const equip = option[k] === held ? 0 : 1
+			for (let shots = 1; shots <= Math.min(w.uses, Math.floor((left - equip) / w.cost)); shots++) sizes(k + 1, left - equip - shots * w.cost, total + shots * dmg(w))
 		}
+		sizes(0, tp, 0)
 	}
 	return best
 }

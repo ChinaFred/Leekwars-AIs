@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 4
+// file version: 5
 import { computeReachableCells } from "../Context/ReachableCells.js"
 import { isLaser } from "../Context/LaserLine.js"
 import { laserRefusal } from "../Context/LaserShot.js"
@@ -7,7 +7,7 @@ import { chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY } from "./ExecutionBudget.js"
 import { track } from "../Context/StagnationTracker.js"
-import { TacticalPlan, same } from "./TacticalTypes.js"
+import { TacticalPlan, same, weaponSegmentsOf } from "./TacticalTypes.js"
 
 function interrupted(reason: string): void {
 	log(() => `[Tactical] execution: ${reason}`, LOG_CONTEXT.PLANNING)
@@ -40,6 +40,7 @@ function execute(me: Me, plan: TacticalPlan): void {
 		interrupted("global operations reserve; stop")
 		return false
 	}
+	const segments = weaponSegmentsOf(plan)
 	log(() => `[Tactical] plan before execution ${JSON.stringify({
 		mode: "complete intent; native checks may cancel actions",
 		order: [...(plan.mpBoost ? ["mp boost"] : []), "approach", "boost", "protection", "equipment if needed", "offensive chips", "weapon shots", "final move"],
@@ -52,6 +53,8 @@ function execute(me: Me, plan: TacticalPlan): void {
 		mp: { available: me.mp, before: plan.beforeMp, after: plan.afterMp },
 		weapon: plan.weapon === null ? null : { name: plan.weapon.name, cost: plan.weapon.cost,
 			equipTp: me.weapon === plan.weapon ? 0 : 1, shots: plan.weaponShots },
+		weaponSegments: segments.map((segment, i) => ({ name: segment.weapon.name, cost: segment.weapon.cost,
+			equipTp: (i === 0 ? me.weapon : segments[i - 1]!.weapon) === segment.weapon ? 0 : 1, shots: segment.shots })),
 		chips: plan.chips.map((chip) => ({ name: chip.name, cost: chip.cost })),
 		mpBoost: plan.mpBoost === undefined ? null : { name: plan.mpBoost.chip.name, cost: plan.mpBoost.chip.cost, gain: plan.mpBoost.gain },
 		boost: (plan.boost?.chips ?? []).map((chip) => ({ name: chip.name, cost: chip.cost })),
@@ -122,32 +125,46 @@ function execute(me: Me, plan: TacticalPlan): void {
 	for (const chip of plan.boost?.chips ?? []) cast(chip, me, "boost")
 	for (const chip of plan.protection) cast(chip, me, "protection")
 	if (!available()) return
-	if (plan.weapon !== null && me.weapon !== plan.weapon && me.tp >= 1 && me.life > 0) {
-		phase(me, "equipment", () => ({ weapon: plan.weapon!.name, tpCost: 1 }))
-		if (!available()) return
-		track(me, "equip", null, () => me.setWeapon(plan.weapon!))
+	const equip = (weapon: Weapon): boolean => {
+		if (me.weapon === weapon || me.tp < 1 || me.life <= 0) return true
+		if (!available()) return false
+		phase(me, "equipment", () => ({ weapon: weapon.name, tpCost: 1 }))
+		if (!available()) return false
+		track(me, "equip", null, () => me.setWeapon(weapon))
+		return true
 	}
+	// La 1re arme est équipée avant les puces (comme avant), les suivantes entre les segments.
+	if (segments.length > 0 && !equip(segments[0]!.weapon)) return
 	for (const chip of plan.chips) {
 		if (!available()) return
 		cast(chip, plan.target, "offensive chip")
 	}
-	for (let shot = 0; shot < plan.weaponShots; shot++) {
-		if (!available()) return
-		if (me.life <= 0 || plan.target.life <= 0 || plan.weapon === null || me.weapon !== plan.weapon ||
-			shot >= maxUsesOf(plan.weapon) || me.tp < plan.weapon.cost || !me.canUseWeapon(plan.target)) {
-			interrupted("weapon/target unavailable")
-			break
+	// Segments d'arme dans l'ordre : équiper (1 PT, sauf arme déjà en main), tirer N fois, puis la suivante. Un segment interrompu
+	// (refus, PT, cible) arrête tout le plan d'armes : les segments suivants dépendent des PT et de la cible du précédent.
+	for (const [index, segment] of segments.entries()) {
+		const { weapon } = segment
+		if (index > 0 && !equip(weapon)) return
+		let stopped = false
+		for (let shot = 0; shot < segment.shots; shot++) {
+			if (!available()) return
+			if (me.life <= 0 || plan.target.life <= 0 || me.weapon !== weapon ||
+				shot >= maxUsesOf(weapon) || me.tp < weapon.cost || !me.canUseWeapon(plan.target)) {
+				interrupted("weapon/target unavailable")
+				stopped = true
+				break
+			}
+			// Laser : la ligne réelle (entités à jour) ne doit toucher que les alliés prévus, jamais un coffre.
+			const refusal = isLaser(weapon) ? laserRefusal(me, plan.target, weapon, plan.laserAllies) : null
+			if (refusal !== null) { interrupted(`${refusal}; weapon shot cancelled`); stopped = true; break }
+			phase(me, "weapon shot", () => ({
+				weapon: weapon.name, target: plan.target.id, shot: shot + 1,
+				atMost: segment.shots, tpCost: weapon.cost
+			}))
+			if (!available()) return
+			const result = track(me, weapon, plan.target, () => me.useWeapon(plan.target))
+			if (!(result > 0)) { interrupted(`weapon refused: result ${result}`); stopped = true; break }
 		}
-		// Laser : la ligne réelle (entités à jour) ne doit toucher que les alliés prévus, jamais un coffre.
-		const refusal = isLaser(plan.weapon) ? laserRefusal(me, plan.target, plan.weapon, plan.laserAllies) : null
-		if (refusal !== null) { interrupted(`${refusal}; weapon shot cancelled`); break }
-		phase(me, "weapon shot", () => ({
-			weapon: plan.weapon!.name, target: plan.target.id, shot: shot + 1,
-			atMost: plan.weaponShots, tpCost: plan.weapon!.cost
-		}))
-		if (!available()) return
-		const result = track(me, plan.weapon, plan.target, () => me.useWeapon(plan.target))
-		if (!(result > 0)) { interrupted(`weapon refused: result ${result}`); break }
+		if (stopped) break
 	}
 	if (me.life <= 0 || same(me.cell, plan.destination) || !available()) return
 	if (!currentState()) { interrupted("danger stale after actions; final move cancelled"); return }
