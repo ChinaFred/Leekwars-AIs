@@ -323,6 +323,31 @@ test("step 3: the next level opens only the nodes the measured cost of a node al
 	assert.equal(poor.result.best.steps[0].key, one.result.best.steps[0].key)
 })
 
+test("heavy turn: 2.0 x the measured node cost remaining opens 3 of 5 nodes (margin 0.55; 0.7 opened 2)", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
+	const budgetOf = (cap) => new class extends BookBudget {
+		ops() { return this.work * 250 }
+		remainingOps() { return cap - this.work * 250 }
+		guard() {}
+	}()
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color, previous = getLogConfig()
+	globalThis.Debug = { log: (text) => lines.push(String(text)), pause() {} }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled(LOG_CONTEXT.ERROR, true)
+	try {
+		let w = replay(5)
+		const level1 = planBeam(w.me, w.context, w.profile, { depth: 1, standoff: duel(6) }).work * 250
+		w = replay(5); initLeekLogging(errors); lines.length = 0
+		planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: budgetOf(level1 * 3) })
+		assert.match(lines.join("\n"), /beam nodes bound \(5 > 3\)/)
+	} finally {
+		globalThis.Debug = oldDebug
+		globalThis.Color = oldColor
+		initLeekLogging(previous)
+	}
+})
+
 test("search cut: a deeper level refused or narrowed by the operations allowance is one red line; a roomy budget gives none", async () => {
 	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
 	const { NODE_COST_MARGIN } = await import("../dist/Classes/Plannification/BookBeam.js")
@@ -359,11 +384,11 @@ test("search cut: a deeper level refused or narrowed by the operations allowance
 	}
 })
 
-test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 nodes of level 2 (margin 0.7; margin 1.2 gave 3)", async () => {
+test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 nodes of level 2 (margin 0.55; margin 1.2 gave 3)", async () => {
 	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
 	const { NODE_COST_MARGIN } = await import("../dist/Classes/Plannification/BookBeam.js")
 	const { getLogConfig, LOG_CONTEXT } = await import("../dist/Toolbox/Logger.js")
-	assert.equal(NODE_COST_MARGIN, 0.7)
+	assert.equal(NODE_COST_MARGIN, 0.55)
 	const budgetOf = (cap) => new class extends BookBudget {
 		ops() { return this.work * 250 }
 		remainingOps() { return cap - this.work * 250 }
@@ -378,7 +403,7 @@ test("fight 55027536: remaining ops 6.9 x the measured node cost open all 5 node
 		const level1Run = planBeam(w.me, w.context, w.profile, { depth: 1, standoff: duel(6) })
 		const level1 = level1Run.work * 250
 		assert.equal(level1Run.result.beam.length, 5, "5 nodes at the beam")
-		// reste = 3,6 x coût d'un nœud (combat 55029308 : 5 > 4 à 64,5 % des ops) : 3,6 / 0,7 = 5 nœuds payés ; avec la marge 1,2, 3.
+		// reste = 3,6 x coût d'un nœud (combat 55029308 : 5 > 4 à 64,5 % des ops) : 3,6 / 0,55 = 6 nœuds payés ; avec la marge 1,2, 3.
 		w = replay(5); initLeekLogging(errors); lines.length = 0
 		const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: budgetOf(level1 * 4.6) })
 		assert.equal(run.result.depth, 2)

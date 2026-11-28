@@ -120,6 +120,7 @@ les tours imaginés.
 - Le niveau 1 est toujours complet. Le niveau 2 est toujours ouvert. Le niveau 3 est ouvert tant que le livre a
   consommé moins de 30 % des opérations, ou si un boost est en jeu.
 - Le faisceau dispose de 70 % des opérations du tour ; aucune recherche ne dépasse 80 %.
+  Marge sur le coût mesuré d'un nœud (`NODE_COST_MARGIN`) : 0,55 (avant 0,7), rapport niveau 3 / niveau 2 mesuré.
 - Avant d'ouvrir un niveau, on estime le coût d'un nœud d'après le niveau précédent. Si le budget ne couvre pas tous les
   nœuds, seuls les meilleurs sont développés. Un niveau coupé en cours est abandonné : le niveau précédent, complet,
   reste valable. Chaque coupure écrit une ligne `SEARCH CUT`.
