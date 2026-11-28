@@ -247,7 +247,7 @@ test("idle boost: no credit when a non-lethal shot exists this turn, even a bad 
 
 test("boost durations in the archived fight 55005067: protein lasts 2 turns, motivation 3, removed at the start of my turn that follows", async () => {
 	const { readFileSync } = await import("node:fs")
-	const f = JSON.parse(readFileSync(new URL("../LWGarden/Data/fights/55005067/fight.json", import.meta.url), "utf8"))
+	const f = JSON.parse(readFileSync(new URL("./data/fight-55005067.json", import.meta.url), "utf8"))
 	const added = new Map(), removed = []
 	let turn = 0, entity = null
 	for (const a of f.data.actions) {
