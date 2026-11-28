@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -181,7 +181,7 @@ export function planWithBook(me: Me, context: TacticalContext, profile: LeekProf
 	}
 	log(() => unchosen(first, run.trace, catalog.book.items, me.mp), LOG_CONTEXT.PLANNING)
 	log(() => `[Book] chosen: ${describe({ ...best, steps: [first] }, catalog.book.items)}`, LOG_CONTEXT.PLANNING)
-	return laserChecked(me, toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score))
+	return laserChecked(me, toPlan(me, catalog, first, enemies, result.depth, result.cut, best.score, laterOf(catalog, best.steps)))
 }
 
 /**
@@ -224,7 +224,18 @@ export function unchosen(chosen: TurnStep, trace: BeamTrace, items: Catalog["boo
 	return `[Book] unchosen with more damage: ${describe({ state: chosen.plan.state, score: alt.score, steps: [alt], key: "", group: "" }, items)} reason: ${reason}`
 }
 
-function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], depth: number, cut: string | null, score: number): TacticalPlan {
+/** Tours simulés après le tour 1 du meilleur enchaînement et première arme qu'ils utilisent (`TacticalPlan.later`). */
+function laterOf(catalog: Catalog, steps: readonly TurnStep[]): NonNullable<TacticalPlan["later"]> {
+	const items = catalog.book.items
+	for (const step of steps.slice(1)) {
+		const index = step.combo.items.find((i) => items[i]!.isWeapon)
+		if (index !== undefined) return { turns: steps.length - 1, weapon: items[index]!.ref as Weapon }
+	}
+	return { turns: steps.length - 1, weapon: null }
+}
+
+function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], depth: number, cut: string | null, score: number,
+	later: NonNullable<TacticalPlan["later"]>): TacticalPlan {
 	const items = catalog.book.items
 	const weaponIndex = step.combo.items.find((i) => items[i]!.isWeapon)
 	const nearest = [...enemies].sort((a, b) => me.distance(a) - me.distance(b))[0]!
@@ -239,7 +250,7 @@ function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], dep
 		boost: boostChips.length > 0 ? { chips: boostChips, tpGain: step.tpGain } : undefined,
 		mpBoost: mpBoost === undefined ? undefined : { chip: mpBoost.chip, gain: mpBoost.gain },
 		tpUsed: step.tpUsed, usefulDamage: step.outcome.damage, danger: step.danger, score,
-		searchStatus: `book beam depth ${depth}${cut ? `; cut: ${cut}` : ""}`,
+		searchStatus: `book beam depth ${depth}${cut ? `; cut: ${cut}` : ""}`, later,
 		state: { turn: Fight.turn, enemies: enemies.map((enemy) => ({ enemy, cell: enemy.cell })) }
 	}
 }
