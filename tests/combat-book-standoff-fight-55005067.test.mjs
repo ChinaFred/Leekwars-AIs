@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { existsSync } from "node:fs"
 
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5, ABSOLUTE_SHIELD: 6, BUFF_MP: 7, BUFF_TP: 8, RAW_BUFF_TP: 32, RAW_BUFF_STRENGTH: 38 }
 const { planBeam, planWithBook, unchosen } = await import("../dist/Classes/Plannification/BookPlanner.js")
@@ -424,7 +425,9 @@ test("step 3 wiring: the beam gets 70 % of the operations, in a duel or not", ()
 	assert.equal(fraction(new StandoffTracker()), 0.70, "no duel noticed yet")
 })
 
-test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9, then most turns; 55005897 (won in 14 turns) never", async () => {
+const archivedFight = (id) => existsSync(new URL(`../LWGarden/Data/fights/${id}/fight.json`, import.meta.url))
+
+test("duel counter replayed on 55005067 (fight.json): first duel turn is turn 9, then most turns; 55005897 (won in 14 turns) never", { skip: !(archivedFight(55005067) && archivedFight(55005897)) && "archive 55005067 ou 55005897 absente" }, async () => {
 	// Même rejeu que ci-dessus. Fixe le tour de déclenchement : à PV adverses de début de tour et dégâts du tour précédent, la
 	// fenêtre de 6 tours est pleine au tour 6 mais les dégâts bruts n'atteignent 15 % des PV max qu'à partir du tour 9.
 	const { readFileSync } = await import("node:fs")

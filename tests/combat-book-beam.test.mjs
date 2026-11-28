@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { existsSync } from "node:fs"
 
 globalThis.Effect = { DAMAGE: 1, HEAL: 2, BUFF_STRENGTH: 3, BUFF_AGILITY: 4, RELATIVE_SHIELD: 5, ABSOLUTE_SHIELD: 6, BUFF_MP: 7, BUFF_TP: 8 }
 const { planBeam, planWithBook } = await import("../dist/Classes/Plannification/BookPlanner.js")
@@ -245,7 +246,9 @@ test("idle boost: no credit when a non-lethal shot exists this turn, even a bad 
 	for (const node of beam) assert.equal(node.score, node.steps[0].score, "no idle credit added")
 })
 
-test("boost durations in the archived fight 55005067: protein lasts 2 turns, motivation 3, removed at the start of my turn that follows", async () => {
+const archived = (id) => existsSync(new URL(`../LWGarden/Data/fights/${id}/fight.json`, import.meta.url))
+
+test("boost durations in the archived fight 55005067: protein lasts 2 turns, motivation 3, removed at the start of my turn that follows", { skip: !archived(55005067) && "archive 55005067 absente" }, async () => {
 	const { readFileSync } = await import("node:fs")
 	const f = JSON.parse(readFileSync(new URL("../LWGarden/Data/fights/55005067/fight.json", import.meta.url), "utf8"))
 	const added = new Map(), removed = []
