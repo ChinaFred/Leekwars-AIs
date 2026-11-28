@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 12
+// file version: 13
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -57,6 +57,8 @@ export interface SimState {
 	readonly life: number
 	/** PT disponibles au début du tour simulé (boosts de PT actifs compris). */
 	readonly tp: number
+	/** PM disponibles au début du tour simulé (boosts de PM actifs compris). */
+	readonly mp: number
 	/** Tours avant que la puce `catalog.chips[i]` soit relançable : 0 = prête. */
 	readonly cooldowns: readonly number[]
 	readonly buffs: readonly Buff[]
@@ -90,10 +92,11 @@ export interface BeamEnv {
 	readonly catalog: Catalog
 	readonly objective: BookObjective
 	readonly budget: BookBudget
-	readonly mp: number
+	/** PM que la zone du tour 0 couvre en plus de mes PM (boost de PM prêt, zone et danger obtenus) ; 0 : pas de boost de PM au tour 0. */
+	readonly rootMpGain: number
 	readonly mover: EnemyMover
-	/** Cases atteignables au tour simulé `k` (0 = tour courant) depuis la case de l'état. */
-	zone(state: SimState, k: number): Zone
+	/** Cases atteignables avec `mp` PM au tour simulé `k` (0 = tour courant) depuis la case de l'état ; `cost` = PM du trajet. */
+	zone(state: SimState, k: number, mp: number): Zone
 	/** Danger de la case au tour simulé `k` : carte du jeu au tour 0, hypothèse de `BookEnemyModel` ensuite. */
 	dangerAt(cell: Cell, k: number): number
 	lineOfSight(from: Cell, to: Cell): boolean
@@ -181,24 +184,37 @@ function nearestAlive(enemies: readonly SimEnemy[], cell: Cell): { enemy: SimEne
 	return best
 }
 
-export interface Variant { readonly boosts: readonly BoostItem[]; readonly cost: number; readonly tpGain: number; readonly buffs: readonly Buff[]; readonly tp: number }
+export interface Variant {
+	readonly boosts: readonly BoostItem[]; readonly cost: number; readonly tpGain: number; readonly buffs: readonly Buff[]; readonly tp: number
+	/** PM gagnés dès le lancer (boost de PM) : la zone du tour s'élargit d'autant. */
+	readonly mpGain: number
+}
 
 /**
- * Variantes de boost du tour : aucune, ou un sous-ensemble du meilleur boost PRÊT par statistique (force, PT, agilité),
- * sans empiler un effet déjà actif. Sous le seuil de PV `MIN_LIFE_RATIO_FOR_BOOST` : aucune. Le boost de PT est lancé
- * d'abord (ses PT servent aux autres).
+ * Le meilleur boost PRÊT d'une statistique (puce prête, abordable, aucun effet de la même statistique actif), ou undefined ;
+ * toujours undefined sous le seuil de PV `MIN_LIFE_RATIO_FOR_BOOST`.
  */
-export function boostVariants(env: BeamEnv, state: SimState): Variant[] {
-	const none: Variant = { boosts: [], cost: 0, tpGain: 0, buffs: [], tp: state.tp }
-	if (state.life / env.me.maxLife < MIN_LIFE_RATIO_FOR_BOOST) return [none]
-	const best = new Map<string, BoostItem>()
+export function bestReadyBoost(env: Pick<BeamEnv, "me" | "catalog">, state: SimState, stat: Buff["stat"]): BoostItem | undefined {
+	if (state.life / env.me.maxLife < MIN_LIFE_RATIO_FOR_BOOST) return undefined
+	if (state.buffs.some((buff) => buff.stat === stat && buff.turns > 0)) return undefined
+	let best: BoostItem | undefined
 	for (const boost of env.catalog.boosts) {
-		if (state.cooldowns[env.catalog.chipIndex.get(boost.chip)!] !== 0 || boost.cost > state.tp) continue
-		if (state.buffs.some((buff) => buff.stat === boost.stat && buff.turns > 0)) continue
-		const known = best.get(boost.stat)
-		if (known === undefined || boost.gain > known.gain || (boost.gain === known.gain && boost.cost < known.cost)) best.set(boost.stat, boost)
+		if (boost.stat !== stat || state.cooldowns[env.catalog.chipIndex.get(boost.chip)!] !== 0 || boost.cost > state.tp) continue
+		if (best === undefined || boost.gain > best.gain || (boost.gain === best.gain && boost.cost < best.cost)) best = boost
 	}
-	const ready = ["tp", "strength", "agility"].map((stat) => best.get(stat)).filter((boost) => boost !== undefined) as BoostItem[]
+	return best
+}
+
+/**
+ * Variantes de boost du tour : aucune, ou un sous-ensemble du meilleur boost PRÊT par statistique (PT, force, agilité, PM),
+ * sans empiler un effet déjà actif. Sous le seuil de PV `MIN_LIFE_RATIO_FOR_BOOST` : aucune. Le boost de PT est lancé
+ * d'abord (ses PT servent aux autres), celui de PM avant tout déplacement. Au tour 0 le boost de PM exige la zone et le danger
+ * à PM + gain (`env.rootMpGain`) ; aux tours simulés la zone est calculée à PM + gain.
+ */
+export function boostVariants(env: BeamEnv, state: SimState, k: number): Variant[] {
+	const none: Variant = { boosts: [], cost: 0, tpGain: 0, buffs: [], tp: state.tp, mpGain: 0 }
+	const ready = (["tp", "strength", "agility", "mp"] as const).map((stat) => bestReadyBoost(env, state, stat))
+		.filter((boost): boost is BoostItem => boost !== undefined && !(boost.stat === "mp" && k === 0 && boost.gain > env.rootMpGain))
 	const variants: Variant[] = [none]
 	for (let bits = 1; bits < 1 << ready.length; bits++) {
 		const boosts = ready.filter((_, i) => (bits & (1 << i)) !== 0)
@@ -208,7 +224,7 @@ export function boostVariants(env: BeamEnv, state: SimState): Variant[] {
 		const cost = boosts.reduce((sum, boost) => sum + boost.cost, 0)
 		if ((tpBoost?.cost ?? 0) > state.tp || cost > state.tp + tpGain) continue
 		variants.push({
-			boosts, cost, tpGain, tp: state.tp - cost + tpGain,
+			boosts, cost, tpGain, tp: state.tp - cost + tpGain, mpGain: boosts.find((boost) => boost.stat === "mp")?.gain ?? 0,
 			buffs: boosts.map((boost) => ({ stat: boost.stat, value: boost.gain, turns: boost.turns }))
 		})
 	}
@@ -326,27 +342,27 @@ const NEIGHBORS: ReadonlyArray<readonly [number, number]> = [[1, 0], [-1, 0], [0
 
 /**
  * Meilleure case finale d'un groupe d'actions, sur TOUTES les cases de tir du groupe : parcours à sources multiples dans
- * la zone (départ = case de tir au coût d'approche, un PM par pas, au plus `env.mp` en tout). La case de moindre danger
+ * la zone (départ = case de tir au coût d'approche, un PM par pas, au plus `mp` en tout, boost de PM du groupe compris). La case de moindre danger
  * (puis de moindre coût) est retenue : à actions égales le score ne croît qu'avec la baisse du danger exposé.
  * Rend l'étape (case de tir d'origine, case finale), ou null si aucune case de moindre danger que le tir lui-même.
  */
-function bestRetreat(env: BeamEnv, zone: Zone, steps: readonly TurnStep[], k: number, trace?: { reachedMp: number }): TurnStep | null {
+function bestRetreat(env: BeamEnv, zone: Zone, steps: readonly TurnStep[], k: number, mp: number, trace?: { reachedMp: number }): TurnStep | null {
 	const count = zone.cells.length
 	const distance: number[] = new Array(count).fill(Infinity)
 	const origin: Array<TurnStep | undefined> = new Array(count)
 	const buckets: number[][] = []
-	for (let cost = 0; cost <= env.mp; cost++) buckets.push([])
+	for (let cost = 0; cost <= mp; cost++) buckets.push([])
 	for (const step of steps) {
 		const index = zone.byKey.get(step.shotCell.x * 4096 + step.shotCell.y)
-		if (index === undefined || step.beforeMp > env.mp || step.beforeMp >= distance[index]!) continue
+		if (index === undefined || step.beforeMp > mp || step.beforeMp >= distance[index]!) continue
 		distance[index] = step.beforeMp
 		origin[index] = step
 		buckets[step.beforeMp]!.push(index)
 	}
 	let visited = 0
-	for (let cost = 0; cost <= env.mp; cost++) {
+	for (let cost = 0; cost <= mp; cost++) {
 		for (const index of buckets[cost]!) {
-			if (distance[index] !== cost || cost >= env.mp) continue
+			if (distance[index] !== cost || cost >= mp) continue
 			visited++
 			const cell = zone.cells[index]!.cell
 			for (const [dx, dy] of NEIGHBORS) {
@@ -401,10 +417,11 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 	const { catalog, budget } = env
 	const book = catalog.book
 	if (!state.enemies.some((enemy) => enemy.life > 0)) return
-	const zone = env.zone(state, k)
+	const variants = boostVariants(env, state, k)
+	// Une seule zone, à PM + meilleur gain : une variante sans boost de PM en ignore les cases au-delà de ses PM (le coût est celui du trajet).
+	const zone = env.zone(state, k, state.mp + Math.max(...variants.map((variant) => variant.mpGain)))
 	const mask = book.maskOf((item) => state.cooldowns[catalog.chipIndex.get(item.ref as Chip)!] === 0)
 	const stats = { strength: catalog.base.strength, magic: catalog.base.magic }
-	const variants = boostVariants(env, state)
 	const alive = state.enemies.filter((enemy) => enemy.life > 0)
 	const startNearest = nearestAlive(state.enemies, state.cell)!
 	const shieldOf = (enemy: SimEnemy): Shield => ({ relative: enemy.enemy.relativeShield || 0, absolute: enemy.enemy.absoluteShield || 0 })
@@ -430,7 +447,7 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 		const pv = prepared[index]!
 		const boost = pv.variant.boosts.find((candidate) => candidate.stat === "strength")
 		if (k !== 0 || boost === undefined) return 0
-		return idleBoostCredit(env, nearestNow.distance, nearestNow.enemy, boost.turns, prepared[0]!, pv, nearestIdx, mask, state.held)
+		return idleBoostCredit(env, state.mp, nearestNow.distance, nearestNow.enemy, boost.turns, prepared[0]!, pv, nearestIdx, mask, state.held)
 	}
 	prepared.forEach((entry, index) => { entry.idle = idleOf(index) })
 	const readAt = (plan: Plan, tp: number): { combo: Combo; net: number } => {
@@ -460,6 +477,7 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 				los = env.lineOfSight(cell, enemy.cell)
 			}
 			for (const pv of prepared) {
+				if (entry.cost > state.mp + pv.variant.mpGain) continue
 				let combo = EMPTY_COMBO
 				let net = 0
 				if (distance <= book.maxDistance && pv.variant.tp > 0) {
@@ -498,8 +516,9 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
 		let best = group.stay
 		let retreat: TurnStep | null = null
 		const reached = { reachedMp: 0 }
-		if (env.allowRetreat && group.stay.target !== null && env.mp > 0) {
-			retreat = bestRetreat(env, zone, group.members, k, reached)
+		const mp = state.mp + group.stay.plan.variant.mpGain
+		if (env.allowRetreat && group.stay.target !== null && mp > 0) {
+			retreat = bestRetreat(env, zone, group.members, k, mp, reached)
 			if (retreat !== null) { sink.push(retreat); if (betterStep(retreat, best) < 0) best = retreat }
 		}
 		if (env.trace !== undefined && k === 0) env.trace.groups.set(group.stay.group, { stay: group.stay, retreat, reachedMp: reached.reachedMp })
@@ -516,13 +535,13 @@ export function expandTurn(env: BeamEnv, state: SimState, k: number, sink: TurnS
  * du meilleur tour de tir avec ce boost (au meilleur éloignement, tous mes PT, plafonné aux PV de la cible). 0 si `d − s` ≤ 0.
  */
 function idleBoostCredit(
-	env: BeamEnv, distance: number, target: SimEnemy, duration: number,
+	env: BeamEnv, mp: number, distance: number, target: SimEnemy, duration: number,
 	plain: { resolved: ReadonlyArray<{ table: CombatTable; netFactor: number }>; critical: number },
 	boosted: { resolved: ReadonlyArray<{ table: CombatTable; netFactor: number }>; critical: number },
 	enemyIdx: number, mask: number, held: number
 ): number {
 	const book = env.catalog.book
-	const contact = Math.max(1, Math.ceil((distance - env.mp - book.maxDistance) / (env.mp + target.enemy.mp)))
+	const contact = Math.max(1, Math.ceil((distance - mp - book.maxDistance) / (mp + target.enemy.mp)))
 	const covered = duration - contact
 	if (covered <= 0) return 0
 	let gain = 0
@@ -556,18 +575,32 @@ function nextState(env: BeamEnv, state: SimState, step: TurnStep): SimState {
 	return {
 		cell: step.finalCell, life: Math.min(env.me.maxLife, Math.max(1, state.life + step.outcome.heal - step.outcome.exposed * DAMAGE_TAKEN_FRACTION)),
 		tp: catalog.base.tp + buffs.filter((buff) => buff.stat === "tp").reduce((sum, buff) => sum + buff.value, 0),
+		mp: catalog.base.mp + buffs.filter((buff) => buff.stat === "mp").reduce((sum, buff) => sum + buff.value, 0),
 		cooldowns, buffs, enemies, held
 	}
 }
 
 /**
- * Le niveau suivant vaut-il son coût ? Oui en duel (AGGRESSIVE) ou si un plan NON létal du niveau courant inflige plus que
- * le meilleur (le compromis dégâts / danger se joue sur deux tours). Conséquence assumée : hors de ces cas, un boost qui ne
- * paie qu'au tour suivant n'est pas évalué (profondeur 1) ; `env.deepen` l'impose ou l'interdit (tests, réglage).
+ * Le meilleur plan du tour n'inflige rien (aucun tir possible : ses PT seraient perdus) et un plan non létal du faisceau lance un
+ * boost ? Alors un boost ne coûte aucun tir et ne se juge que sur les tours suivants (PM : zone et cases de tir plus proches ; PT et
+ * force : tirs ou dégâts en plus) : sans niveau de plus il ne serait jamais comparé à ne pas le lancer. Sinon un boost qui accompagne
+ * un tir paie déjà dans le score du niveau 1 : la règle du plan qui inflige plus suffit.
+ */
+function investsInBoost(beam: readonly BeamNode[]): boolean {
+	const best = beam[0]?.steps[0]
+	return best !== undefined && best.outcome.damage === 0 &&
+		beam.some((node) => node.steps.some((step) => !step.lethal && step.boosts.length > 0))
+}
+
+/**
+ * Le niveau suivant vaut-il son coût ? Oui en duel (AGGRESSIVE), si un boost peut être posé sans tir (`investsInBoost`) ou si un
+ * plan NON létal du niveau courant inflige plus que le meilleur (le compromis dégâts / danger se joue sur deux tours).
+ * `env.deepen` l'impose ou l'interdit (tests, réglage).
  */
 export function worthDeepening(env: BeamEnv, beam: readonly BeamNode[]): boolean {
 	if (env.deepen !== undefined) return env.deepen
 	if (env.duel !== null) return true
+	if (investsInBoost(beam)) return true
 	const best = beam[0]?.steps[0]
 	if (best === undefined) return false
 	return beam.some((node) => {
@@ -609,8 +642,10 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 	for (let k = 0; k < depth; k++) {
 		let nodes = beam
 		if (k >= 1) {
-			if (!worthDeepening(env, beam)) { skipped = `level ${k + 1}: no better non-lethal plan, no boost, no duel`; break }
-			if (k >= 2 && !env.budget.deepenOk()) {
+			if (!worthDeepening(env, beam)) { skipped = `level ${k + 1}: no better non-lethal plan, no boost cast, no duel`; break }
+			// Le 3e tour reste facultatif (`deepenOk`) sauf pour un tel boost, dont l'effet dure 2 à 3 tours : les plafonds du faisceau
+			// (`BOOK_SEARCH_FRACTION`, 0,80 global) et le coût mesuré d'un nœud (`affordable`) s'appliquent toujours.
+			if (k >= 2 && !investsInBoost(beam) && !env.budget.deepenOk()) {
 				skipped = `level ${k + 1}: budget`
 				logSearchCut("livre", "deepen fraction", `${opsDetail()} profondeur=${k + 1} niveau_atteint=${reached}`)
 				break

@@ -35,6 +35,7 @@ Les décisions, les seuils et leurs limites sont décrits dans [docs/strategies.
 | `types/` | `leekwars.d.ts` : sous-ensemble local de l'API du jeu |
 | `scripts/` | Outils du dépôt (contrôle du message de commit, synchronisation des agents) |
 | `LWGarden/` | Déploiement vers Leek Wars et archive des combats (Python) |
+| `ExternalTooling/` | Outils hors ligne, hors combat : `loadout/best_loadout.py` cherche la meilleure combinaison armes + puces (Python, sans dépendance ; `--help`) |
 
 Chaque fichier `.ts` commence par `// @version:5.8` (version du langage) puis `// file version: N`, à incrémenter
 à chaque modification. Les `.leek` de `src/_oldLeekScript/` sont des archives ignorées par Git.

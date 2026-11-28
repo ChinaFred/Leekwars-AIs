@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 11
+// file version: 12
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -9,7 +9,7 @@ import { toCandidate } from "../Context/ShotPlan.js"
 import { aliveChests, aliveEnemies } from "../Context/Targets.js"
 import { LeekProfile } from "../LeekProfile.js"
 import {
-	BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, BeamTrace, DuelState, REFINE_KEEP, SimState, TurnStep, Zone, runBeam
+	BEAM_DEPTH, BEAM_WIDTH, BeamEnv, BeamNode, BeamResult, BeamTrace, DuelState, REFINE_KEEP, SimState, TurnStep, Zone, bestReadyBoost, runBeam
 } from "./BookBeam.js"
 import { BOOK_DUEL_SEARCH_FRACTION, BookBudget } from "./BookBudget.js"
 import { catalogFor } from "./BookCatalog.js"
@@ -102,21 +102,45 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 		if (danger === null || !Number.isFinite(danger) || danger < 0) return null
 		known.set(entry.cell.x * 4096 + entry.cell.y, { cell: entry.cell, danger: Math.max(0, danger - chestDanger(entry.cell)) })
 	}
+	const root: SimState = {
+		cell: me.cell, life: me.life, tp: me.tp, mp: me.mp, cooldowns: catalog.chips.map((chip) => chip.currentCooldown),
+		buffs: catalog.buffs, enemies: enemies.map((enemy) => ({ enemy, cell: enemy.cell, life: enemy.life })),
+		held: me.weapon === null ? -1 : catalog.book.items.findIndex((item) => item.ref === me.weapon)
+	}
 	const toZone = (cells: ReadonlyArray<{ cell: Cell; cost: number }>): Zone =>
 		({ cells, byKey: new Map(cells.map((entry, i) => [entry.cell.x * 4096 + entry.cell.y, i])) })
 	const rootZone = toZone(rootCells)
+	// Boost de PM prêt : zone et carte de danger à PM + gain, demandées à l'observation (une fois). Indisponibles (tronquées, danger
+	// inconnu, plafond d'opérations) : pas de boost de PM au tour 0, le reste du livre est inchangé. Les cases en plus entrent dans
+	// `known` (le danger des tours simulés les voit) ; la carte de PM + gain n'a pas le danger des coffres, `dangerAt` l'ajoute.
+	const mpGain = context.mpZone === undefined ? 0 : bestReadyBoost({ me, catalog }, root, "mp")?.gain ?? 0
+	const boosted = mpGain > 0 ? context.mpZone!(mpGain) : null
+	let boostedZone: Zone | null = null
+	if (boosted !== null && !boosted.reachable.truncated && !boosted.threat.truncated && !boosted.threat.inputsTruncated) {
+		const extra: Array<{ key: number; cell: Cell; danger: number }> = []
+		const entries = [...boosted.reachable.entries()]
+		for (const entry of entries) {
+			const danger = boosted.threat.dangerAt(entry.cell)
+			if (danger === null || !Number.isFinite(danger) || danger < 0) { extra.length = 0; break }
+			extra.push({ key: entry.cell.x * 4096 + entry.cell.y, cell: entry.cell, danger })
+		}
+		if (extra.length === entries.length) {
+			for (const entry of extra) if (!known.has(entry.key)) known.set(entry.key, { cell: entry.cell, danger: entry.danger })
+			boostedZone = toZone(entries)
+		}
+	}
 	const zones = new Map<string, Zone>()
 	const sight = new Map<string, boolean>()
 	const futureDanger = futureDangerOf(known)
 	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
-		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? (options.stanceOf === undefined ? advanceTowardMe : moverByStance(options.stanceOf)), allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
-		zone(state, k) {
-			if (k === 0) return rootZone
-			const id = `${k}:${state.cell.id}`
+		me, catalog, objective, budget, rootMpGain: boostedZone === null ? 0 : mpGain, mover: options.mover ?? (options.stanceOf === undefined ? advanceTowardMe : moverByStance(options.stanceOf)), allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
+		zone(state, k, mp) {
+			if (k === 0) return mp > me.mp && boostedZone !== null ? boostedZone : rootZone
+			const id = `${k}:${state.cell.id}:${mp}`
 			let zone = zones.get(id)
 			if (zone === undefined) {
-				const computed = computeReachableCells({ id: me.id, cell: state.cell }, me.mp, Fight.turn + k)
+				const computed = computeReachableCells({ id: me.id, cell: state.cell }, mp, Fight.turn + k)
 				budget.tick(computed.size * 4)
 				zones.set(id, zone = toZone([...computed.entries()]))
 			}
@@ -130,11 +154,6 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 			return seen
 		},
 		supportAllowed: (state) => ({ heal: profile.allowHealing && state.life < me.maxLife, shield: profile.allowShielding })
-	}
-	const root: SimState = {
-		cell: me.cell, life: me.life, tp: me.tp, cooldowns: catalog.chips.map((chip) => chip.currentCooldown),
-		buffs: catalog.buffs, enemies: enemies.map((enemy) => ({ enemy, cell: enemy.cell, life: enemy.life })),
-		held: me.weapon === null ? -1 : catalog.book.items.findIndex((item) => item.ref === me.weapon)
 	}
 	const opsPrepared = budget.ops()
 	const result = runBeam(env, root, options.width ?? BEAM_WIDTH, options.depth ?? BEAM_DEPTH)
@@ -209,7 +228,8 @@ function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], dep
 	const items = catalog.book.items
 	const weaponIndex = step.combo.items.find((i) => items[i]!.isWeapon)
 	const nearest = [...enemies].sort((a, b) => me.distance(a) - me.distance(b))[0]!
-	const boostChips = step.boosts.map((boost) => boost.chip)
+	const boostChips = step.boosts.filter((boost) => boost.stat !== "mp").map((boost) => boost.chip)
+	const mpBoost = step.boosts.find((boost) => boost.stat === "mp")
 	return {
 		target: step.target?.enemy ?? nearest, shotCell: step.shotCell, destination: step.finalCell,
 		beforeMp: step.beforeMp, afterMp: step.afterMp,
@@ -217,6 +237,7 @@ function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], dep
 		chips: step.combo.items.filter((i) => !items[i]!.isWeapon).map((i) => items[i]!.ref as Chip),
 		protection: step.supports.map((support) => support.chip),
 		boost: boostChips.length > 0 ? { chips: boostChips, tpGain: step.tpGain } : undefined,
+		mpBoost: mpBoost === undefined ? undefined : { chip: mpBoost.chip, gain: mpBoost.gain },
 		tpUsed: step.tpUsed, usefulDamage: step.outcome.damage, danger: step.danger, score,
 		searchStatus: `book beam depth ${depth}${cut ? `; cut: ${cut}` : ""}`,
 		state: { turn: Fight.turn, enemies: enemies.map((enemy) => ({ enemy, cell: enemy.cell })) }

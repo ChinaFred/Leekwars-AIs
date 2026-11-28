@@ -4,9 +4,10 @@ import { EnemyMemory, NEVER_ATTRIBUTE_DAMAGE } from "../Classes/Context/EnemyMem
 import { actionHistory, StagnationTracker } from "../Classes/Context/StagnationTracker.js"
 import { aliveChests, aliveEnemies } from "../Classes/Context/Targets.js"
 import { TACTICAL_LIMITS, TacticalContext } from "../Classes/Plannification/TacticalTypes.js"
-import { decideFleeMpBoost, decideMpBoost } from "./StrengthBoost.js"
+import { decideFleeMpBoost, decideMpBoost, hasSearchRoom } from "./StrengthBoost.js"
+import { computeReachableCells } from "../Classes/Context/ReachableCells.js"
 import { reportError } from "../Toolbox/Debug.js"
-import { isLogEnabled, log, LOG_CONTEXT } from "../Toolbox/Logger.js"
+import { cutOperations, isLogEnabled, log, LOG_CONTEXT, logSearchCut } from "../Toolbox/Logger.js"
 import { AccessibleZoneSource, showAccessibleZones, showDangerZone, showTargetZone } from "../Toolbox/Marker.js"
 
 /** Mémoire et cartes du tour ; seules les cartes sont transmises à planAct. */
@@ -299,6 +300,29 @@ export function mpBoostCandidate(me: Me): NonNullable<TacticalContext["mpBoost"]
 			return { option: decision.option, reachable: decision.zone, threat, reason: decision.reason }
 		} catch (error) {
 			reportError("src/Brain/TurnObservation.ts", "mpBoostCandidate", error)
+			return null
+		}
+	}
+}
+
+/**
+ * Zone atteignable et carte de danger à mes PM + `gain` pour le livre (`TacticalContext.mpZone`). Lecture seule, à la demande :
+ * la carte réutilise les entrées ennemies du tour (`threatMapFor`). Null : zone ou carte tronquée, carte absente, opérations
+ * au-delà du plafond de recherche (`hasSearchRoom`) ou erreur journalisée ; le livre ne lance alors pas de boost de PM.
+ */
+export function mpZoneFor(me: Me): NonNullable<TacticalContext["mpZone"]> {
+	return (gain) => {
+		try {
+			if (!hasSearchRoom()) return null
+			const reachable = computeReachableCells(me, me.mp + gain, Fight.turn)
+			if (reachable.truncated) {
+				logSearchCut("boost PM", `cells bound (${reachable.size}+ with ${me.mp + gain} MP, zone truncated)`, `${cutOperations()} repli=livre sans boost de PM`)
+				return null
+			}
+			const threat = enemyMemory.threatMapFor(me, reachable, Fight.turn)
+			return threat === null ? null : { reachable, threat }
+		} catch (error) {
+			reportError("src/Brain/TurnObservation.ts", "mpZoneFor", error)
 			return null
 		}
 	}
