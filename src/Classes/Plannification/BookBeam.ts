@@ -1,6 +1,7 @@
 // @version:5.8
-// file version: 8
+// file version: 9
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
+import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
 import { BoostItem, Buff, Catalog, SupportItem } from "./BookCatalog.js"
 import { EnemyMover } from "./BookEnemyModel.js"
@@ -598,6 +599,7 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 		} catch (error) {
 			if (!(error instanceof BookCut)) throw error
 			cut = error.message
+			logSearchCut("livre", cut, `ops=${env.budget.ops()}/${typeof System === "undefined" ? "?" : System.maxOperations} profondeur=${k + 1} niveau_atteint=${reached}`)
 			// Tour 1 coupé : les étapes déjà produites sont complètes, on garde les meilleures ; plus loin, niveau abandonné.
 			if (k === 0) for (const step of selectTop(sink, width, betterStep)) {
 				next.push({ state: nextState(env, root, step), score: (TURN_WEIGHTS[0] ?? 1) * step.score, steps: [step], key: step.key, group: step.group })

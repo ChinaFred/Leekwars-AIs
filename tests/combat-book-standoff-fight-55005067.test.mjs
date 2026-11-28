@@ -440,3 +440,25 @@ test("book budget: 25-30 % of the operations no longer cuts the beam; the cut na
 	assert.equal(cause(late), "operations reserve (global cap)", "global cap binds when the beam starts late")
 	delete globalThis.System
 })
+
+test("search cut: a cut of the book emits exactly one red SEARCH CUT line with its cause; no cut, no line", async () => {
+	const { BookBudget } = await import("../dist/Classes/Plannification/BookBudget.js")
+	const lines = [], oldDebug = globalThis.Debug, oldColor = globalThis.Color
+	globalThis.Debug = { log: (text, color) => lines.push({ text, color }) }
+	globalThis.Color = { rgb: () => 0xff0000 }
+	const errors = new LogConfig(); errors.setAll(false).setEnabled("error", true); initLeekLogging(errors)
+	try {
+		let w = replay(5)
+		planBeam(w.me, w.context, w.profile, { depth: 1, standoff: duel(6) })
+		assert.equal(lines.length, 0, "no cut, no line")
+		w = replay(5)
+		const run = planBeam(w.me, w.context, w.profile, { depth: 2, standoff: duel(6), budget: new BookBudget(30) })
+		assert.equal(run.result.cut, "work limit")
+		assert.equal(lines.length, 1)
+		assert.equal(lines[0].color, 0xff0000)
+		assert.match(lines[0].text, /^SEARCH CUT \[livre\] cause=work limit ops=0\/\? profondeur=1 niveau_atteint=0$/)
+	} finally {
+		globalThis.Debug = oldDebug; globalThis.Color = oldColor
+		const off = new LogConfig(); off.setAll(false); initLeekLogging(off)
+	}
+})
