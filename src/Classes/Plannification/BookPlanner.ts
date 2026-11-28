@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { log, LOG_CONTEXT } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -14,7 +14,7 @@ import {
 import { BOOK_DUEL_SEARCH_FRACTION, BookBudget } from "./BookBudget.js"
 import { catalogFor } from "./BookCatalog.js"
 import { EnemyMover, advanceTowardMe, futureDangerOf } from "./BookEnemyModel.js"
-import { BookObjective, DEFAULT_OBJECTIVE } from "./BookObjective.js"
+import { BookObjective, objectiveFor } from "./BookObjective.js"
 import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
 import { netDamage } from "./TacticalScore.js"
@@ -71,7 +71,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 		threat.entityId !== me.id || threat.turn !== Fight.turn || threat.candidateCells !== reachable.size ||
 		!hasExecutionRoom()) return null
 
-	const objective = options.objective ?? DEFAULT_OBJECTIVE
+	const objective = options.objective ?? objectiveFor(profile.aggression)
 	// Duel : actif dès que le compteur de duel (`BookStandoff.ts`) le constate.
 	const duel: DuelState | null = options.standoff?.active
 		? { accept: options.standoff.accept, riskScale: options.standoff.riskScale, beyond: options.standoff.beyond } : null
@@ -95,7 +95,6 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 	const zones = new Map<string, Zone>()
 	const sight = new Map<string, boolean>()
 	const futureDanger = futureDangerOf(known)
-	const behavior = profile.behavior
 	const trace: BeamTrace = { retreat: profile.allowHiding && me.mp > 0, candidates: [], groups: new Map() }
 	const env: BeamEnv = {
 		me, catalog, objective, budget, mp: me.mp, mover: options.mover ?? advanceTowardMe, allowRetreat: profile.allowHiding, duel, deepen: options.deepen, trace,
@@ -117,21 +116,7 @@ export function planBeam(me: Me, context: TacticalContext, profile: LeekProfile,
 			if (seen === undefined) { budget.tick(1); sight.set(id, seen = Field.lineOfSight(from, to)) }
 			return seen
 		},
-		supportAllowed(state) {
-			const ratio = state.life / me.maxLife
-			let closest: SimState["enemies"][number] | null = null
-			let distance = Infinity
-			for (const enemy of state.enemies) {
-				const d = Math.abs(enemy.cell.x - state.cell.x) + Math.abs(enemy.cell.y - state.cell.y)
-				if (enemy.life > 0 && d < distance) { closest = enemy; distance = d }
-			}
-			return {
-				heal: profile.allowHealing && closest !== null &&
-					(behavior.shouldHeal(ratio) || behavior.shouldHealWithThreat(ratio, distance)),
-				shield: profile.allowShielding && closest !== null &&
-					behavior.shouldShield(ratio, distance, closest.enemy.mp + (closest.enemy.weapon?.maxRange ?? 1))
-			}
-		}
+		supportAllowed: (state) => ({ heal: profile.allowHealing && state.life < me.maxLife, shield: profile.allowShielding })
 	}
 	const root: SimState = {
 		cell: me.cell, life: me.life, tp: me.tp, cooldowns: catalog.chips.map((chip) => chip.currentCooldown),

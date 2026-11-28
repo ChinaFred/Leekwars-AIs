@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 17
+// file version: 18
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { computeReachableCells, MOVE_NEIGHBOR_OFFSETS, ReachableCells } from "../Context/ReachableCells.js"
 import { isLaser, laserBalance } from "../Context/LaserLine.js"
@@ -12,7 +12,7 @@ import {
 	tpBoostFutureDamage, tpBoostNetDamage
 } from "../../Brain/StrengthBoost.js"
 import { TacticalContext, TacticalPreparation } from "./TacticalTypes.js"
-import { netDamage, riskWeight } from "./TacticalScore.js"
+import { netDamage, riskWeight, shouldHeal, shouldHealWithThreat, shouldShield } from "./TacticalScore.js"
 import { track } from "../Context/StagnationTracker.js"
 import { log, LOG_CONTEXT, LogText, getLogConfig } from "../../Toolbox/Logger.js"
 import { ExecutionBudget, EXECUTION_BUDGET_POLICY, SEARCH_GLOBAL_FRACTION, hasExecutionRoom } from "./ExecutionBudget.js"
@@ -180,7 +180,6 @@ export function executeReservePlan(
 		const objective = enemies[0]!
 		const distanceToObjective = (cell: Cell): number =>
 			Math.abs(cell.x - objective.cell.x) + Math.abs(cell.y - objective.cell.y)
-		const behavior = profile.behavior
 		const weight = riskWeight(profile, me.life / me.maxLife, allEnemies.reduce((nearest, enemy) =>
 			Math.min(nearest, Math.abs(origin.x - enemy.cell.x) + Math.abs(origin.y - enemy.cell.y)), Infinity))
 		// Sélection partielle AVANT les validations/fournisseurs coûteux, uniquement avec
@@ -415,8 +414,8 @@ export function executeReservePlan(
 			return (heal || shield) && chip.features.every((f) =>
 				f.type === Effect.HEAL || f.type === Effect.ABSOLUTE_SHIELD || f.type === Effect.RELATIVE_SHIELD) &&
 				(!heal || (profile.allowHealing &&
-				(behavior.shouldHeal(life) || behavior.shouldHealWithThreat(life, distance)))) &&
-				(!shield || (profile.allowShielding && behavior.shouldShield(life, distance,
+				(shouldHeal(profile.aggression, life) || shouldHealWithThreat(profile.aggression, life, distance)))) &&
+				(!shield || (profile.allowShielding && shouldShield(profile.aggression, life, distance,
 					target.mp + (target.weapon?.maxRange ?? 1))))
 		}
 		const supportSteps: Array<{ chip: Chip; selected: boolean; tpBefore: number; tpAfter: number;

@@ -17,10 +17,11 @@ export async function load(dir) {
 	const S = await import(dir + "/dist/Classes/Context/StagnationTracker.js")
 	const G = await import(dir + "/dist/Toolbox/Logger.js")
 	const V = await import(dir + "/dist/Classes/Plannification/ReservePlan.js")
+	const C = await import(dir + "/dist/Classes/Plannification/TacticalScore.js")
 	// Build d'avant le découpage du planificateur (`DIST_ROOT`) : `executeTacticalPlan` vient encore de TacticalPlanner.js.
 	const executeTacticalPlan = P.executeTacticalPlan ??
 		(await import(dir + "/dist/Classes/Plannification/TacticalExecution.js")).executeTacticalPlan
-	return { ...P, ...R, ...T, ...L, ...S, ...G, executeTacticalPlan, executeReservePlan: V.executeReservePlan }
+	return { ...P, ...R, ...T, ...L, ...S, ...G, executeTacticalPlan, executeReservePlan: V.executeReservePlan, shouldHide: C.shouldHide }
 }
 
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
@@ -226,7 +227,7 @@ export function run(M, s, interruptAfter = null, act = false) {
 			geo: dist(startCell, enemies[0].cell) - dist(p.destination, enemies[0].cell),
 			noop: p.beforeMp + p.afterMp === 0 && p.weaponShots === 0 && p.chips.length === 0 && p.protection.length === 0 && !(p.boost?.chips ?? []).length }
 	}
-	const hide = profile.allowHiding && profile.behavior.shouldHide(s.life / s.maxLife, near(startCell))
+	const hide = profile.allowHiding && M.shouldHide(profile.aggression, s.life / s.maxLife, near(startCell))
 	return { end, plan: summary, reason: result.reason, logs, work, reads, originDanger, minDanger: Math.min(...dangers.values()), cells: reachable.size, hide,
 		closest: near(startCell), m, stayLethal: originDanger >= s.life * m,
 		refused: logs.filter((l) => l.startsWith("[Tactical] retreat without damage refused")).length, doomed: logs.some((l) => l.startsWith("[Tactical] doomed turn")) }

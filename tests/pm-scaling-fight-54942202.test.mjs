@@ -195,7 +195,7 @@ const done = () => { delete globalThis.System }
 // 4 PM : même décision (score -16,88 -> 37,57). Tour 5 à 5 PM, la DÉCISION CHANGE : avant, protein seul et repli en 74
 // (danger 59,76, score -8,46, aucun item utilisable de là au tour suivant) ; maintenant, comme à 4 PM, motivation + protein
 // + neutrino depuis 217 (danger 154,38, N = 0,75 x 72,6 : neutrino + rock, score 37,57).
-// Rejoué avec le comportement unique (`LeekBehavior`, poids du risque 0,5, approche 1,25 ; avant : profil BALANCED, poids 1) :
+// Rejoué avec le comportement unique (thresholds de `TacticalScore.ts`, poids du risque 0,5, approche 1,25 ; avant : profil BALANCED, poids 1) :
 // destinations et dangers inchangés, scores et N plus hauts ; aux tours 5 (4 et 5 PM) et 6 (5 PM) le plan lance rock + protein
 // au lieu de motivation + protein + neutrino (danger identique, 154,38 au tour 5).
 const EXPECTED = {
