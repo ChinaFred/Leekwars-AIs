@@ -50,6 +50,8 @@ Choisis le plus petit circuit qui couvre la demande.
   redirection de sortie vers le dépôt. Un hook refuse tout nouveau `.md`/`.txt` hors `docs/`.
 - Trois documents seulement, avec un budget de taille vérifié au commit (`scripts/check-doc-budget.mjs`) :
   `README.md`, `docs/strategies.md`, `ChangeLog.md` (une ligne par version, uniquement lors d'un commit demandé).
+- `docs/observation-et-faisceau.md` décrit l'observation du tour, le journal, le faisceau et l'exécution : tout changement
+  de ces parties le met à jour dans le même commit.
 - `LWGarden/Data/` (combats archivés et `resume.md`) est suivi par Git ; `Data/exports/` ne l'est pas.
 
 ## Sécurité

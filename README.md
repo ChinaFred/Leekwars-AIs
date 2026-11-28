@@ -4,6 +4,7 @@ Sources de l'IA **Kassbi** pour [Leek Wars](https://leekwars.com) (`src/`, TypeS
 Python qui déploie les sources et archive les combats.
 
 - Stratégie en vigueur : [docs/strategies.md](docs/strategies.md)
+- Observation du tour, faisceau et exécution : [docs/observation-et-faisceau.md](docs/observation-et-faisceau.md)
 - Versions : [ChangeLog.md](ChangeLog.md)
 - Déploiement et archive des combats : [LWGarden/README.md](LWGarden/README.md)
 
@@ -90,6 +91,7 @@ lancez `npm run agents:sync`.
 
 ## Documentation
 
-Trois documents, volontairement courts : ce README (fonctionnement et structure),
-[docs/strategies.md](docs/strategies.md) (stratégie en vigueur) et [ChangeLog.md](ChangeLog.md) (une ligne par
-version). Tout le reste est dans le code et dans `git log`.
+Ce README (fonctionnement et structure), [docs/strategies.md](docs/strategies.md) (stratégie en vigueur),
+[docs/observation-et-faisceau.md](docs/observation-et-faisceau.md) (observation du tour, journal, faisceau,
+exécution : mis à jour à chaque changement de ces parties) et [ChangeLog.md](ChangeLog.md) (une ligne par version).
+Tout le reste est dans le code et dans `git log`.

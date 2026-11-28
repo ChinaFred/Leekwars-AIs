@@ -129,10 +129,10 @@ les tours imaginés.
 - La meilleure suite est celle dont le score total est le plus haut. En cas d'égalité : danger plus bas, moins de PT
   dépensés, moins de PM.
 - Seul le **premier tour** de cette suite est exécuté. Au tour suivant, tout est recalculé avec l'état réel.
-- Le premier tour est transformé en plan (`toPlan`) : cible, case de tir, arme et nombre de tirs, puces, protections,
+- Le premier tour est transformé en plan (`toPlan`) : cible, case de tir, armes et nombre de tirs (jusqu'à deux armes, `weaponSegments`), puces, protections,
   boosts, case finale, PM avant et après le tir.
 - Contrôle du laser : le faisceau ne simule pas la ligne du laser. Le plan est écarté si la ligne touche un coffre ou
-  si les alliés touchés coûtent plus que l'ennemi ne rapporte.
+  si les alliés touchés coûtent plus que l'ennemi ne rapporte. Un plan à deux armes dont l'une est un laser est écarté.
 - Si la meilleure suite ne fait rien ce tour-ci, ou si aucun plan n'existe, le plan de repli `planAct` joue : un tour
   n'est jamais perdu.
 
@@ -156,9 +156,9 @@ Ordre des actions :
 2. déplacement vers la case de tir ;
 3. boosts (leurs PT, force ou agilité servent aux actions suivantes) ;
 4. protections (soin, bouclier) ;
-5. changement d'arme, au prix de 1 PT ;
+5. changement d'arme, au prix de 1 PT (la 1re arme ; la 2e, s'il y en a une, entre les tirs de la 1re et les siens, voir 7) ;
 6. puces offensives ;
-7. tirs d'arme ;
+7. tirs d'arme, segment par segment (jusqu'à deux armes différentes : tirs, changement d'arme à 1 PT, tirs) ;
 8. déplacement final vers la case de moindre danger.
 
 Garde-fous :

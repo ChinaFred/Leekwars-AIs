@@ -31,6 +31,7 @@ hook Git `pre-commit` le lance.
 |---|---|
 | Dossier, point d'entrée, commande | `README.md` |
 | Seuil, condition, ordre de planification, score | `docs/strategies.md` |
+| Observation, lignes de journal, faisceau, exécution du plan | `docs/observation-et-faisceau.md` (en plus de `docs/strategies.md` si un seuil change) |
 | Commit demandé par l'utilisateur | `ChangeLog.md` : `- AAAA-MM-JJ — titre : effet en combat chiffré` |
 
 Si le budget est dépassé, condense le document : ne relève pas le budget.

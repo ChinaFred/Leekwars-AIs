@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 9
+// file version: 10
 import { OPS_BUDGET } from "../../Toolbox/Budgets.js"
 import { cutOperations, logSearchCut } from "../../Toolbox/Logger.js"
 import { ReachableCells } from "../Context/ReachableCells.js"
@@ -50,14 +50,28 @@ export interface TacticalPreparation {
 	readonly currentWeapons: Map<Entity, Map<Weapon, boolean>>
 }
 
+export interface WeaponSegment { readonly weapon: Weapon; readonly shots: number }
+
+/** Segments d'arme du plan, dans l'ordre joué (vide sans tir d'arme). */
+export function weaponSegmentsOf(plan: Pick<TacticalPlan, "weapon" | "weaponShots" | "weaponSegments">): readonly WeaponSegment[] {
+	if (plan.weaponSegments !== undefined) return plan.weaponSegments
+	return plan.weapon !== null && plan.weaponShots > 0 ? [{ weapon: plan.weapon, shots: plan.weaponShots }] : []
+}
+
 export interface TacticalPlan {
 	readonly target: Entity
 	readonly shotCell: Cell
 	readonly destination: Cell
 	readonly beforeMp: number
 	readonly afterMp: number
+	/** Première arme du plan (null sans tir d'arme) ; `weaponShots` : TOTAL des tirs d'arme, toutes armes confondues. */
 	readonly weapon: Weapon | null
 	readonly weaponShots: number
+	/**
+	 * Livre : suite ordonnée de segments d'arme (équiper, tirer N fois, équiper la suivante...), 2 armes distinctes au plus ; absent
+	 * = un seul segment (`weapon`, `weaponShots`). Lire par `weaponSegmentsOf`.
+	 */
+	readonly weaponSegments?: readonly WeaponSegment[]
 	/** Arme laser : ids des alliés que la ligne touche et que le plan accepte de toucher (jamais de coffre) ; revérifié avant chaque tir. */
 	readonly laserAllies?: readonly number[]
 	readonly chips: readonly Chip[]

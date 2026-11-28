@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 3
+// file version: 4
 import { isCellInLaunchPattern } from "../Context/LaunchPattern.js"
 import { ShotItem, chipUsesOf, maxUsesOf } from "../Context/ShotPlan.js"
 
@@ -73,7 +73,7 @@ export function shapeOf(dx: number, dy: number): number {
 }
 
 export interface Combo {
-	/** Indices (dans `book.items`) un par lancer : l'arme répétée par tir, puis les puces. */
+	/** Indices (dans `book.items`) un par lancer, dans l'ordre joué : les tirs de la 1re arme, ceux de la 2e (au plus 2 armes), puis les puces. */
 	readonly items: readonly number[]
 	/** Dégâts bruts (sans boucliers) par statistique. */
 	readonly raw: DamageByStat
@@ -107,7 +107,7 @@ export interface BookQuery {
 	readonly mask: number
 	/** Indice de l'arme en main, -1 si aucune. */
 	readonly held: number
-	/** Arme du combo : `ANY` (défaut, la meilleure, puces seules comprises), `NONE` (puces seules) ou un indice d'arme. */
+	/** Arme du combo : `ANY` (défaut : le meilleur de puces seules, une arme ou DEUX armes différentes, avec puces), `NONE` (puces seules) ou un indice d'arme (cette arme seule). */
 	readonly weapon?: number
 }
 
@@ -311,22 +311,33 @@ export class CombatBook {
 	/** Oublie les tables mémoïsées (changement d'items : construire plutôt un nouveau livre). */
 	clear(): void { this.tables.clear() }
 
-	/** Meilleur combo à `maxTp` budgets pour (items utilisables, arme en main, arme du combo) : tableau indexé par PT. */
-	buildOption(stats: Stats, shield: Shield, usable: number, held: number, option: number): Array<State | null> {
+	/**
+	 * Meilleur combo à `maxTp` budgets pour (items utilisables, arme en main, armes du combo) : tableau indexé par PT. `weapons` =
+	 * armes jouées DANS CET ORDRE (aucune : puces seules ; une ou deux : au moins un tir de chacune). Chaque arme autre que `held`
+	 * coûte 1 PT de changement ; l'arme en main doit donc venir en premier (sinon la remettre coûterait un PT de plus).
+	 */
+	buildOption(stats: Stats, shield: Shield, usable: number, held: number, weapons: readonly number[]): Array<State | null> {
 		const { items, maxTp } = this
-		const equip = option >= 0 && option !== held ? 1 : 0
 		let states: Array<State | undefined> = new Array(maxTp + 1)
-		// Combo à arme : seuls des états avec au moins un tir (un état sans arme au même coût exact masquerait le combo à arme).
-		if (option < 0) states[0] = EMPTY_STATE
-		else {
+		states[0] = EMPTY_STATE
+		// Combo à arme : seuls des états avec au moins un tir de chaque arme (un état sans arme au même coût exact masquerait le combo à arme).
+		for (const option of weapons) {
 			const weapon = items[option]!
+			const equip = option !== held ? 1 : 0
 			const damage = itemNet(weapon, stats, shield)
 			const raw = itemRaw(weapon, stats)
-			const limit = Math.min(weapon.uses, Math.floor((maxTp - equip) / weapon.cost))
-			for (let shots = 1; shots <= limit; shots++) {
-				this.work++
-				states[equip + shots * weapon.cost] = this.extend(EMPTY_STATE, weapon, damage, raw, option, shots, true, equip)
+			const next: Array<State | undefined> = new Array(maxTp + 1)
+			for (let cost = 0; cost <= maxTp; cost++) {
+				const base = states[cost]
+				if (base === undefined) continue
+				const limit = Math.min(weapon.uses, Math.floor((maxTp - cost - equip) / weapon.cost))
+				for (let shots = 1; shots <= limit; shots++) {
+					this.work++
+					const at = cost + equip + shots * weapon.cost
+					if (base.total + damage * shots > (next[at]?.total ?? -1)) next[at] = this.extend(base, weapon, damage, raw, option, shots, true, equip)
+				}
 			}
+			states = next
 		}
 		for (let i = 0; i < items.length; i++) {
 			const chip = items[i]!
@@ -357,7 +368,7 @@ export class CombatBook {
 		for (let cost = 0; cost <= maxTp; cost++) {
 			this.work++
 			const state = states[cost]
-			if (state !== undefined && state.total > 0 && (option < 0 || state.shots > 0) &&
+			if (state !== undefined && state.total > 0 && (weapons.length === 0 || state.shots > 0) &&
 				(current === null || state.total > current.total)) current = state
 			best.push(current)
 		}
@@ -421,9 +432,17 @@ export class CombatTable {
 
 	private build(usable: number, held: number, option: number): Combo[] {
 		const book = this.book
-		const options: number[] = option === ANY ? [NONE] : [option]
-		if (option === ANY) book.items.forEach((item, i) => { if (item.isWeapon && (usable & (1 << i)) !== 0) options.push(i) })
-		else if (option >= 0 && (usable & (1 << option)) === 0) return new Array(book.maxTp + 1).fill(EMPTY_COMBO)
+		// ANY : puces seules, chaque arme seule, puis chaque PAIRE d'armes (l'arme en main d'abord). Ordre = départage des égalités :
+		// à total égal, le combo le plus simple (moins d'armes) gagne.
+		const options: number[][] = option === ANY ? [[]] : [option === NONE ? [] : [option]]
+		if (option === ANY) {
+			const weapons: number[] = []
+			book.items.forEach((item, i) => { if (item.isWeapon && (usable & (1 << i)) !== 0) weapons.push(i) })
+			for (const i of weapons) options.push([i])
+			for (let a = 0; a < weapons.length; a++) {
+				for (let b = a + 1; b < weapons.length; b++) options.push(weapons[b] === held ? [weapons[b]!, weapons[a]!] : [weapons[a]!, weapons[b]!])
+			}
+		} else if (option >= 0 && (usable & (1 << option)) === 0) return new Array(book.maxTp + 1).fill(EMPTY_COMBO)
 		const vectors = options.map((o) => book.buildOption(this.stats, this.shield, usable, held, o))
 		const row: Combo[] = []
 		for (let tp = 0; tp <= book.maxTp; tp++) {

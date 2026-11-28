@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { cutOperations, log, LOG_CONTEXT, logSearchCut } from "../../Toolbox/Logger.js"
 import { chestDangerOf } from "../Context/ChestDanger.js"
 import { computeReachableCells } from "../Context/ReachableCells.js"
@@ -19,7 +19,7 @@ import { BookObjective, objectiveFor } from "./BookObjective.js"
 import { StandoffTracker } from "./BookStandoff.js"
 import { hasExecutionRoom } from "./ExecutionBudget.js"
 import { netDamage } from "./TacticalScore.js"
-import { TACTICAL_LIMITS, TacticalContext, TacticalPlan } from "./TacticalTypes.js"
+import { TACTICAL_LIMITS, TacticalContext, TacticalPlan, WeaponSegment, weaponSegmentsOf } from "./TacticalTypes.js"
 
 /**
  * Plan du tour par faisceau sur la table de combos (`BookBeam.ts`), parallèle à `TacticalPlanner.ts` (qu'il ne modifie
@@ -198,6 +198,12 @@ export function planWithBook(me: Me, context: TacticalContext, profile: LeekProf
  * pour la revérification avant tir. Pas d'optimisation de la visée dans le livre.
  */
 function laserChecked(me: Me, plan: TacticalPlan): TacticalPlan | null {
+	const segments = weaponSegmentsOf(plan)
+	// Plan à deux armes dont l'une est un laser : la ligne n'est vérifiée que pour une arme, le plan est écarté (il cède au plan suivant du faisceau).
+	if (segments.length > 1 && segments.some((segment) => isLaser(segment.weapon))) {
+		log(() => "[Book] multi-weapon plan with a laser: fallback", LOG_CONTEXT.PLANNING)
+		return null
+	}
 	if (plan.weapon === null || plan.weaponShots === 0 || !isLaser(plan.weapon)) return plan
 	const hits = laserHitsFrom(me, plan.shotCell, plan.target.cell, plan.weapon)
 	const item = toCandidate(plan.weapon, false, me.strength)
@@ -245,14 +251,22 @@ function laterOf(catalog: Catalog, steps: readonly TurnStep[]): NonNullable<Tact
 function toPlan(me: Me, catalog: Catalog, step: TurnStep, enemies: Entity[], depth: number, cut: string | null, score: number,
 	later: NonNullable<TacticalPlan["later"]>): TacticalPlan {
 	const items = catalog.book.items
-	const weaponIndex = step.combo.items.find((i) => items[i]!.isWeapon)
+	// Segments d'arme : les indices d'arme consécutifs du combo (l'ordre du combo est l'ordre joué).
+	const segments: WeaponSegment[] = []
+	let previous = -1
+	for (const i of step.combo.items) {
+		if (!items[i]!.isWeapon) continue
+		if (i === previous) segments[segments.length - 1] = { weapon: segments[segments.length - 1]!.weapon, shots: segments[segments.length - 1]!.shots + 1 }
+		else segments.push({ weapon: items[i]!.ref as Weapon, shots: 1 })
+		previous = i
+	}
 	const nearest = [...enemies].sort((a, b) => me.distance(a) - me.distance(b))[0]!
 	const boostChips = step.boosts.filter((boost) => boost.stat !== "mp").map((boost) => boost.chip)
 	const mpBoost = step.boosts.find((boost) => boost.stat === "mp")
 	return {
 		target: step.target?.enemy ?? nearest, shotCell: step.shotCell, destination: step.finalCell,
 		beforeMp: step.beforeMp, afterMp: step.afterMp,
-		weapon: weaponIndex === undefined ? null : items[weaponIndex]!.ref as Weapon, weaponShots: step.combo.weaponShots,
+		weapon: segments[0]?.weapon ?? null, weaponShots: step.combo.weaponShots, weaponSegments: segments.length > 1 ? segments : undefined,
 		chips: step.combo.items.filter((i) => !items[i]!.isWeapon).map((i) => items[i]!.ref as Chip),
 		protection: step.supports.map((support) => support.chip),
 		boost: boostChips.length > 0 ? { chips: boostChips, tpGain: step.tpGain } : undefined,
