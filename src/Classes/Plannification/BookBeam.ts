@@ -1,5 +1,5 @@
 // @version:5.8
-// file version: 14
+// file version: 15
 import { MIN_LIFE_RATIO_FOR_BOOST } from "../../Brain/StrengthBoost.js"
 import { logSearchCut } from "../../Toolbox/Logger.js"
 import { BookBudget, BookCut } from "./BookBudget.js"
@@ -595,20 +595,12 @@ function investsInBoost(beam: readonly BeamNode[]): boolean {
 }
 
 /**
- * Le niveau suivant vaut-il son coût ? Oui en duel (AGGRESSIVE), si un boost peut être posé sans tir (`investsInBoost`) ou si un
- * plan NON létal du niveau courant inflige plus que le meilleur (le compromis dégâts / danger se joue sur deux tours).
- * `env.deepen` l'impose ou l'interdit (tests, réglage).
+ * Le niveau suivant est toujours ouvert : un plan qui se juge sur un seul tour peut se payer au tour d'après (combat 55029810,
+ * tour 2 : danger 249 sur 450 PV accepté à profondeur 1, tour 3 létal partout). Seuls `env.deepen === false` (tests, réglage), le
+ * budget (`affordable`, plafonds du faisceau) et `deepenOk` au 3e tour le limitent encore.
  */
-export function worthDeepening(env: BeamEnv, beam: readonly BeamNode[]): boolean {
-	if (env.deepen !== undefined) return env.deepen
-	if (env.duel !== null) return true
-	if (investsInBoost(beam)) return true
-	const best = beam[0]?.steps[0]
-	if (best === undefined) return false
-	return beam.some((node) => {
-		const step = node.steps[0]!
-		return !step.lethal && step.outcome.damage > best.outcome.damage
-	})
+export function worthDeepening(env: BeamEnv, _beam: readonly BeamNode[]): boolean {
+	return env.deepen !== false
 }
 
 /**
@@ -644,7 +636,7 @@ export function runBeam(env: BeamEnv, root: SimState, width = BEAM_WIDTH, depth 
 	for (let k = 0; k < depth; k++) {
 		let nodes = beam
 		if (k >= 1) {
-			if (!worthDeepening(env, beam)) { skipped = `level ${k + 1}: no better non-lethal plan, no boost cast, no duel`; break }
+			if (!worthDeepening(env, beam)) { skipped = `level ${k + 1}: deepen disabled`; break }
 			// Le 3e tour reste facultatif (`deepenOk`) sauf pour un tel boost, dont l'effet dure 2 à 3 tours : les plafonds du faisceau
 			// (`BOOK_SEARCH_FRACTION`, 0,80 global) et le coût mesuré d'un nœud (`affordable`) s'appliquent toujours.
 			if (k >= 2 && !investsInBoost(beam) && !env.budget.deepenOk()) {

@@ -1,24 +1,5 @@
 [
  {
-  "id": "b046e07",
-  "account": "Kassbi",
-  "published_at": 1795856745,
-  "published_at_iso": "2026-11-28T09:05:45Z",
-  "commit": "b046e07a2b3444b2edee2e3ef0eb7e7a6c43e208",
-  "committed_at": 1795856388,
-  "subject": "feat(book): salutation et récit du poireau dans Kassbi_Book",
-  "message": "feat(book): salutation et récit du poireau dans Kassbi_Book\n\nStratégie: aucun changement de plan ; Kassbi_Book salue au tour 1 et raconte la vie du poireau avec les PT restants (2 say max par tour), comme Kassbi_Class.\nTests: tests/turn-speech.test.mjs ; npm run typecheck et npm test passent.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6czQJ6LyGAWDmNzo7T",
-  "has_strategy_section": true,
-  "dirty": false,
-  "dirty_files": [],
-  "changes": {
-   "created": 1,
-   "updated": 2,
-   "deleted_files": 0,
-   "deleted_folders": 0
-  }
- },
- {
   "id": "b32d851",
   "account": "Kassbi",
   "published_at": 1795859383,
@@ -185,6 +166,25 @@
   "changes": {
    "created": 0,
    "updated": 4,
+   "deleted_files": 0,
+   "deleted_folders": 0
+  }
+ },
+ {
+  "id": "5d07584",
+  "account": "Kassbi",
+  "published_at": 1795869096,
+  "published_at_iso": "2026-11-28T12:31:36Z",
+  "commit": "5d075845befcfdba29f6b3889b4db8e37d0a2caa",
+  "committed_at": 1795868682,
+  "subject": "feat(livre): niveau 2 toujours ouvert",
+  "message": "feat(livre): niveau 2 toujours ouvert\n\nStratégie: le livre simule toujours le tour suivant (avant : duel, boost sans tir ou plan non létal infligeant plus). Combat 55029810 tour 2 : danger 249 sur 450 PV accepté à profondeur 1, tour 3 létal partout. Coût en ops du niveau 2 non mesuré, plafonds de budget inchangés.\nTests: typecheck OK ; suite OK sauf 2 tests dépendant de l'archive 55005067 absente (échec antérieur au changement) ; nouveau test de régression dans combat-book-beam.\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_014ees6bTmmwxDmkPjSgSirS",
+  "has_strategy_section": true,
+  "dirty": false,
+  "dirty_files": [],
+  "changes": {
+   "created": 0,
+   "updated": 1,
    "deleted_files": 0,
    "deleted_folders": 0
   }

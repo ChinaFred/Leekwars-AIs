@@ -5,11 +5,15 @@ Généré par Garden (options 7 et 8) ou `python LWGarden/src/FightSummary.py` ;
 ## db21aac — feat(book): arme du tour 1 choisie selon les tours 2-3 du meilleur plan
 Compte Kassbi, publié le 2026-11-28T11:53:37Z.
 Stratégie : l'arme équipée au tour 1 est celle que le meilleur enchaînement du livre utilise en premier aux tours simulés suivants (TacticalPlan.later). Sans arme prévue (pas de plan, profondeur 1, repli planAct) : dégâts moyens/PT × part des distances de tir plausibles du prochain contact, donc une arme à distance passe devant le corps à corps tant que le contact n'est pas plausible (Magnum au lieu de l'Épée large à 20-32 cases ; l'Épée large redevient éligible à 1-2 cases). Aucune constante nouvelle.
-Combats : 1 — 1 victoires, 0 défaites, 0 nuls (100 % de victoires), 0 sans logs.
-Ops : pic maximal 73 % (combat 55029308), médiane des pics 73 %.
-Ressources : 5 tours joués, 0 sans aucune action payante (0 %), 17 % des PM inutilisés, 0 tours interrompus ou en erreur.
-PT (ligne [History]) : 12 % inutilisés sur 49 disponibles.
-Combats les plus gaspilleurs (tours sans action payante) : 55029308 (0/5, victoire).
+Combats : 4 — 2 victoires, 2 défaites, 0 nuls (50 % de victoires), 0 sans logs.
+Ops : pic maximal 73 % (combat 55029329), médiane des pics 73 %.
+Ressources : 23 tours joués, 3 sans aucune action payante (13 %), 28 % des PM inutilisés, 0 tours interrompus ou en erreur.
+PT (ligne [History]) : 23 % inutilisés sur 230 disponibles.
+Combats les plus gaspilleurs (tours sans action payante) : 55029752 (2/9, défaite), 55029329 (1/6, victoire), 55029308 (0/5, victoire), 55029810 (0/3, défaite).
+
+Défaites :
+- 55029752 : 9 tours · vs leghapilu · pic ops 67 %
+- 55029810 : 4 tours · vs Poireaufesseur · pic ops 73 %
 
 ## cb11183 — chore(merge): fusion de Master (ennemi défensif) dans la fuite sans tir
 Compte Kassbi, publié le 2026-11-28T11:36:24Z.

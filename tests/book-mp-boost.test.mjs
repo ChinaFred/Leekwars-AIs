@@ -94,7 +94,7 @@ test("counter-tests: no MP boost when it brings nothing", () => {
 	const coolingRun = run(cooling)
 	assert.ok(coolingRun.result.beam.every((node) => node.steps.every((step) => cast(step).length === 0)))
 	assert.equal(cooling.zoneCalls(), 0)
-	assert.equal(coolingRun.result.depth, 1, "aucun boost : le niveau 2 reste fermé (comportement inchangé)")
+	assert.ok(coolingRun.result.depth >= 2, "niveau 2 toujours ouvert, même sans boost")
 	// Zone boostée indisponible : repli sur le livre sans boost de PM.
 	const noZone = run(world({ chips: [boots()], mpZone: false }))
 	assert.deepEqual(cast(noZone.result.best.steps[0]), [])
